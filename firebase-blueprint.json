@@ -1,0 +1,251 @@
+{
+  "entities": {
+    "SchoolSetting": {
+      "title": "SchoolSetting",
+      "description": "Global school configuration, branding, and assets such as official crest logo and banner",
+      "type": "object",
+      "properties": {
+        "schoolLogoUrl": {
+          "type": "string",
+          "description": "Cloud URL or data URI for the official school logo"
+        },
+        "schoolName": {
+          "type": "string",
+          "description": "Official name of the school institution"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Identifier or email of staff who updated settings"
+        }
+      },
+      "required": ["updatedAt"]
+    },
+    "SchoolGalleryItem": {
+      "title": "SchoolGalleryItem",
+      "description": "Photos and media showcasing campus life, classrooms, ICT lab, and sports",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique gallery item identifier"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the campus photo or event"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["outdoor", "classrooms", "technology", "culture", "sports"],
+          "description": "Category for filtering campus media"
+        },
+        "imageSrc": {
+          "type": "string",
+          "description": "Cloud URL of the photo asset"
+        },
+        "caption": {
+          "type": "string",
+          "description": "Explanatory caption for prospective parents and visitors"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp when photo was uploaded"
+        }
+      },
+      "required": ["id", "title", "category", "imageSrc"]
+    },
+    "StudentProgressLog": {
+      "title": "StudentProgressLog",
+      "description": "Academic and behavioral assessment logs entered by teachers",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique log identifier"
+        },
+        "studentId": {
+          "type": "string",
+          "description": "Student ID reference"
+        },
+        "studentName": {
+          "type": "string",
+          "description": "Full name of the student"
+        },
+        "regNumber": {
+          "type": "string",
+          "description": "Student registration number"
+        },
+        "gradeCode": {
+          "type": "string",
+          "description": "Class/grade code such as P1 or P4"
+        },
+        "stream": {
+          "type": "string",
+          "description": "Stream or section assignment"
+        },
+        "date": {
+          "type": "string",
+          "description": "Evaluation date YYYY-MM-DD"
+        },
+        "teacherId": {
+          "type": "string",
+          "description": "Staff ID of recording teacher"
+        },
+        "teacherName": {
+          "type": "string",
+          "description": "Teacher display name"
+        },
+        "subject": {
+          "type": "string",
+          "description": "Subject evaluated"
+        },
+        "academicPerformance": {
+          "type": "string",
+          "enum": ["Excellent", "Proficient", "Developing", "Needs Support"],
+          "description": "Categorical performance rating"
+        },
+        "academicScore": {
+          "type": "number",
+          "description": "Numerical score out of 100"
+        },
+        "academicNotes": {
+          "type": "string",
+          "description": "Detailed notes on student academic trajectory"
+        },
+        "behaviorRating": {
+          "type": "string",
+          "enum": ["Exemplary", "Good", "Fair", "Needs Improvement", "Concern"],
+          "description": "Behavioral conduct rating"
+        },
+        "behavioralNotes": {
+          "type": "string",
+          "description": "Observations regarding conduct, punctuality, and peer collaboration"
+        },
+        "actionOrRecommendation": {
+          "type": "string",
+          "description": "Follow-up recommendations or parental guidance"
+        },
+        "parentNotified": {
+          "type": "boolean",
+          "description": "Whether parent has received automated SMS or email alert"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of log creation"
+        }
+      },
+      "required": ["id", "studentName", "gradeCode", "date", "teacherName", "academicPerformance", "behaviorRating"]
+    },
+    "StaffRole": {
+      "title": "StaffRole",
+      "description": "Authorized staff identity mapping for role-based access control",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Verified email address of the staff member"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full staff member name"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["Admin", "DOS", "DOD", "Teacher", "Finance", "Registrar"],
+          "description": "Assigned institutional role"
+        },
+        "assignedSubjectOrGrade": {
+          "type": "string",
+          "description": "Class or department assignment"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Active", "Inactive"],
+          "description": "Authorization status"
+        }
+      },
+      "required": ["email", "name", "role", "status"]
+    },
+    "SchoolDocument": {
+      "title": "SchoolDocument",
+      "description": "Official school registration and policy documents stored in Firebase Storage",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique document identifier"
+        },
+        "title": {
+          "type": "string",
+          "description": "Name or title of the document requirement"
+        },
+        "description": {
+          "type": "string",
+          "description": "Instructions for parents and applicants"
+        },
+        "isRequired": {
+          "type": "boolean",
+          "description": "Whether document is mandatory for admission"
+        },
+        "applicableGrades": {
+          "type": "string",
+          "description": "Grades for which document is required"
+        },
+        "formatHint": {
+          "type": "string",
+          "description": "Accepted format instructions"
+        },
+        "fileUrl": {
+          "type": "string",
+          "description": "Firebase Storage download URL"
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Original file name of the document"
+        },
+        "fileSize": {
+          "type": "string",
+          "description": "Human-readable file size"
+        },
+        "fileType": {
+          "type": "string",
+          "description": "MIME type or file extension"
+        },
+        "uploadedAt": {
+          "type": "string",
+          "description": "ISO timestamp of upload"
+        },
+        "order": {
+          "type": "number",
+          "description": "Display order"
+        }
+      },
+      "required": ["id", "title", "description", "isRequired", "applicableGrades"]
+    }
+  },
+  "firestore": {
+    "/school_settings/{settingId}": {
+      "schema": "SchoolSetting",
+      "description": "Global school branding and public website settings"
+    },
+    "/school_gallery/{itemId}": {
+      "schema": "SchoolGalleryItem",
+      "description": "School facility and campus life photos visible across all devices"
+    },
+    "/school_documents/{docId}": {
+      "schema": "SchoolDocument",
+      "description": "School registration forms, guidelines, and PDF files stored in Firebase Storage"
+    },
+    "/student_progress_logs/{logId}": {
+      "schema": "StudentProgressLog",
+      "description": "Teacher student academic and conduct log records"
+    },
+    "/staff_members/{staffId}": {
+      "schema": "StaffRole",
+      "description": "Staff identity definitions for secure role-based access control"
+    }
+  }
+}

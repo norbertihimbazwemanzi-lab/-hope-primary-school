@@ -1,0 +1,209 @@
+[
+  {
+    "refCode": "MHA-2026-7841",
+    "studentName": "Mugisha Brian",
+    "parentName": "Alice Mukamugema",
+    "parentEmail": "norbertihimbazwemanzi@gmail.com",
+    "parentPhone": "+250 788 444 333",
+    "gradeCode": "P2",
+    "status": "Pending Confirmation",
+    "messages": [
+      {
+        "id": "msg-seed-1",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "Registration received for Mugisha Brian (P2). Application is currently under review by School Administrator Norbert Ihimbazwe Manzi.",
+        "createdAt": "2026-10-12T08:30:00.000Z"
+      },
+      {
+        "id": "msg-seed-2",
+        "sender": "parent",
+        "senderName": "Alice Mukamugema",
+        "text": "Muraho Administrator Norbert, we submitted Brian's transfer report from his previous school. Please let us know if additional documents are needed.",
+        "createdAt": "2026-10-12T09:15:00.000Z"
+      },
+      {
+        "id": "msg-seed-3",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Muraho Alice! We have verified Brian's transfer report and report card. His academic profile looks strong for P2. Confirmation and student ID badge will be issued shortly.",
+        "createdAt": "2026-10-12T10:05:00.000Z"
+      },
+      {
+        "id": "msg-seed-4",
+        "sender": "parent",
+        "senderName": "Alice Mukamugema",
+        "text": "Murakoze cyane Administrator Norbert! Will Brian also be enrolled in the school hot lunch program?",
+        "createdAt": "2026-10-12T11:20:00.000Z"
+      },
+      {
+        "id": "msg-seed-5",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Yes, absolutely! Hot lunch and afternoon school bus route to Mugina center are both included in his enrollment package.",
+        "createdAt": "2026-10-12T11:45:00.000Z"
+      }
+    ],
+    "updatedAt": "2026-10-12T11:45:00.000Z"
+  },
+  {
+    "refCode": "MHA-2026-5120",
+    "studentName": "Keza Divine",
+    "parentName": "Jean Damascene Nkurunziza",
+    "parentEmail": "jdnkurunziza@gmail.com",
+    "parentPhone": "+250 788 555 123",
+    "gradeCode": "N-TOP",
+    "status": "Confirmed & Enrolled",
+    "messages": [
+      {
+        "id": "msg-seed-201",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "Registration received for Keza Divine (Nursery Top Class). Assigned reference code MHA-2026-5120.",
+        "createdAt": "2026-10-13T07:45:00.000Z"
+      },
+      {
+        "id": "msg-seed-202",
+        "sender": "parent",
+        "senderName": "Jean Damascene Nkurunziza",
+        "text": "Good morning Admin Norbert, does the school bus pick up children near the Mugina commercial trading center?",
+        "createdAt": "2026-10-13T08:10:00.000Z"
+      },
+      {
+        "id": "msg-seed-203",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Good morning Jean Damascene! Yes, Bus Route #1 stops at Mugina Commercial Center every morning at 6:45 AM with our dedicated teacher chaperone.",
+        "createdAt": "2026-10-13T08:35:00.000Z"
+      },
+      {
+        "id": "msg-seed-204",
+        "sender": "system",
+        "senderName": "Admissions Desk",
+        "text": "Application CONFIRMED & ENROLLED. Student ID: MHA-STU-2026-088. Welcome to Mugina Hope Academy!",
+        "createdAt": "2026-10-13T09:00:00.000Z"
+      }
+    ],
+    "updatedAt": "2026-10-13T09:00:00.000Z"
+  },
+  {
+    "refCode": "MHA-2026-3409",
+    "studentName": "Uwase Ange",
+    "parentName": "Marie Claire Mukamana",
+    "parentEmail": "claire.mukamana@gmail.com",
+    "parentPhone": "+250 788 999 888",
+    "gradeCode": "P4",
+    "status": "Pending Confirmation",
+    "messages": [
+      {
+        "id": "msg-seed-301",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "Application received for Uwase Ange (P4). Reference: MHA-2026-3409.",
+        "createdAt": "2026-10-14T14:10:00.000Z"
+      },
+      {
+        "id": "msg-seed-302",
+        "sender": "parent",
+        "senderName": "Marie Claire Mukamana",
+        "text": "Mwiriwe Norbert, we uploaded Ange's birth certificate and previous school report card. Please confirm when orientation starts.",
+        "createdAt": "2026-10-14T14:40:00.000Z"
+      },
+      {
+        "id": "msg-seed-303",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Mwiriwe Marie Claire, documents received in pristine condition. Orientation for new Primary learners begins on the first Monday of the term at 8:00 AM.",
+        "createdAt": "2026-10-14T15:10:00.000Z"
+      }
+    ],
+    "updatedAt": "2026-10-14T15:10:00.000Z"
+  },
+  {
+    "refCode": "MHA-2026-9214",
+    "studentName": "Irakoze Prince",
+    "parentName": "Emmanuel Habimana",
+    "parentEmail": "habimana.e@gmail.com",
+    "parentPhone": "+250 783 111 222",
+    "gradeCode": "P1",
+    "status": "Pending Confirmation",
+    "messages": [
+      {
+        "id": "msg-seed-401",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "Registration received for Irakoze Prince (Primary 1). Application assigned ref code MHA-2026-9214.",
+        "createdAt": "2026-10-15T09:30:00.000Z"
+      },
+      {
+        "id": "msg-seed-402",
+        "sender": "parent",
+        "senderName": "Emmanuel Habimana",
+        "text": "Muraho Administrator Norbert! We applied for Prince to join Primary 1. We also requested school van transport and hot lunch.",
+        "createdAt": "2026-10-15T10:15:00.000Z"
+      },
+      {
+        "id": "msg-seed-403",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Muraho Emmanuel! Prince's enrollment file for P1 is confirmed in order. Van transport from Mugina center and daily nutrition meal plan have both been reserved.",
+        "createdAt": "2026-10-15T10:45:00.000Z"
+      },
+      {
+        "id": "msg-seed-404",
+        "sender": "parent",
+        "senderName": "Emmanuel Habimana",
+        "text": "Murakoze cyane Norbert! Does the school issue official uniforms on opening day?",
+        "createdAt": "2026-10-15T11:05:00.000Z"
+      },
+      {
+        "id": "msg-seed-405",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Yes Emmanuel, two sets of tailored navy & gold uniforms and sports kit will be handed to you upon arrival at the registrar desk.",
+        "createdAt": "2026-10-15T11:30:00.000Z"
+      }
+    ],
+    "updatedAt": "2026-10-15T11:30:00.000Z"
+  },
+  {
+    "refCode": "MHA-2026-6330",
+    "studentName": "Uwera Clarisse",
+    "parentName": "Solange Mukashyaka",
+    "parentEmail": "solange.muka@gmail.com",
+    "parentPhone": "+250 788 667 890",
+    "gradeCode": "N-BABY",
+    "status": "Pending Confirmation",
+    "messages": [
+      {
+        "id": "msg-seed-501",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "Application received for Uwera Clarisse (Nursery Baby Class). Reference: MHA-2026-6330.",
+        "createdAt": "2026-10-16T13:00:00.000Z"
+      },
+      {
+        "id": "msg-seed-502",
+        "sender": "parent",
+        "senderName": "Solange Mukashyaka",
+        "text": "Good afternoon Administrator Norbert, Clarisse is 3 years old. Are the Nursery Baby care rooms equipped with sleeping cots and dedicated matrons?",
+        "createdAt": "2026-10-16T13:25:00.000Z"
+      },
+      {
+        "id": "msg-seed-503",
+        "sender": "admin",
+        "senderName": "Norbert Ihimbazwe Manzi (Admin)",
+        "text": "Good afternoon Solange! Yes, our Nursery Baby hall features child-safe padded flooring, individual sanitized cots for midday naps, and trained full-time childcare matrons.",
+        "createdAt": "2026-10-16T13:50:00.000Z"
+      },
+      {
+        "id": "msg-seed-504",
+        "sender": "parent",
+        "senderName": "Solange Mukashyaka",
+        "text": "That gives us great peace of mind! Thank you Norbert, we look forward to the visit.",
+        "createdAt": "2026-10-16T14:15:00.000Z"
+      }
+    ],
+    "updatedAt": "2026-10-16T14:15:00.000Z"
+  }
+]

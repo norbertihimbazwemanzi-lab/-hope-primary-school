@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdministrator() {
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'norbertihimbazwemanzi@gmail.com' ||
+        request.auth.token.email.lower() == 'headteacher@muginahopeschool.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // School Settings & Branding (Public read so all devices see the school logo & data)
+    match /school_settings/{settingId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // School Photo Gallery (Public read so photos are visible across all user devices)
+    match /school_gallery/{itemId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // School Registration Documents (Public read so all applicants see required forms and downloads)
+    match /school_documents/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Student Progress Logs (Accessible to authenticated school staff)
+    match /student_progress_logs/{logId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Staff Members & Role Mappings
+    match /staff_members/{staffId} {
+      allow read: if isSignedIn();
+      allow write: if isAdministrator();
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdministrator();
+    }
+  }
+}
