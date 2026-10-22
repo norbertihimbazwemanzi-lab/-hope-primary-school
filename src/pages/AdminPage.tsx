@@ -2394,12 +2394,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                       src={item.imageSrc}
                       alt={item.title}
                       referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (target.src.includes('/src/assets/images/')) {
+                          const filename = target.src.split('/').pop();
+                          target.src = `/images/${filename}`;
+                        } else {
+                          target.src =
+                            'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+                        }
+                      }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <span className="absolute top-2.5 right-2.5 text-[10px] font-bold uppercase bg-slate-900/80 text-white px-2 py-0.5 rounded-sm">
                       {item.category}
                     </span>
-                    {item.imageSrc.includes('firebasestorage') && (
+                    {item.imageSrc?.includes('firebasestorage') && (
                       <span className="absolute bottom-2.5 left-2.5 text-[10px] font-bold bg-blue-900/80 text-blue-200 backdrop-blur-xs px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
                         <UploadCloud className="w-3 h-3 text-amber-300" />
                         Firebase Storage

@@ -88,6 +88,18 @@ export default function App() {
       }
     });
 
+    // Helper to sanitize static image URLs
+    const sanitizeItem = (item: any) => {
+      if (!item) return item;
+      if (item.imageSrc && typeof item.imageSrc === 'string' && item.imageSrc.startsWith('/src/assets/images/')) {
+        return {
+          ...item,
+          imageSrc: `/images/${item.imageSrc.replace('/src/assets/images/', '')}`,
+        };
+      }
+      return item;
+    };
+
     // 2. Initial Gallery Sync from Firebase Storage/Firestore & Server
     Promise.all([
       syncServerGalleryItems(),
@@ -95,7 +107,8 @@ export default function App() {
     ]).then(([serverItems, firestoreItems]) => {
       const local = getGalleryItems();
       const map = new Map();
-      [...local, ...serverItems, ...firestoreItems].forEach((item) => {
+      [...local, ...serverItems, ...firestoreItems].forEach((rawItem) => {
+        const item = sanitizeItem(rawItem);
         if (item && item.id) map.set(item.id, item);
       });
       const merged = Array.from(map.values());
@@ -109,7 +122,8 @@ export default function App() {
       if (Array.isArray(liveItems) && liveItems.length > 0) {
         const local = getGalleryItems();
         const map = new Map();
-        [...local, ...liveItems].forEach((item) => {
+        [...local, ...liveItems].forEach((rawItem) => {
+          const item = sanitizeItem(rawItem);
           if (item && item.id) map.set(item.id, item);
         });
         const merged = Array.from(map.values());

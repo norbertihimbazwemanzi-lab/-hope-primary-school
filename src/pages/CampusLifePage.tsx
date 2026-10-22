@@ -186,6 +186,16 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
             src={SCHOOL_INFO.images.culturalDance}
             alt="Mugina Hope Academy children performing traditional Rwandan cultural dance"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (!target.dataset.triedBackup) {
+                target.dataset.triedBackup = '1';
+                target.src = '/images/campus_life_traditional_dance_1791823290926.jpg';
+              } else if (!target.dataset.triedFallback) {
+                target.dataset.triedFallback = '1';
+                target.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80';
+              }
+            }}
             className="w-full h-full object-cover"
           />
         </div>
@@ -314,12 +324,18 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
                   alt={fac.title}
                   referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src =
-                      'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+                    const target = e.target as HTMLImageElement;
+                    if (target.src.includes('/src/assets/images/')) {
+                      const filename = target.src.split('/').pop();
+                      target.src = `/images/${filename}`;
+                    } else {
+                      target.src =
+                        'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+                    }
                   }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
-                {fac.imageSrc.includes('firebasestorage') && (
+                {fac.imageSrc?.includes('firebasestorage') && (
                   <span className="absolute top-2.5 left-2.5 text-[9px] font-bold bg-blue-900/80 text-blue-200 px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1 backdrop-blur-xs">
                     ☁️ Firebase Cloud Media
                   </span>

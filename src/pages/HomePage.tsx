@@ -84,6 +84,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                 src={slide.image}
                 alt={slide.title}
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (!target.dataset.triedBackup) {
+                    target.dataset.triedBackup = '1';
+                    if (index === 0) target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+                    else if (index === 1) target.src = '/images/primary_stem_computer_lab_1791823280335.jpg';
+                    else target.src = '/images/nursery_play_learning_1791823267251.jpg';
+                  } else if (!target.dataset.triedFallback) {
+                    target.dataset.triedFallback = '1';
+                    target.src = 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1600&q=80';
+                  }
+                }}
                 className="w-full h-full object-cover object-center scale-105 transition-transform duration-10000"
               />
               {/* Cinematic Scrim for AA contrast */}

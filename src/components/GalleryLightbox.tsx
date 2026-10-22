@@ -33,6 +33,15 @@ export const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ item, onClose 
             src={item.imageSrc}
             alt={item.title}
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (target.src.includes('/src/assets/images/')) {
+                const filename = target.src.split('/').pop();
+                target.src = `/images/${filename}`;
+              } else {
+                target.src = 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+              }
+            }}
             className="max-h-[65vh] w-auto object-contain"
           />
         </div>

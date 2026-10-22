@@ -31,6 +31,16 @@ export const DualPathGateway: React.FC<DualPathGatewayProps> = ({ onNavigate, on
               src={SCHOOL_INFO.images.nursery}
               alt="Mugina Hope Nursery classroom with happy children learning through play in Rwanda"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.dataset.triedBackup) {
+                  target.dataset.triedBackup = '1';
+                  target.src = '/images/nursery_play_learning_1791823267251.jpg';
+                } else if (!target.dataset.triedFallback) {
+                  target.dataset.triedFallback = '1';
+                  target.src = 'https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=1200&q=80';
+                }
+              }}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/30 to-transparent flex items-end p-6">
@@ -101,6 +111,16 @@ export const DualPathGateway: React.FC<DualPathGatewayProps> = ({ onNavigate, on
               src={SCHOOL_INFO.images.primaryStem}
               alt="Mugina Hope Primary students in computer lab learning ICT in Kamonyi Rwanda"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (!target.dataset.triedBackup) {
+                  target.dataset.triedBackup = '1';
+                  target.src = '/images/primary_stem_computer_lab_1791823280335.jpg';
+                } else if (!target.dataset.triedFallback) {
+                  target.dataset.triedFallback = '1';
+                  target.src = 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+                }
+              }}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/30 to-transparent flex items-end p-6">

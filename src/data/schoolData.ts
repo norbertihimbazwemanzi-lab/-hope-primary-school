@@ -41,11 +41,20 @@ const defaultSchoolInfo = {
     { label: 'National Exam Pass Rate', value: '100%', subtext: 'Excellence in Rwanda REB primary leaving examinations' },
   ],
   images: {
-    hero: '/src/assets/images/hero_mugina_hope_campus_1791823254957.jpg',
-    nursery: '/src/assets/images/nursery_play_learning_1791823267251.jpg',
-    primaryStem: '/src/assets/images/primary_stem_computer_lab_1791823280335.jpg',
-    culturalDance: '/src/assets/images/campus_life_traditional_dance_1791823290926.jpg',
+    hero: heroCampusImg,
+    nursery: nurseryPlayImg,
+    primaryStem: computerLabImg,
+    culturalDance: traditionalDanceImg,
   }
+};
+
+const sanitizeAssetUrl = (url: string | undefined, fallback: string): string => {
+  if (!url) return fallback;
+  if (url.startsWith('/src/assets/images/')) {
+    const filename = url.replace('/src/assets/images/', '');
+    return `/images/${filename}`;
+  }
+  return url;
 };
 
 function getLiveSavedSettings(): any {
@@ -86,6 +95,14 @@ export const SCHOOL_INFO: typeof defaultSchoolInfo = new Proxy(defaultSchoolInfo
         whatsappUrl: `https://wa.me/${cleanPhone}`,
         email: saved.officialEmail || target.contact.email,
         admissionsEmail: saved.admissionsEmail || target.contact.admissionsEmail,
+      };
+    }
+    if (prop === 'images') {
+      return {
+        hero: sanitizeAssetUrl(saved.heroImageUrl, target.images.hero),
+        nursery: sanitizeAssetUrl(saved.nurseryImageUrl, target.images.nursery),
+        primaryStem: sanitizeAssetUrl(saved.primaryStemImageUrl, target.images.primaryStem),
+        culturalDance: sanitizeAssetUrl(saved.culturalDanceImageUrl, target.images.culturalDance),
       };
     }
     return target[prop];

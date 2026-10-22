@@ -128,6 +128,16 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             src={SCHOOL_INFO.images.hero}
             alt="Mugina Hope Primary Campus in Kamonyi District"
             referrerPolicy="no-referrer"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (!target.dataset.triedBackup) {
+                target.dataset.triedBackup = '1';
+                target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+              } else if (!target.dataset.triedFallback) {
+                target.dataset.triedFallback = '1';
+                target.src = 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+              }
+            }}
             className="w-full h-80 sm:h-96 object-cover"
           />
           <div className="p-4 bg-slate-50 border-t border-slate-200 text-xs text-slate-600 flex items-center justify-between">

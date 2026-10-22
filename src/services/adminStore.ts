@@ -905,7 +905,18 @@ export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | nul
 export const getGalleryItems = (): FacilityItem[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.GALLERY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: FacilityItem[] = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((item) => {
+          if (item?.imageSrc && typeof item.imageSrc === 'string' && item.imageSrc.startsWith('/src/assets/images/')) {
+            const filename = item.imageSrc.replace('/src/assets/images/', '');
+            return { ...item, imageSrc: `/images/${filename}` };
+          }
+          return item;
+        });
+      }
+    }
   } catch (e) {
     console.error(e);
   }

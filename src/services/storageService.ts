@@ -46,9 +46,9 @@ export const uploadSchoolAsset = async (
   } catch (storageError: any) {
     console.warn('Firebase Storage upload notice (falling back to server endpoint):', storageError?.message || storageError);
 
-    // 2. Fallback to Express backend /api/upload
+    // 2. Fallback to Express backend /api/upload or direct base64
+    let base64Data = '';
     try {
-      let base64Data = '';
       if (typeof fileOrBase64 === 'string') {
         base64Data = fileOrBase64;
       } else {
@@ -81,7 +81,10 @@ export const uploadSchoolAsset = async (
       // If server returned ok with base64 data or fallback
       return { url: base64Data, source: 'base64' };
     } catch (serverErr: any) {
-      console.warn('Server upload fallback:', serverErr);
+      console.warn('Server upload fallback (using base64 for static host persistence):', serverErr);
+      if (base64Data) {
+        return { url: base64Data, source: 'base64' };
+      }
       if (typeof fileOrBase64 === 'string') {
         return { url: fileOrBase64, source: 'base64' };
       }
