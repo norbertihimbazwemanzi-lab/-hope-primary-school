@@ -9,6 +9,11 @@ import {
   saveSchoolDocumentToFirebase,
   fetchSchoolDocumentsFromFirebase,
   deleteSchoolDocumentFromFirebase,
+  saveSchoolAnnouncementToFirebase,
+  deleteSchoolAnnouncementFromFirebase,
+  saveWebsiteSettingsToFirebase,
+  saveEnrolledStudentToFirebase,
+  deleteEnrolledStudentFromFirebase,
 } from './firebaseStore';
 
 export type UserRole = 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD' | 'Student';
@@ -744,6 +749,9 @@ export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enroll
   };
   const updated = [newStudent, ...list];
   saveEnrolledStudents(updated);
+  saveEnrolledStudentToFirebase(newStudent).catch((e) =>
+    console.warn('Firebase student sync notice:', e)
+  );
   return newStudent;
 };
 
@@ -751,6 +759,12 @@ export const updateEnrolledStudent = (id: string, updates: Partial<EnrolledStude
   const list = getEnrolledStudents();
   const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
   saveEnrolledStudents(updated);
+  const target = updated.find((s) => s.id === id);
+  if (target) {
+    saveEnrolledStudentToFirebase(target).catch((e) =>
+      console.warn('Firebase student sync notice:', e)
+    );
+  }
   return updated;
 };
 
@@ -758,6 +772,9 @@ export const deleteEnrolledStudent = (id: string): EnrolledStudent[] => {
   const list = getEnrolledStudents();
   const updated = list.filter((s) => s.id !== id);
   saveEnrolledStudents(updated);
+  deleteEnrolledStudentFromFirebase(id).catch((e) =>
+    console.warn('Firebase student delete notice:', e)
+  );
   return updated;
 };
 
@@ -849,6 +866,11 @@ export const saveWebsiteSettings = (settings: WebsiteSettings) => {
     );
   }
 
+  // Sync complete settings to Firebase Firestore
+  saveWebsiteSettingsToFirebase(settings).catch((e) =>
+    console.warn('Firebase website settings sync notice:', e)
+  );
+
   try {
     fetch('/api/settings', {
       method: 'POST',
@@ -892,6 +914,9 @@ export const getGalleryItems = (): FacilityItem[] => {
 
 export const saveGalleryItems = (items: FacilityItem[]) => {
   localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(items));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('mugina-gallery-updated', { detail: items }));
+  }
 };
 
 export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
@@ -1235,6 +1260,9 @@ export const addAnnouncement = (item: Omit<SchoolAnnouncement, 'id' | 'published
   };
   const updated = [newAnn, ...current];
   saveAnnouncements(updated);
+  saveSchoolAnnouncementToFirebase(newAnn).catch((e) =>
+    console.warn('Firebase announcement sync notice:', e)
+  );
   return newAnn;
 };
 
@@ -1242,6 +1270,12 @@ export const updateAnnouncement = (id: string, updates: Partial<SchoolAnnounceme
   const current = getAnnouncements();
   const updated = current.map((a) => (a.id === id ? { ...a, ...updates } : a));
   saveAnnouncements(updated);
+  const target = updated.find((a) => a.id === id);
+  if (target) {
+    saveSchoolAnnouncementToFirebase(target).catch((e) =>
+      console.warn('Firebase announcement sync notice:', e)
+    );
+  }
   return updated;
 };
 
@@ -1249,6 +1283,9 @@ export const deleteAnnouncement = (id: string): SchoolAnnouncement[] => {
   const current = getAnnouncements();
   const updated = current.filter((a) => a.id !== id);
   saveAnnouncements(updated);
+  deleteSchoolAnnouncementFromFirebase(id).catch((e) =>
+    console.warn('Firebase announcement delete notice:', e)
+  );
   return updated;
 };
 

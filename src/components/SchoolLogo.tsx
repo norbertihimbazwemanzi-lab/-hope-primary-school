@@ -42,7 +42,10 @@ export const SchoolLogo: React.FC<SchoolLogoProps> = ({
         setImgError(false);
         const current = getWebsiteSettings();
         if (current.schoolLogoUrl !== firebaseLogoUrl) {
-          saveWebsiteSettings({ ...current, schoolLogoUrl: firebaseLogoUrl });
+          localStorage.setItem(
+            'mugina_website_settings_v3',
+            JSON.stringify({ ...current, schoolLogoUrl: firebaseLogoUrl })
+          );
         }
       }
     }).catch((e) => console.warn('Logo firebase sync notice:', e));

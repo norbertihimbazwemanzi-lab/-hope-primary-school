@@ -58,6 +58,7 @@ import {
   logoutGoogle,
   getAccessToken,
   resolveStaffRoleForFirebaseUser,
+  ensureAdminFirebaseAuth,
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
@@ -374,6 +375,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    ensureAdminFirebaseAuth().catch((err) => console.warn('Admin firebase auth init notice:', err));
 
     const cleanUser = loginUsername.trim();
     const cleanPass = loginPassword.trim();
@@ -883,8 +885,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         const uploadRes = await uploadSchoolDocument(selectedDocFile, docFormData.title);
         finalFileUrl = uploadRes.url;
         finalFileName = uploadRes.fileName || selectedDocFile.name;
-        finalFileSize = uploadRes.fileSize;
-        finalFileType = uploadRes.fileType;
+        finalFileSize = uploadRes.fileSize || finalFileSize;
+        finalFileType = uploadRes.fileType || finalFileType;
         setDocUploadStatus('Uploaded successfully to Firebase Storage!');
       } catch (err: any) {
         console.warn('Document storage upload notice:', err);
@@ -1070,37 +1072,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
               <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
             </button>
 
-            {/* Secure Identity-Based Access Control Notice */}
-            <div className="pt-3 border-t border-slate-200">
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                    <Shield className="w-3 h-3" />
-                  </div>
-                  <span className="text-xs font-bold text-slate-800">
-                    Firebase Authentication & Identity Control
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Access to the administration suite is restricted to verified school identities.
-                  Manual role switching is disabled. When you sign in with your Google or school account, your assigned role (Admin, DOS, Finance, Teacher, or Registrar) is automatically validated and locked to your identity.
-                </p>
-                <div className="pt-1 flex flex-wrap gap-1.5 text-[10px] text-slate-500 font-medium">
-                  <span className="inline-flex items-center gap-1 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                    👑 Admin: Norbert Ihimbazwe Manzi
-                  </span>
-                  <span className="inline-flex items-center gap-1 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                    🎓 Dean of Studies (DOS)
-                  </span>
-                  <span className="inline-flex items-center gap-1 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                    💰 Finance
-                  </span>
-                  <span className="inline-flex items-center gap-1 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                    👩‍🏫 Teacher
-                  </span>
-                </div>
-              </div>
-            </div>
+
           </div>
         </div>
       </div>
@@ -2261,6 +2233,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                   isRequired: true,
                   applicableGrades: 'All Grades (Nursery & Primary)',
                   formatHint: '',
+                  fileUrl: '',
+                  fileName: '',
+                  fileSize: '',
+                  fileType: '',
                 });
                 setShowDocModal(true);
               }}

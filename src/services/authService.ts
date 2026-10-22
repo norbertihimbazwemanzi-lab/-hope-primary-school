@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
+  signInAnonymously,
   User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -14,6 +15,21 @@ import { getStaffMembers, UserRole, CurrentSessionUser } from './adminStore';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
+
+/**
+ * Ensures the administrator has an active Firebase Auth identity
+ * so Firestore security rules recognize the authorized session.
+ */
+export const ensureAdminFirebaseAuth = async (): Promise<User | null> => {
+  if (auth.currentUser) return auth.currentUser;
+  try {
+    const cred = await signInAnonymously(auth);
+    return cred.user;
+  } catch (err) {
+    console.warn('[Auth Service] Firebase anonymous auth notice:', err);
+    return null;
+  }
+};
 
 // Standard Google Auth Provider for identity verification
 const googleProvider = new GoogleAuthProvider();

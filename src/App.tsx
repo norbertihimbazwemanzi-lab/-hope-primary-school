@@ -23,11 +23,19 @@ import {
   saveWebsiteSettings,
   syncServerGalleryItems,
   syncServerDocuments,
+  saveAnnouncements,
 } from './services/adminStore';
 import {
   fetchSchoolLogoFromFirebase,
   fetchSchoolGalleryFromFirebase,
   fetchSchoolDocumentsFromFirebase,
+  fetchSchoolAnnouncementsFromFirebase,
+  fetchWebsiteSettingsFromFirebase,
+  subscribeToSchoolLogo,
+  subscribeToSchoolGallery,
+  subscribeToSchoolDocuments,
+  subscribeToSchoolAnnouncements,
+  subscribeToWebsiteSettings,
 } from './services/firebaseStore';
 
 export default function App() {
@@ -54,20 +62,33 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Sync official school assets (logo, gallery photos, and documents) from Firebase Firestore
-  // This guarantees every user on any computer, mobile device, or browser sees the exact same data
+  // Multi-Device Real-Time Sync & Public Data Ingestion
+  // Ensures all public visitors (unauthenticated) and authenticated users see identical data across devices
   useEffect(() => {
-    // 1. Sync official School Logo from Firebase
+    // 1. Initial Logo Fetch & Real-time Subscription
     fetchSchoolLogoFromFirebase().then((firebaseLogoUrl) => {
       if (firebaseLogoUrl) {
         const settings = getWebsiteSettings();
         if (settings.schoolLogoUrl !== firebaseLogoUrl) {
-          saveWebsiteSettings({ ...settings, schoolLogoUrl: firebaseLogoUrl });
+          const updated = { ...settings, schoolLogoUrl: firebaseLogoUrl };
+          localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
+          window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+        }
+      }
+    }).catch((e) => console.warn('Logo fetch notice:', e));
+
+    const unsubLogo = subscribeToSchoolLogo((newLogoUrl) => {
+      if (newLogoUrl) {
+        const settings = getWebsiteSettings();
+        if (settings.schoolLogoUrl !== newLogoUrl) {
+          const updated = { ...settings, schoolLogoUrl: newLogoUrl };
+          localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
+          window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
         }
       }
     });
 
-    // 2. Sync Gallery Photos from Firebase and server
+    // 2. Initial Gallery Sync from Firebase Storage/Firestore & Server
     Promise.all([
       syncServerGalleryItems(),
       fetchSchoolGalleryFromFirebase(),
@@ -83,7 +104,20 @@ export default function App() {
       }
     }).catch((e) => console.warn('Gallery sync notice:', e));
 
-    // 3. Sync Documents from Firebase and server
+    // Real-time Gallery Subscription for instant photo display across all devices
+    const unsubGallery = subscribeToSchoolGallery((liveItems) => {
+      if (Array.isArray(liveItems) && liveItems.length > 0) {
+        const local = getGalleryItems();
+        const map = new Map();
+        [...local, ...liveItems].forEach((item) => {
+          if (item && item.id) map.set(item.id, item);
+        });
+        const merged = Array.from(map.values());
+        saveGalleryItems(merged);
+      }
+    });
+
+    // 3. Initial Documents Sync from Firebase Firestore & Server
     Promise.all([
       syncServerDocuments(),
       fetchSchoolDocumentsFromFirebase(),
@@ -94,9 +128,53 @@ export default function App() {
       });
       const merged = Array.from(map.values());
       if (merged.length > 0) {
-        localStorage.setItem('mugina_hope_registration_docs_v1', JSON.stringify(merged));
+        localStorage.setItem('mugina_registration_documents_v3', JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('mugina-documents-updated', { detail: merged }));
       }
     }).catch((e) => console.warn('Document sync notice:', e));
+
+    // Real-time Documents Subscription
+    const unsubDocs = subscribeToSchoolDocuments((liveDocs) => {
+      if (Array.isArray(liveDocs) && liveDocs.length > 0) {
+        localStorage.setItem('mugina_registration_documents_v3', JSON.stringify(liveDocs));
+        window.dispatchEvent(new CustomEvent('mugina-documents-updated', { detail: liveDocs }));
+      }
+    });
+
+    // 4. Initial Announcements Sync & Real-time Subscription
+    fetchSchoolAnnouncementsFromFirebase().then((annList) => {
+      if (Array.isArray(annList) && annList.length > 0) {
+        saveAnnouncements(annList);
+        const active = annList.find((a) => a.isActive);
+        if (active) setActiveAnnouncement(active);
+      }
+    }).catch((e) => console.warn('Announcement sync notice:', e));
+
+    const unsubAnn = subscribeToSchoolAnnouncements((liveAnn) => {
+      if (Array.isArray(liveAnn) && liveAnn.length > 0) {
+        saveAnnouncements(liveAnn);
+        const active = liveAnn.find((a) => a.isActive);
+        setActiveAnnouncement(active || null);
+      }
+    });
+
+    // 5. Real-time Website Settings Subscription
+    const unsubSettings = subscribeToWebsiteSettings((liveSettings) => {
+      if (liveSettings) {
+        const current = getWebsiteSettings();
+        const updated = { ...current, ...liveSettings };
+        localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+      }
+    });
+
+    return () => {
+      unsubLogo();
+      unsubGallery();
+      unsubDocs();
+      unsubAnn();
+      unsubSettings();
+    };
   }, []);
 
   const handleNavigate = (page: PageId) => {

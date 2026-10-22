@@ -38,8 +38,19 @@ service cloud.firestore {
       allow write: if isSignedIn();
     }
 
+    // School Announcements (Public read for active notices and banners across all devices)
+    match /school_announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // Student Progress Logs (Accessible to authenticated school staff)
     match /student_progress_logs/{logId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Enrolled Students Roster
+    match /enrolled_students/{studentId} {
       allow read, write: if isSignedIn();
     }
 

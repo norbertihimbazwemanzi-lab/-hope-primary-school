@@ -40,6 +40,14 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
     syncServerDocuments().then((docs) => {
       if (docs && docs.length > 0) setRequiredDocs(docs);
     });
+
+    const docHandler = (e: any) => {
+      if (Array.isArray(e.detail) && e.detail.length > 0) {
+        setRequiredDocs(e.detail);
+      }
+    };
+    window.addEventListener('mugina-documents-updated', docHandler);
+    return () => window.removeEventListener('mugina-documents-updated', docHandler);
   }, []);
 
   const toggleFaq = (idx: number) => {

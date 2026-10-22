@@ -55,8 +55,16 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
       }
     }).catch((err) => console.warn('Gallery sync notice:', err));
 
+    const galleryHandler = (e: any) => {
+      if (Array.isArray(e.detail)) {
+        setFacilities(e.detail);
+      }
+    };
+    window.addEventListener('mugina-gallery-updated', galleryHandler);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('mugina-gallery-updated', galleryHandler);
     };
   }, []);
 

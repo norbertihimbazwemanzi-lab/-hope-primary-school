@@ -11,7 +11,9 @@ import {
   doc,
   getDoc,
   setDoc,
+  onSnapshot,
   Timestamp,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -209,7 +211,7 @@ export const saveSchoolLogoToFirebase = async (logoUrl: string): Promise<boolean
 };
 
 /**
- * Fetch School Logo from Firebase Firestore
+ * Fetch School Logo from Firebase Firestore (Public readable)
  */
 export const fetchSchoolLogoFromFirebase = async (): Promise<string | null> => {
   try {
@@ -222,6 +224,29 @@ export const fetchSchoolLogoFromFirebase = async (): Promise<string | null> => {
     console.warn('[Firebase Store] Notice fetching school logo from Firestore:', err);
   }
   return null;
+};
+
+/**
+ * Real-time listener for School Logo changes across all devices
+ */
+export const subscribeToSchoolLogo = (callback: (logoUrl: string | null) => void): Unsubscribe => {
+  try {
+    const docRef = doc(db, 'school_settings', 'branding');
+    return onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists() && docSnap.data().schoolLogoUrl) {
+          callback(docSnap.data().schoolLogoUrl);
+        }
+      },
+      (err) => {
+        console.warn('[Firebase Store] School logo real-time listener notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register school logo listener:', err);
+    return () => {};
+  }
 };
 
 /**
@@ -251,7 +276,7 @@ export const saveSchoolGalleryItemToFirebase = async (item: any): Promise<boolea
 };
 
 /**
- * Fetch All School Gallery Photos from Firebase Firestore
+ * Fetch All School Gallery Photos from Firebase Firestore (Public readable)
  */
 export const fetchSchoolGalleryFromFirebase = async (): Promise<any[]> => {
   try {
@@ -265,6 +290,33 @@ export const fetchSchoolGalleryFromFirebase = async (): Promise<any[]> => {
   } catch (err) {
     console.warn('[Firebase Store] Firestore gallery fetch notice:', err);
     return [];
+  }
+};
+
+/**
+ * Real-time listener for School Gallery photos across all devices
+ */
+export const subscribeToSchoolGallery = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'school_gallery');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        if (items.length > 0) {
+          callback(items);
+        }
+      },
+      (err) => {
+        console.warn('[Firebase Store] School gallery real-time listener notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register school gallery listener:', err);
+    return () => {};
   }
 };
 
@@ -308,7 +360,7 @@ export const saveSchoolDocumentToFirebase = async (documentItem: any): Promise<b
 };
 
 /**
- * Fetch All School Registration Documents from Firebase Firestore
+ * Fetch All School Registration Documents from Firebase Firestore (Public readable)
  */
 export const fetchSchoolDocumentsFromFirebase = async (): Promise<any[]> => {
   try {
@@ -326,6 +378,33 @@ export const fetchSchoolDocumentsFromFirebase = async (): Promise<any[]> => {
 };
 
 /**
+ * Real-time listener for Registration Documents across all devices
+ */
+export const subscribeToSchoolDocuments = (callback: (docs: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'school_documents');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        if (items.length > 0) {
+          callback(items.sort((a, b) => (a.order || 0) - (b.order || 0)));
+        }
+      },
+      (err) => {
+        console.warn('[Firebase Store] School documents real-time listener notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register school documents listener:', err);
+    return () => {};
+  }
+};
+
+/**
  * Delete School Document from Firebase Firestore
  */
 export const deleteSchoolDocumentFromFirebase = async (id: string): Promise<boolean> => {
@@ -335,6 +414,209 @@ export const deleteSchoolDocumentFromFirebase = async (id: string): Promise<bool
     return true;
   } catch (err) {
     console.warn('[Firebase Store] Firestore document delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Save School Announcement to Firebase Firestore
+ */
+export const saveSchoolAnnouncementToFirebase = async (announcement: any): Promise<boolean> => {
+  try {
+    const annId = announcement.id || `ann-${Date.now()}`;
+    const docRef = doc(db, 'school_announcements', annId);
+    await setDoc(
+      docRef,
+      {
+        ...announcement,
+        id: annId,
+        updatedAt: new Date().toISOString(),
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    console.log('[Firebase Store] Announcement synced to Firestore:', annId);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore announcement write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch All School Announcements from Firebase Firestore (Public readable)
+ */
+export const fetchSchoolAnnouncementsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'school_announcements');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore announcements fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Real-time listener for School Announcements across all devices
+ */
+export const subscribeToSchoolAnnouncements = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'school_announcements');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        if (items.length > 0) {
+          callback(items);
+        }
+      },
+      (err) => {
+        console.warn('[Firebase Store] School announcements listener notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register announcements listener:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Delete School Announcement from Firebase Firestore
+ */
+export const deleteSchoolAnnouncementFromFirebase = async (id: string): Promise<boolean> => {
+  try {
+    const docRef = doc(db, 'school_announcements', id);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore announcement delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Save Global Website Settings to Firebase Firestore
+ */
+export const saveWebsiteSettingsToFirebase = async (settings: any): Promise<boolean> => {
+  try {
+    const docRef = doc(db, 'school_settings', 'general');
+    await setDoc(
+      docRef,
+      {
+        ...settings,
+        updatedAt: new Date().toISOString(),
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    console.log('[Firebase Store] Website settings synced to Firestore');
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore settings write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Global Website Settings from Firebase Firestore (Public readable)
+ */
+export const fetchWebsiteSettingsFromFirebase = async (): Promise<any | null> => {
+  try {
+    const docRef = doc(db, 'school_settings', 'general');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore settings fetch notice:', err);
+  }
+  return null;
+};
+
+/**
+ * Real-time listener for Website Settings across all devices
+ */
+export const subscribeToWebsiteSettings = (callback: (settings: any) => void): Unsubscribe => {
+  try {
+    const docRef = doc(db, 'school_settings', 'general');
+    return onSnapshot(
+      docRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          callback(docSnap.data());
+        }
+      },
+      (err) => {
+        console.warn('[Firebase Store] Website settings listener notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register website settings listener:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Save Enrolled Student to Firebase Firestore
+ */
+export const saveEnrolledStudentToFirebase = async (student: any): Promise<boolean> => {
+  try {
+    const stuId = student.id || `stu-${Date.now()}`;
+    const docRef = doc(db, 'enrolled_students', stuId);
+    await setDoc(
+      docRef,
+      {
+        ...student,
+        id: stuId,
+        updatedAt: new Date().toISOString(),
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    console.log('[Firebase Store] Enrolled student synced to Firestore:', stuId);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore student write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Enrolled Students from Firebase Firestore
+ */
+export const fetchEnrolledStudentsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'enrolled_students');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore students fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Delete Enrolled Student from Firebase Firestore
+ */
+export const deleteEnrolledStudentFromFirebase = async (id: string): Promise<boolean> => {
+  try {
+    const docRef = doc(db, 'enrolled_students', id);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore student delete notice:', err);
     return false;
   }
 };
