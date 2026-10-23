@@ -311,32 +311,33 @@ export default function App() {
       />
 
       {/* Bright Floating "Apply Now" & Quick Dial Action Stack */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3 print:hidden">
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end gap-2 sm:gap-3 print:hidden">
         {/* Scroll To Top Button */}
         {showScrollTop && (
           <button
             onClick={scrollToTop}
-            className="p-3 bg-white text-slate-700 hover:text-slate-950 rounded-full shadow-lg border border-slate-200 transition-all hover:-translate-y-0.5 active:translate-y-0"
+            className="p-2.5 sm:p-3 bg-white text-slate-700 hover:text-slate-950 rounded-full shadow-lg border border-slate-200 transition-all hover:-translate-y-0.5 active:translate-y-0"
             aria-label="Scroll to top"
           >
-            <ArrowUp className="w-4 h-4" />
+            <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         )}
 
         {/* Floating Call Button */}
         <a
           href={`tel:${SCHOOL_INFO.contact.phone.replace(/\s+/g, '')}`}
-          className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-xs font-bold rounded-full shadow-lg backdrop-blur-md border border-slate-700 transition-all hover:scale-105"
+          className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-[11px] sm:text-xs font-bold rounded-full shadow-lg backdrop-blur-md border border-slate-700 transition-all hover:scale-105"
           title="Direct Call to School"
         >
           <Phone className="w-3.5 h-3.5 text-amber-400" />
-          <span>{SCHOOL_INFO.contact.phone}</span>
+          <span className="hidden sm:inline">{SCHOOL_INFO.contact.phone}</span>
+          <span className="sm:hidden">Call School</span>
         </a>
 
         {/* Floating Applicant Chat & Status Tracker Button */}
         <button
           onClick={() => setIsChatTrackerOpen(true)}
-          className="inline-flex items-center gap-1.5 px-4 py-3 bg-blue-900/95 hover:bg-blue-950 text-white text-xs font-bold rounded-full shadow-lg backdrop-blur-md border border-blue-700/80 transition-all hover:scale-105 cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-900/95 hover:bg-blue-950 text-white text-[11px] sm:text-xs font-bold rounded-full shadow-lg backdrop-blur-md border border-blue-700/80 transition-all hover:scale-105 cursor-pointer"
           title="Track Application Status & View Chat History"
         >
           <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
@@ -347,9 +348,9 @@ export default function App() {
         {/* Bright Floating "Apply Now" Button */}
         <button
           onClick={() => handleOpenApply()}
-          className="inline-flex items-center gap-2 px-6 py-3.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-slate-950 font-black text-sm tracking-wide rounded-full shadow-xl shadow-amber-500/30 hover:shadow-2xl hover:shadow-amber-500/45 ring-4 ring-amber-400/30 transition-all transform hover:-translate-y-1 active:translate-y-0"
+          className="inline-flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-slate-950 font-black text-xs sm:text-sm tracking-wide rounded-full shadow-xl shadow-amber-500/30 hover:shadow-2xl hover:shadow-amber-500/45 ring-2 sm:ring-4 ring-amber-400/30 transition-all transform hover:-translate-y-1 active:translate-y-0"
         >
-          <Sparkles className="w-4 h-4 text-slate-950 animate-pulse" />
+          <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950 animate-pulse" />
           <span>Apply Now</span>
         </button>
       </div>

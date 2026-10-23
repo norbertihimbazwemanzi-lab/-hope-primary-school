@@ -342,7 +342,7 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {!isSubmitted ? (
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Stepper Progress */}
@@ -350,28 +350,31 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className={`flex items-center gap-1.5 ${step === 1 ? 'text-blue-700 font-bold' : 'text-slate-400'}`}
+                  className={`flex items-center gap-1 sm:gap-1.5 ${step === 1 ? 'text-blue-700 font-bold' : 'text-slate-400'}`}
                 >
-                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[11px]">1</span>
-                  <span>Student Information</span>
+                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[11px] shrink-0">1</span>
+                  <span className="hidden sm:inline">Student Information</span>
+                  <span className="sm:hidden">Learner</span>
                 </button>
                 <span className="text-slate-300">→</span>
                 <button
                   type="button"
                   onClick={() => setStep(2)}
-                  className={`flex items-center gap-1.5 ${step === 2 ? 'text-blue-700 font-bold' : 'text-slate-400'}`}
+                  className={`flex items-center gap-1 sm:gap-1.5 ${step === 2 ? 'text-blue-700 font-bold' : 'text-slate-400'}`}
                 >
-                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[11px]">2</span>
-                  <span>Parent / Guardian</span>
+                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[11px] shrink-0">2</span>
+                  <span className="hidden sm:inline">Parent / Guardian</span>
+                  <span className="sm:hidden">Parent</span>
                 </button>
                 <span className="text-slate-300">→</span>
                 <button
                   type="button"
                   onClick={() => setStep(3)}
-                  className={`flex items-center gap-1.5 ${step === 3 ? 'text-blue-700 font-bold' : 'text-slate-400'}`}
+                  className={`flex items-center gap-1 sm:gap-1.5 ${step === 3 ? 'text-blue-700 font-bold' : 'text-slate-400'}`}
                 >
-                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[11px]">3</span>
-                  <span>Documents & Services</span>
+                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-[11px] shrink-0">3</span>
+                  <span className="hidden sm:inline">Documents & Services</span>
+                  <span className="sm:hidden">Services</span>
                 </button>
               </div>
 

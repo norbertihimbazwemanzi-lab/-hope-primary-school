@@ -186,21 +186,21 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white px-6 py-4 flex items-center justify-between border-b border-blue-900 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center font-bold">
-              <MessageSquare className="w-5 h-5 text-amber-400" />
+        <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between border-b border-blue-900 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center font-bold shrink-0">
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold font-display text-white">
+                <h3 className="text-sm sm:text-base font-bold font-display text-white truncate">
                   Application Status & Admin Chat
                 </h3>
-                <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-bold">
+                <span className="hidden xs:inline-block text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
                   Direct Line to Admin Norbert
                 </span>
               </div>
-              <p className="text-xs text-slate-300">
+              <p className="text-[11px] sm:text-xs text-slate-300 truncate">
                 Track verification progress & communicate in real time with school administration
               </p>
             </div>

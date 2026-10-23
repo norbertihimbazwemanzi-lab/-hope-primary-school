@@ -46,19 +46,19 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between gap-8 h-20">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 lg:gap-8 h-16 sm:h-20">
           {/* Zone 1: Brand Wordmark with Official School Crest Logo */}
           <button
             onClick={() => handleNavClick('home')}
-            className="flex items-center gap-3 text-left focus:outline-hidden group shrink-0"
+            className="flex items-center gap-2 sm:gap-3 text-left focus:outline-hidden group shrink-0 min-w-0"
           >
             <SchoolLogo size="md" />
-            <div className="flex flex-col">
-              <span className="text-lg sm:text-xl font-black tracking-tight text-slate-900 font-display group-hover:text-blue-700 transition-colors">
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm xs:text-base sm:text-xl font-black tracking-tight text-slate-900 font-display group-hover:text-blue-700 transition-colors truncate max-w-[130px] xs:max-w-[180px] sm:max-w-none">
                 Mugina Hope Academy
               </span>
-              <span className="text-xs text-slate-500 font-medium tracking-normal">
+              <span className="hidden xs:inline-block text-[10px] sm:text-xs text-slate-500 font-medium tracking-normal truncate">
                 Primary & Nursery · Kamonyi
               </span>
             </div>
@@ -86,13 +86,13 @@ export const Header: React.FC<HeaderProps> = ({
           </nav>
 
           {/* Zone 3: Primary Actions (Admin Portal + Apply Now) */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 lg:gap-3 shrink-0">
             {/* Role-Based Portal Button */}
             {sessionUser ? (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => handleNavClick('admin')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition-colors border ${
+                  className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-bold rounded-lg transition-colors border ${
                     currentPage === 'admin'
                       ? 'bg-blue-900 text-white border-blue-800'
                       : 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
@@ -100,11 +100,12 @@ export const Header: React.FC<HeaderProps> = ({
                   title={`${sessionUser.role} Dashboard`}
                 >
                   <Shield className="w-3.5 h-3.5 text-amber-500" />
-                  <span>{sessionUser.role} Portal</span>
+                  <span className="hidden xs:inline">{sessionUser.role} Portal</span>
+                  <span className="xs:hidden">{sessionUser.role}</span>
                 </button>
                 <button
                   onClick={handleAdminLogout}
-                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  className="p-1.5 sm:p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                   title="Sign out"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -113,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <button
                 onClick={() => handleNavClick('admin')}
-                className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold rounded-lg transition-colors ${
                   currentPage === 'admin'
                     ? 'bg-slate-900 text-white'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
@@ -141,7 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Bright, Floating/Prominent Apply Now Button */}
             <button
               onClick={onOpenApply}
-              className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 active:bg-amber-700 rounded-lg shadow-md shadow-amber-500/25 hover:shadow-lg hover:shadow-amber-500/35 transition-all transform hover:-translate-y-0.5 active:translate-y-0 whitespace-nowrap shrink-0 border border-amber-400"
+              className="px-2.5 sm:px-5 py-1.5 sm:py-2.5 text-xs sm:text-sm font-bold text-white bg-amber-500 hover:bg-amber-600 active:bg-amber-700 rounded-lg shadow-sm hover:shadow-md transition-all whitespace-nowrap shrink-0 border border-amber-400"
             >
               Apply Now
             </button>
@@ -149,10 +150,10 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-100 focus:outline-hidden"
+              className="lg:hidden p-1.5 sm:p-2 text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-100 focus:outline-hidden"
               aria-label="Toggle navigation menu"
             >
-              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {mobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
             </button>
           </div>
         </div>
@@ -161,6 +162,24 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 shadow-xl animate-in slide-in-from-top duration-150">
+          {sessionUser && (
+            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-xl mb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-500 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-blue-950 block truncate">{sessionUser.name}</span>
+                  <span className="text-[10px] text-blue-700 font-semibold">{sessionUser.role} Console</span>
+                </div>
+              </div>
+              <button
+                onClick={handleAdminLogout}
+                className="px-2.5 py-1 text-xs font-bold text-rose-700 bg-white border border-rose-200 rounded-lg shrink-0 cursor-pointer"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-1">
             {navItems.map((item) => {
               const isActive = currentPage === item.id;
@@ -168,7 +187,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`text-left px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  className={`text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-blue-50 text-blue-700 font-semibold'
                       : 'text-slate-700 hover:bg-slate-50'
@@ -180,14 +199,14 @@ export const Header: React.FC<HeaderProps> = ({
             })}
             <button
               onClick={() => handleNavClick('admin')}
-              className={`text-left px-4 py-3 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
+              className={`text-left px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
                 currentPage === 'admin'
                   ? 'bg-blue-900 text-white font-semibold'
                   : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
               <Lock className="w-4 h-4 text-amber-500" />
-              <span>{isAdmin ? 'Admin Dashboard' : 'Admin Login'}</span>
+              <span>{sessionUser ? `${sessionUser.role} Dashboard` : 'Staff & Admin Portal'}</span>
             </button>
           </div>
 
