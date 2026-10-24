@@ -14,6 +14,11 @@ import {
   saveWebsiteSettingsToFirebase,
   saveEnrolledStudentToFirebase,
   deleteEnrolledStudentFromFirebase,
+  saveStaffMemberToFirebase,
+  fetchStaffMembersFromFirebase,
+  deleteStaffMemberFromFirebase,
+  saveStaffMembersBatchToFirebase,
+  fetchEnrolledStudentsFromFirebase,
 } from './firebaseStore';
 
 export type UserRole = 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD' | 'Student';
@@ -684,6 +689,9 @@ export const persistToServer = (endpoint: string, data: any) => {
 export const saveStaffMembers = (list: StaffMember[]) => {
   localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(list));
   persistToServer('/api/staff', { items: list });
+  saveStaffMembersBatchToFirebase(list).catch((e) =>
+    console.warn('[Staff Batch] Firebase save notice:', e)
+  );
 };
 
 export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' | 'status'>): StaffMember => {
@@ -696,6 +704,9 @@ export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' |
   };
   const updated = [newStaff, ...list];
   saveStaffMembers(updated);
+  saveStaffMemberToFirebase(newStaff).catch((e) =>
+    console.warn('[Staff Enroll] Firebase Firestore error:', e)
+  );
   return newStaff;
 };
 
@@ -703,6 +714,12 @@ export const updateStaffMember = (id: string, updates: Partial<StaffMember>): St
   const list = getStaffMembers();
   const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
   saveStaffMembers(updated);
+  const target = updated.find((s) => s.id === id);
+  if (target) {
+    saveStaffMemberToFirebase(target).catch((e) =>
+      console.warn('[Staff Update] Firebase Firestore error:', e)
+    );
+  }
   return updated;
 };
 
@@ -710,7 +727,90 @@ export const deleteStaffMember = (id: string): StaffMember[] => {
   const list = getStaffMembers();
   const updated = list.filter((s) => s.id !== id);
   saveStaffMembers(updated);
+  deleteStaffMemberFromFirebase(id).catch((e) =>
+    console.warn('[Staff Delete] Firebase Firestore error:', e)
+  );
   return updated;
+};
+
+/**
+ * Cross-Device Synchronization for Staff Accounts from Firebase Firestore and Server
+ * Guarantees accounts enrolled by Admin are immediately visible and recognized on any device
+ */
+export const syncServerStaff = async (): Promise<StaffMember[]> => {
+  try {
+    const firestoreStaff = await fetchStaffMembersFromFirebase();
+    let serverStaff: StaffMember[] = [];
+    try {
+      const res = await fetch('/api/staff');
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.items)) serverStaff = json.items;
+      }
+    } catch {}
+
+    const local = getStaffMembers();
+    const map = new Map<string, StaffMember>();
+
+    // 1. Seed defaults first
+    defaultStaff.forEach((s) => map.set(s.username.toLowerCase(), s));
+    // 2. Local
+    local.forEach((s) => map.set(s.username.toLowerCase(), s));
+    // 3. Server
+    serverStaff.forEach((s) => map.set(s.username.toLowerCase(), s));
+    // 4. Firestore (authoritative cross-device)
+    firestoreStaff.forEach((s) => {
+      if (s.username) map.set(s.username.toLowerCase(), s as StaffMember);
+    });
+
+    const merged = Array.from(map.values());
+    localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(merged));
+
+    // Ensure all default/initial accounts are in Firestore if database is newly initialized
+    if (firestoreStaff.length < merged.length) {
+      saveStaffMembersBatchToFirebase(merged).catch(() => {});
+    }
+
+    return merged;
+  } catch (err) {
+    console.warn('[Staff Sync] Notice:', err);
+    return getStaffMembers();
+  }
+};
+
+/**
+ * Cross-Device Synchronization for Enrolled Students from Firebase Firestore and Server
+ */
+export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
+  try {
+    const firestoreStudents = await fetchEnrolledStudentsFromFirebase();
+    let serverStudents: EnrolledStudent[] = [];
+    try {
+      const res = await fetch('/api/students');
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.items)) serverStudents = json.items;
+      }
+    } catch {}
+
+    const local = getEnrolledStudents();
+    const map = new Map<string, EnrolledStudent>();
+
+    defaultStudents.forEach((s) => map.set(s.id, s));
+    local.forEach((s) => map.set(s.id, s));
+    serverStudents.forEach((s) => map.set(s.id, s));
+    firestoreStudents.forEach((s) => {
+      if (s.id) map.set(s.id, s as EnrolledStudent);
+    });
+
+    const merged = Array.from(map.values());
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(merged));
+
+    return merged;
+  } catch (err) {
+    console.warn('[Student Sync] Notice:', err);
+    return getEnrolledStudents();
+  }
 };
 
 // --- Student Enrollment Management (DOS, Registrar & Admin) ---
@@ -1650,9 +1750,11 @@ export const reviewRefundRequest = (
 // Global sync utility to pull latest database records on initial load
 export const syncAllStoresWithServerDatabase = async () => {
   try {
+    // 1. Cross-device authoritative sync for staff and students from Firebase Firestore
+    await syncServerStaff();
+    await syncServerStudents();
+
     const endpoints = [
-      { key: STORAGE_KEYS.STAFF, url: '/api/staff' },
-      { key: STORAGE_KEYS.STUDENTS, url: '/api/students' },
       { key: STORAGE_KEYS.ATTENDANCE, url: '/api/attendance' },
       { key: STORAGE_KEYS.TEACHER_ATTENDANCE, url: '/api/teacher-attendance' },
       { key: STORAGE_KEYS.DISCIPLINE, url: '/api/discipline' },

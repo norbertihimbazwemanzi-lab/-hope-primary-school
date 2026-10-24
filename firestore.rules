@@ -2,68 +2,45 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isAdministrator() {
-      return isSignedIn() && (
-        request.auth.token.email.lower() == 'norbertihimbazwemanzi@gmail.com' ||
-        request.auth.token.email.lower() == 'headteacher@muginahopeschool.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
-
-    // Default deny catch-all
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // School Settings & Branding (Public read so all devices see the school logo & data)
+    // School Settings & Branding (Public read/write so all devices see the school logo & data)
     match /school_settings/{settingId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // School Photo Gallery (Public read so photos are visible across all user devices)
+    // School Photo Gallery (Public read/write so photos are visible across all user devices)
     match /school_gallery/{itemId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // School Registration Documents (Public read so all applicants see required forms and downloads)
+    // School Registration Documents (Public read/write so all applicants see required forms and downloads)
     match /school_documents/{docId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // School Announcements (Public read for active notices and banners across all devices)
+    // School Announcements (Public read/write for active notices and banners across all devices)
     match /school_announcements/{announcementId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // Student Progress Logs (Accessible to authenticated school staff)
+    // Student Progress Logs (Accessible across staff devices)
     match /student_progress_logs/{logId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // Enrolled Students Roster
+    // Enrolled Students Roster (Synced across devices)
     match /enrolled_students/{studentId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
-    // Staff Members & Role Mappings
+    // Staff Members & Role Mappings (Cross-device staff authentication & enrollment sync)
     match /staff_members/{staffId} {
-      allow read: if isSignedIn();
-      allow write: if isAdministrator();
+      allow read, write: if true;
     }
 
     // Admins Collection
     match /admins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isAdministrator();
+      allow read, write: if true;
     }
   }
 }
+

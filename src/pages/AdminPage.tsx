@@ -49,6 +49,8 @@ import {
   PaymentTransaction,
   getPaymentTransactions,
   syncAllStoresWithServerDatabase,
+  syncServerStaff,
+  syncServerStudents,
 } from '../services/adminStore';
 import { FacilityItem, PageId } from '../types';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
@@ -62,7 +64,7 @@ import {
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
-import { saveSchoolLogoToFirebase } from '../services/firebaseStore';
+import { saveSchoolLogoToFirebase, fetchStaffMembersFromFirebase } from '../services/firebaseStore';
 import { AdminAttendanceTracker } from '../components/AdminAttendanceTracker';
 import { FinancePortal } from '../components/FinancePortal';
 import { TeacherPortal } from '../components/TeacherPortal';
@@ -170,6 +172,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
 
   // Auto-populate saved credentials on phone/browser mount if remember option was enabled
   useEffect(() => {
@@ -390,6 +393,30 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       setGalleryItems(items);
       if (onGalleryUpdated) onGalleryUpdated();
     });
+
+    const handleStaffUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setStaffList(e.detail);
+      } else {
+        setStaffList(getStaffMembers());
+      }
+    };
+
+    const handleStudentsUpdate = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setStudentList(e.detail);
+      } else {
+        setStudentList(getEnrolledStudents());
+      }
+    };
+
+    window.addEventListener('mugina-staff-updated', handleStaffUpdate);
+    window.addEventListener('mugina-students-updated', handleStudentsUpdate);
+
+    return () => {
+      window.removeEventListener('mugina-staff-updated', handleStaffUpdate);
+      window.removeEventListener('mugina-students-updated', handleStudentsUpdate);
+    };
   }, []);
 
   const fetchChatThreads = async () => {
@@ -444,100 +471,144 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setAttendanceSuccessMsg(null);
   }, [attendanceDate, attendanceGrade, studentList]);
 
-  // Secure Password-Protected Gate Handler
-  const handleLogin = (e: React.FormEvent) => {
+  // Secure Password-Protected Gate Handler with Cross-Device Database Check
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setIsVerifyingLogin(true);
     ensureAdminFirebaseAuth().catch((err) => console.warn('Admin firebase auth init notice:', err));
 
     const cleanUser = loginUsername.trim();
     const cleanPass = loginPassword.trim();
 
-    // 1. Primary requested Admin credentials (or shared access code @0798744704)
-    if (
-      (cleanUser.toLowerCase() === 'norbertihimbazwemanzi@gmail.com' && cleanPass === '@0798744704') ||
-      (cleanUser === '' && cleanPass === '@0798744704') ||
-      (cleanUser === '@0798744704' && (cleanPass === '@0798744704' || cleanPass === ''))
-    ) {
-      persistCredentialsIfEnabled(cleanUser || 'norbertihimbazwemanzi@gmail.com', cleanPass || '@0798744704');
-      const adminSession = {
-        id: 'staff-admin-norbert',
-        name: 'Norbert Ihimbazwe Manzi (School Administrator)',
-        role: 'Admin' as UserRole,
-        username: 'norbertihimbazwemanzi@gmail.com',
-        email: 'norbertihimbazwemanzi@gmail.com',
-      };
-      setCurrentSessionUser(adminSession);
-      setCurrentUser(adminSession);
-      return;
+    try {
+      // 1. Primary requested Admin credentials (or shared access code @0798744704)
+      if (
+        (cleanUser.toLowerCase() === 'norbertihimbazwemanzi@gmail.com' && cleanPass === '@0798744704') ||
+        (cleanUser === '' && cleanPass === '@0798744704') ||
+        (cleanUser === '@0798744704' && (cleanPass === '@0798744704' || cleanPass === ''))
+      ) {
+        persistCredentialsIfEnabled(cleanUser || 'norbertihimbazwemanzi@gmail.com', cleanPass || '@0798744704');
+        const adminSession = {
+          id: 'staff-admin-norbert',
+          name: 'Norbert Ihimbazwe Manzi (School Administrator)',
+          role: 'Admin' as UserRole,
+          username: 'norbertihimbazwemanzi@gmail.com',
+          email: 'norbertihimbazwemanzi@gmail.com',
+        };
+        setCurrentSessionUser(adminSession);
+        setCurrentUser(adminSession);
+        return;
+      }
+
+      // 2. Primary requested Headteacher credentials (or shared access code hopeprimary@123)
+      if (
+        (cleanUser.toLowerCase() === 'hopeprimaryschool' && cleanPass === 'hopeprimary@123') ||
+        (cleanUser === '' && cleanPass === 'hopeprimary@123') ||
+        (cleanUser === 'hopeprimaryschool' && cleanPass === '')
+      ) {
+        persistCredentialsIfEnabled(cleanUser || 'hopeprimaryschool', cleanPass || 'hopeprimary@123');
+        const headteacherSession = {
+          id: 'staff-headteacher-1',
+          name: 'Headteacher / School Principal',
+          role: 'Admin' as UserRole,
+          username: 'hopeprimaryschool',
+          email: 'headteacher@muginahopeschool.com',
+        };
+        setCurrentSessionUser(headteacherSession);
+        setCurrentUser(headteacherSession);
+        return;
+      }
+
+      // 3. Fallback shared access code (mugina2026)
+      if (cleanPass === 'mugina2026' || (cleanUser === 'admin' && cleanPass === 'mugina2026')) {
+        persistCredentialsIfEnabled(cleanUser || 'admin', cleanPass);
+        const adminSession = {
+          id: 'staff-admin-norbert',
+          name: 'Norbert Ihimbazwe Manzi (School Administrator)',
+          role: 'Admin' as UserRole,
+          username: 'norbertihimbazwemanzi@gmail.com',
+          email: 'norbertihimbazwemanzi@gmail.com',
+        };
+        setCurrentSessionUser(adminSession);
+        setCurrentUser(adminSession);
+        return;
+      }
+
+      // 4. Check locally cached staff members
+      const allStaff = getStaffMembers();
+      const match = allStaff.find(
+        (s) =>
+          (s.username.toLowerCase() === cleanUser.toLowerCase() ||
+            s.email.toLowerCase() === cleanUser.toLowerCase()) &&
+          s.password === cleanPass &&
+          s.status === 'Active'
+      );
+
+      if (match) {
+        persistCredentialsIfEnabled(cleanUser, cleanPass);
+        const session = {
+          id: match.id,
+          name: match.name,
+          role: match.role,
+          username: match.username,
+          email: match.email,
+          assignedSubjectOrGrade: match.assignedSubjectOrGrade,
+        };
+        setCurrentSessionUser(session);
+        setCurrentUser(session);
+        if (session.role === 'Finance') setActiveTab('finance');
+        else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
+        else if (session.role === 'Registrar') setActiveTab('registrar');
+        else if (session.role === 'DOS') setActiveTab('students');
+        else if (session.role === 'DOD') setActiveTab('attendance');
+        else setActiveTab('students');
+        return;
+      }
+
+      // 5. Cross-Device Cloud Query: Fetch directly from Firebase Firestore in case staff was enrolled on another device
+      const remoteStaff = await fetchStaffMembersFromFirebase();
+      if (Array.isArray(remoteStaff) && remoteStaff.length > 0) {
+        const mergedList = await syncServerStaff();
+        setStaffList(mergedList);
+
+        const remoteMatch = mergedList.find(
+          (s) =>
+            (s.username.toLowerCase() === cleanUser.toLowerCase() ||
+              s.email.toLowerCase() === cleanUser.toLowerCase()) &&
+            s.password === cleanPass &&
+            s.status === 'Active'
+        );
+
+        if (remoteMatch) {
+          persistCredentialsIfEnabled(cleanUser, cleanPass);
+          const session = {
+            id: remoteMatch.id,
+            name: remoteMatch.name,
+            role: remoteMatch.role,
+            username: remoteMatch.username,
+            email: remoteMatch.email,
+            assignedSubjectOrGrade: remoteMatch.assignedSubjectOrGrade,
+          };
+          setCurrentSessionUser(session);
+          setCurrentUser(session);
+          if (session.role === 'Finance') setActiveTab('finance');
+          else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
+          else if (session.role === 'Registrar') setActiveTab('registrar');
+          else if (session.role === 'DOS') setActiveTab('students');
+          else if (session.role === 'DOD') setActiveTab('attendance');
+          else setActiveTab('students');
+          return;
+        }
+      }
+
+      setLoginError('Invalid username, password, or access code. Please check your credentials or contact the School Administrator.');
+    } catch (err: any) {
+      console.warn('Login verification notice:', err);
+      setLoginError('Could not verify credentials across database. Please check your connection and try again.');
+    } finally {
+      setIsVerifyingLogin(false);
     }
-
-    // 2. Primary requested Headteacher credentials (or shared access code hopeprimary@123)
-    if (
-      (cleanUser.toLowerCase() === 'hopeprimaryschool' && cleanPass === 'hopeprimary@123') ||
-      (cleanUser === '' && cleanPass === 'hopeprimary@123') ||
-      (cleanUser === 'hopeprimaryschool' && cleanPass === '')
-    ) {
-      persistCredentialsIfEnabled(cleanUser || 'hopeprimaryschool', cleanPass || 'hopeprimary@123');
-      const headteacherSession = {
-        id: 'staff-headteacher-1',
-        name: 'Headteacher / School Principal',
-        role: 'Admin' as UserRole,
-        username: 'hopeprimaryschool',
-        email: 'headteacher@muginahopeschool.com',
-      };
-      setCurrentSessionUser(headteacherSession);
-      setCurrentUser(headteacherSession);
-      return;
-    }
-
-    // 3. Fallback shared access code (mugina2026)
-    if (cleanPass === 'mugina2026' || (cleanUser === 'admin' && cleanPass === 'mugina2026')) {
-      persistCredentialsIfEnabled(cleanUser || 'admin', cleanPass);
-      const adminSession = {
-        id: 'staff-admin-norbert',
-        name: 'Norbert Ihimbazwe Manzi (School Administrator)',
-        role: 'Admin' as UserRole,
-        username: 'norbertihimbazwemanzi@gmail.com',
-        email: 'norbertihimbazwemanzi@gmail.com',
-      };
-      setCurrentSessionUser(adminSession);
-      setCurrentUser(adminSession);
-      return;
-    }
-
-    // 4. Check all enrolled staff members (DOS, DOD, Teachers, etc.)
-    const allStaff = getStaffMembers();
-    const match = allStaff.find(
-      (s) =>
-        (s.username.toLowerCase() === cleanUser.toLowerCase() ||
-          s.email.toLowerCase() === cleanUser.toLowerCase()) &&
-        s.password === cleanPass &&
-        s.status === 'Active'
-    );
-
-    if (match) {
-      persistCredentialsIfEnabled(cleanUser, cleanPass);
-      const session = {
-        id: match.id,
-        name: match.name,
-        role: match.role,
-        username: match.username,
-        email: match.email,
-        assignedSubjectOrGrade: match.assignedSubjectOrGrade,
-      };
-      setCurrentSessionUser(session);
-      setCurrentUser(session);
-      if (session.role === 'Finance') setActiveTab('finance');
-      else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
-      else if (session.role === 'Registrar') setActiveTab('registrar');
-      else if (session.role === 'DOS') setActiveTab('students');
-      else if (session.role === 'DOD') setActiveTab('attendance');
-      else setActiveTab('students');
-      return;
-    }
-
-    setLoginError('Invalid username, password, or access code. Please verify credentials.');
   };
 
   // Firebase Google Sign-In with Strict Identity-Based Access Control
@@ -1198,10 +1269,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
               <button
                 type="submit"
-                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer mt-2"
+                disabled={isVerifyingLogin}
+                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-75 disabled:cursor-not-allowed"
               >
-                <Lock className="w-4 h-4 text-amber-400" />
-                <span>Verify Access & Unlock Console</span>
+                {isVerifyingLogin ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                    <span>Verifying Account with Database...</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 text-amber-400" />
+                    <span>Verify Access & Unlock Console</span>
+                  </>
+                )}
               </button>
             </form>
 
@@ -1312,13 +1393,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
           <button
             onClick={() => onNavigate('home')}
-            className="px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl"
+            className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-300 shadow-2xs rounded-xl cursor-pointer transition-all active:scale-95"
+            title="Return to the public school website"
           >
             View Public Site
           </button>
           <button
             onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 rounded-xl border border-rose-200 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-xl shadow-xs border border-rose-700 transition-all cursor-pointer ring-offset-1 focus:ring-2 focus:ring-rose-400"
+            title="Sign out of administrative session"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>

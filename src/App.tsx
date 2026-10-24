@@ -24,6 +24,10 @@ import {
   syncServerGalleryItems,
   syncServerDocuments,
   saveAnnouncements,
+  syncServerStaff,
+  syncServerStudents,
+  getStaffMembers,
+  getEnrolledStudents,
 } from './services/adminStore';
 import {
   fetchSchoolLogoFromFirebase,
@@ -36,6 +40,8 @@ import {
   subscribeToSchoolDocuments,
   subscribeToSchoolAnnouncements,
   subscribeToWebsiteSettings,
+  subscribeToStaffMembers,
+  subscribeToEnrolledStudents,
 } from './services/firebaseStore';
 
 export default function App() {
@@ -182,12 +188,47 @@ export default function App() {
       }
     });
 
+    // 6. Cross-Device Staff Accounts Real-time Sync & Subscription
+    // Guarantees accounts enrolled by Admin on one device exist on any other device/phone
+    syncServerStaff().catch((e) => console.warn('Staff initial sync notice:', e));
+    const unsubStaff = subscribeToStaffMembers((liveStaff) => {
+      if (Array.isArray(liveStaff) && liveStaff.length > 0) {
+        const local = getStaffMembers();
+        const map = new Map<string, any>();
+        local.forEach((s) => map.set(s.username.toLowerCase(), s));
+        liveStaff.forEach((s) => {
+          if (s && s.username) map.set(s.username.toLowerCase(), s);
+        });
+        const merged = Array.from(map.values());
+        localStorage.setItem('mugina_staff_members_v3', JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('mugina-staff-updated', { detail: merged }));
+      }
+    });
+
+    // 7. Cross-Device Enrolled Students Real-time Sync & Subscription
+    syncServerStudents().catch((e) => console.warn('Student initial sync notice:', e));
+    const unsubStudents = subscribeToEnrolledStudents((liveStudents) => {
+      if (Array.isArray(liveStudents) && liveStudents.length > 0) {
+        const local = getEnrolledStudents();
+        const map = new Map<string, any>();
+        local.forEach((s) => map.set(s.regNumber || s.id, s));
+        liveStudents.forEach((s) => {
+          if (s && (s.regNumber || s.id)) map.set(s.regNumber || s.id, s);
+        });
+        const merged = Array.from(map.values());
+        localStorage.setItem('mugina_enrolled_students_v3', JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('mugina-students-updated', { detail: merged }));
+      }
+    });
+
     return () => {
       unsubLogo();
       unsubGallery();
       unsubDocs();
       unsubAnn();
       unsubSettings();
+      unsubStaff();
+      unsubStudents();
     };
   }, []);
 

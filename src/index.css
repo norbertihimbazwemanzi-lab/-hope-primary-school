@@ -12,4 +12,11 @@
   h1, h2, h3, h4 {
     font-family: var(--font-display);
   }
+  button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"] {
+    cursor: pointer;
+  }
+  button:active:not(:disabled), [role="button"]:active:not(:disabled) {
+    transform: scale(0.98);
+    transition: transform 0.05s ease-in-out;
+  }
 }

@@ -620,3 +620,124 @@ export const deleteEnrolledStudentFromFirebase = async (id: string): Promise<boo
     return false;
   }
 };
+
+/**
+ * Save Staff Member to Firebase Firestore (Permanent Database Persistence)
+ */
+export const saveStaffMemberToFirebase = async (staff: any): Promise<boolean> => {
+  try {
+    const staffId = staff.id || `staff-${Date.now()}`;
+    const docRef = doc(db, 'staff_members', staffId);
+    await setDoc(
+      docRef,
+      {
+        ...staff,
+        id: staffId,
+        updatedAt: new Date().toISOString(),
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    console.log('[Firebase Store] Staff account permanently saved to database:', staffId, staff.username);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore staff write error:', err);
+    return false;
+  }
+};
+
+/**
+ * Save a batch of staff members to Firebase Firestore
+ */
+export const saveStaffMembersBatchToFirebase = async (staffList: any[]): Promise<boolean> => {
+  try {
+    const promises = staffList.map((st) => saveStaffMemberToFirebase(st));
+    await Promise.all(promises);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Batch staff write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Staff Members from Firebase Firestore
+ */
+export const fetchStaffMembersFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'staff_members');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore staff fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Delete Staff Member from Firebase Firestore
+ */
+export const deleteStaffMemberFromFirebase = async (id: string): Promise<boolean> => {
+  try {
+    const docRef = doc(db, 'staff_members', id);
+    await deleteDoc(docRef);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore staff delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Real-time listener for Staff Members across all devices
+ */
+export const subscribeToStaffMembers = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'staff_members');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        callback(items);
+      },
+      (err) => {
+        console.warn('[Firebase Store] Staff members subscription notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register staff listener:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Real-time listener for Enrolled Students across all devices
+ */
+export const subscribeToEnrolledStudents = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'enrolled_students');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        callback(items);
+      },
+      (err) => {
+        console.warn('[Firebase Store] Enrolled students subscription notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register students listener:', err);
+    return () => {};
+  }
+};
