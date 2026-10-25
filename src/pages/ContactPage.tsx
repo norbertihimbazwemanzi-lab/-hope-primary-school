@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { SCHOOL_INFO } from '../data/schoolData';
-import { InteractiveMap } from '../components/InteractiveMap';
 import { PageId } from '../types';
 import { addInquiry, getAdminNotificationEmail } from '../services/adminStore';
 import { handleInquiryNotification } from '../services/gmailService';
@@ -226,22 +225,6 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate, onOpenTour
         </div>
       </div>
 
-      {/* 4. Interactive Location Map */}
-      <section className="space-y-4">
-        <div className="text-center max-w-2xl mx-auto space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-blue-700">
-            Location Map
-          </span>
-          <h2 className="text-2xl font-bold text-slate-900 font-display">
-            Finding Us in Mugina Sector, Kamonyi
-          </h2>
-          <p className="text-xs text-slate-500">
-            Easily accessible from Kigali via RN1 highway, adjacent to local security headquarters
-          </p>
-        </div>
-
-        <InteractiveMap />
-      </section>
 
       {/* 5. Direct Inquiry Form & Tour Invitation */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-10 shadow-2xs grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">

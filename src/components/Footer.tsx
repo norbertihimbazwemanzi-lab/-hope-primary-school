@@ -111,7 +111,15 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenApply, onOpenT
                   onClick={() => onNavigate('admissions')}
                   className="hover:text-amber-400 transition-colors"
                 >
-                  Admissions Checklist & Fees
+                  Admissions Checklist
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('fees')}
+                  className="hover:text-amber-400 transition-colors"
+                >
+                  School Fees & Term Rates
                 </button>
               </li>
               <li>

@@ -28,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'about', label: 'About Us' },
     { id: 'academics', label: 'Academics' },
     { id: 'admissions', label: 'Admissions' },
+    { id: 'fees', label: 'School Fees' },
     { id: 'campus-life', label: 'Campus Life' },
     { id: 'contact', label: 'Contact Us' },
   ];
@@ -35,7 +36,6 @@ export const Header: React.FC<HeaderProps> = ({
   const handleNavClick = (id: PageId) => {
     onNavigate(id);
     setMobileMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAdminLogout = () => {

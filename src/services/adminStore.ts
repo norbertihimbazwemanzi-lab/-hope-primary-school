@@ -245,12 +245,62 @@ export interface WebsiteSettings {
   announcementBarText?: string;
   heroHeadline?: string;
   heroTagline?: string;
+  heroSlides?: Array<{
+    id: string;
+    imageUrl: string;
+    title?: string;
+  }>;
+  heroIntervalSeconds?: number;
   nurseryTuition?: string;
   primaryTuition?: string;
   lunchFee?: string;
   transportFee?: string;
   googleSearchConsoleVerification?: string;
   schoolLogoUrl?: string;
+
+  // About Page: Principal Message Section (Screenshot 1)
+  aboutPrincipalPhotoUrl?: string;
+  aboutPrincipalKicker?: string;
+  aboutPrincipalWelcome?: string;
+  aboutPrincipalMessage?: string;
+  aboutPrincipalSignoff?: string;
+  aboutPrincipalName?: string;
+  aboutPrincipalTitle?: string;
+
+  // About Page: Vision, Mission & Rwandan Values Charter (Screenshot 2)
+  aboutVisionTitle?: string;
+  aboutVisionText?: string;
+  aboutMissionTitle?: string;
+  aboutMissionPoints?: string[];
+  aboutValuesBannerUrl?: string;
+  aboutValuesBoardTitle?: string;
+  aboutIndangagaciro?: string[];
+  aboutKirazira?: string[];
+  aboutValuesSlogan?: string;
+
+  // School Fees Structure (Matching Capture_fff547f5.PNG)
+  feesBadge?: string;
+  feesSubtitle?: string;
+  feesFirstTerm?: string;
+  feesSecondTerm?: string;
+  feesThirdTerm?: string;
+  feesCurrency?: string;
+  feesPeriod?: string;
+  feesIncluded?: string[];
+  feesNotIncluded?: string[];
+
+  // School Staff Showcase (Matching Capture_cd3b07eb.PNG)
+  staffBadge?: string;
+  staffSubtitle?: string;
+  staffShowcase?: Array<{
+    id: string;
+    name: string;
+    role: string;
+    email?: string;
+    phone?: string;
+    imageUrl: string;
+    order?: number;
+  }>;
 }
 
 export const defaultWebsiteSettings: WebsiteSettings = {
@@ -268,12 +318,140 @@ export const defaultWebsiteSettings: WebsiteSettings = {
   termDatesNotice: 'Academic Year 2026: Term 1 underway. Term 2 registration currently open.',
   registrationFeeNotice: 'Application fee: 10,000 RWF (Registration, evaluation, student file & ID card).',
   announcementBarText: 'Term 1 2026 Admissions Open · Nursery & Primary Excellence in Kamonyi · Adjacent to Mugina Police Station',
-  heroHeadline: 'Welcome to Mugina Hope Primary & Nursery Academy',
-  heroTagline: 'Nurturing purposeful, confident, and compassionate young leaders in Kamonyi District since 2014.',
+  heroHeadline: 'Welcome to Runda Technical Secondary School',
+  heroTagline: "Welcome to Runda Technical Secondary School, located in Kamonyi District, South Rwanda. We're proud to offer a blend of academic and technical education, preparing students for success in the modern world.",
+  heroIntervalSeconds: 5,
+  heroSlides: [
+    {
+      id: 'slide-1',
+      imageUrl: '/images/hero_runda_campus.png',
+      title: 'Runda Technical Secondary School Campus',
+    },
+    {
+      id: 'slide-2',
+      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+      title: 'Academic & Technical Campus Grounds',
+    },
+    {
+      id: 'slide-3',
+      imageUrl: '/images/primary_stem_computer_lab_1791823280335.jpg',
+      title: 'ICT & Science Technology Labs',
+    },
+    {
+      id: 'slide-4',
+      imageUrl: '/images/campus_life_traditional_dance_1791823290926.jpg',
+      title: 'Cultural Arts & Co-Curricular Excellence',
+    },
+  ],
   nurseryTuition: '45,000 RWF / Term',
   primaryTuition: '60,000 RWF / Term',
   lunchFee: '25,000 RWF / Term (Hot balanced lunch & porridge)',
   transportFee: '30,000 RWF / Term (Kamonyi van pickup & drop-off)',
+
+  // Default About Page content matching Mugina Hope Academy's official leadership and mission
+  aboutPrincipalPhotoUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+  aboutPrincipalKicker: 'MESSAGE FROM THE HEAD OF SCHOOL',
+  aboutPrincipalWelcome: 'Welcome to Mugina Hope Primary & Nursery Academy!',
+  aboutPrincipalMessage: `Welcome to Mugina Hope Primary & Nursery Academy in Mugina Sector, Kamonyi District. Established in 2014, our school was founded on the fundamental belief that every child deserves a secure, joyful, and academically enriching foundation.\n\nOur campus is securely situated adjacent to the Mugina Police Station, offering families unshakeable peace of mind. Here, dedicated teachers deliver the Rwanda Basic Education Board (REB) curriculum, enriched with early ICT literacy, English conversational fluency, and Rwandan cultural values through Itorero ry'abato.\n\nWith an intimate 18:1 student-to-mentor ratio, we ensure that every single child is known, celebrated, and guided toward excellence, leadership, and moral integrity. Thank you for partnering with us in shaping the leaders of tomorrow!`,
+  aboutPrincipalSignoff: 'Sincerely and with warm regards,',
+  aboutPrincipalName: 'Norbert Ihimbazwe Manzi',
+  aboutPrincipalTitle: 'Head of School & Chief Administrator, Mugina Hope Academy',
+
+  aboutVisionTitle: 'OUR VISION',
+  aboutVisionText: 'To be a premier center of foundational and primary excellence in Rwanda, raising purposeful, morally grounded, and innovative young leaders prepared to excel and contribute to our nation.',
+  aboutMissionTitle: 'OUR MISSION',
+  aboutMissionPoints: [
+    'Deliver high-quality, competency-based early childhood and primary education adhering strictly to REB standards.',
+    'Nurture Christian integrity, mutual respect, and cultural pride through Itorero ry’abato and traditional dance.',
+    'Equip learners with digital literacy, scientific inquiry, and English-Kinyarwanda bilingual fluency in a safe learning environment.',
+  ],
+  aboutValuesBannerUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+  aboutValuesBoardTitle: 'INDANGAGACIRO NA KIRAZIRA',
+  aboutIndangagaciro: [
+    'GUKUNDA IGIHUGU (Patriotism)',
+    'KUBAKA UBUMWE (Unity & Solidarity)',
+    'KWIHESHA AGACIRO (Self-Worth & Dignity)',
+    'UMURAVA NO GUTSINDA (Diligence & Resilience)',
+    'GUKUNDA ISHURI (Love for Learning)',
+    'KUGIRA IKINYABUPFURA (Respect & Discipline)',
+    'KUGIRA ISUKU (Hygiene & Cleanliness)',
+  ],
+  aboutKirazira: [
+    'KUGAMBANIRA IGIHUGU',
+    'GUSENYA IBYAGEZWEHO',
+    'KWIYANDARIKA',
+    'KUBA IKIGWARI',
+    'GUTA ISHURI',
+    'GUSUZUGURA',
+    'KUGIRA UMWANDA',
+  ],
+  aboutValuesSlogan: 'TWIGIRA EJO HACU HEZA',
+
+  // School Fees Structure (Matching Capture_fff547f5.PNG)
+  feesBadge: 'SCHOOL FEES',
+  feesSubtitle: 'Discover the fee structure for each academic term at RUNDA TECHNICAL SECONDARY SCHOOL for seasoned students (L4, L5).',
+  feesFirstTerm: '92000.0',
+  feesSecondTerm: '92000.0',
+  feesThirdTerm: '92000.0',
+  feesCurrency: 'Rwf',
+  feesPeriod: '/ Term',
+  feesIncluded: [
+    'Tuition Fees',
+    'Administrative Charges',
+    'Classroom Materials (Books, Stationery)',
+    'ICT and Technical Education Resources',
+    'Laboratory Fees (For Science students)',
+    'Sports and Physical Education Fees',
+    'Co-curricular activities',
+  ],
+  feesNotIncluded: [
+    'Uniform (Students must purchase separately)',
+    'School Transport (If applicable)',
+    'External Examination Fees (e.g., National Exams)',
+    'Extra-Curricular Activity Fees (e.g., Clubs, Workshops)',
+  ],
+
+  // School Staff Showcase (Matching Capture_cd3b07eb.PNG)
+  staffBadge: 'SCHOOL STAFF',
+  staffSubtitle: 'Meet our dedicated team of educators and support staff who ensure our students thrive in a nurturing environment.',
+  staffShowcase: [
+    {
+      id: 'staff-lead-1',
+      name: 'HAKIZIMANA Enos',
+      role: 'School Manager',
+      email: 'manager@muginahopeschool.com',
+      phone: '+250 788 258 786',
+      imageUrl: '/images/staff_enos_manager.png',
+      order: 1,
+    },
+    {
+      id: 'staff-lead-2',
+      name: 'MBONIGABA Eric',
+      role: 'Dean Of Studies',
+      email: 'dos@muginahopeschool.com',
+      phone: '+250 788 345 678',
+      imageUrl: '/images/staff_eric_dos.png',
+      order: 2,
+    },
+    {
+      id: 'staff-lead-3',
+      name: 'UWIMBABAZI Christine',
+      role: 'Dean Of Discipline',
+      email: 'dod@muginahopeschool.com',
+      phone: '+250 788 567 890',
+      imageUrl: '/images/staff_christine_dod.png',
+      order: 3,
+    },
+    {
+      id: 'staff-lead-4',
+      name: 'NSENGIMANA Bonaventure',
+      role: 'Accountant',
+      email: 'finance@muginahopeschool.com',
+      phone: '+250 788 444 555',
+      imageUrl: '/images/staff_bonaventure_accountant.png',
+      order: 4,
+    },
+  ],
 };
 
 // Initial Seed Staff with exact requested admin & headteacher accounts
@@ -619,6 +797,46 @@ const defaultStudents: EnrolledStudent[] = [
 // Initial Seed Gallery
 const initialGalleryWithCrest: FacilityItem[] = [
   {
+    id: 'fac-gallery-3-center',
+    title: 'Primary Learners Celebrating with Class Teacher',
+    category: 'classrooms',
+    description: 'Active classroom cohort in blue academy shirts celebrating academic accomplishments with their teacher in front of campus classroom.',
+    imageSrc: '/images/gallery_life_3.jpg',
+    caption: 'Learners in blue uniform celebrating academic excellence at Mugina Hope Academy.',
+  },
+  {
+    id: 'fac-gallery-1-cadet',
+    title: 'School Youth Corps & Cadet Uniform Assembly',
+    category: 'culture',
+    description: 'Disciplined student squad standing in formation during the national morning parade.',
+    imageSrc: '/images/gallery_life_1.jpg',
+    caption: 'Student corps parade demonstrating discipline and patriotism.',
+  },
+  {
+    id: 'fac-gallery-2-courtyard',
+    title: 'Students Strolling Between Academic Wings',
+    category: 'outdoor',
+    description: 'Campus pathways bordered by greenery as students walk between lesson periods.',
+    imageSrc: '/images/gallery_life_2.jpg',
+    caption: 'Vibrant courtyard grounds during school day class changes.',
+  },
+  {
+    id: 'fac-gallery-4-delegation',
+    title: 'Educators & Law Enforcement Community Delegation',
+    category: 'culture',
+    description: 'School administration standing in partnership with local community security leadership outside the school grounds.',
+    imageSrc: '/images/gallery_life_4.jpg',
+    caption: 'Close community ties with neighboring security and local leadership in Mugina.',
+  },
+  {
+    id: 'fac-gallery-5-celebration',
+    title: 'Staff Faculty Gift Presentation & Recognition Ceremony',
+    category: 'culture',
+    description: 'Administration and teaching staff gathered together celebrating professional milestones and faculty dedication.',
+    imageSrc: '/images/gallery_life_5.jpg',
+    caption: 'Faculty solidarity and mutual recognition among our educators.',
+  },
+  {
     id: 'fac-crest',
     title: 'Muginahope Primary & Nursery Official Crest Emblem',
     category: 'culture',
@@ -949,7 +1167,61 @@ export const deleteAttendanceRecord = (recordId: string): AttendanceRecord[] => 
 export const getWebsiteSettings = (): WebsiteSettings => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.WEBSITE_SETTINGS);
-    if (raw) return { ...defaultWebsiteSettings, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (
+        parsed.aboutPrincipalName === 'HAKIZIMANA Enos' ||
+        (parsed.aboutPrincipalWelcome && parsed.aboutPrincipalWelcome.includes('Runda Technical')) ||
+        (parsed.aboutVisionText && parsed.aboutVisionText.includes('RUNDA TECHNICAL'))
+      ) {
+        delete parsed.aboutPrincipalName;
+        delete parsed.aboutPrincipalTitle;
+        delete parsed.aboutPrincipalWelcome;
+        delete parsed.aboutPrincipalMessage;
+        delete parsed.aboutPrincipalKicker;
+        delete parsed.aboutPrincipalPhotoUrl;
+        delete parsed.aboutPrincipalSignoff;
+        delete parsed.aboutVisionText;
+        delete parsed.aboutVisionTitle;
+        delete parsed.aboutMissionPoints;
+        delete parsed.aboutMissionTitle;
+        delete parsed.aboutValuesBannerUrl;
+        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
+      }
+      if (
+        !parsed.staffShowcase ||
+        !parsed.staffShowcase.some((s: any) => s.name === 'HAKIZIMANA Enos') ||
+        !parsed.staffShowcase.some((s: any) => s.name === 'NSENGIMANA Bonaventure')
+      ) {
+        parsed.staffShowcase = defaultWebsiteSettings.staffShowcase;
+        parsed.staffBadge = defaultWebsiteSettings.staffBadge;
+        parsed.staffSubtitle = defaultWebsiteSettings.staffSubtitle;
+        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
+      }
+      if (!parsed.feesBadge || !parsed.feesSubtitle) {
+        parsed.feesBadge = defaultWebsiteSettings.feesBadge;
+        parsed.feesSubtitle = defaultWebsiteSettings.feesSubtitle;
+        parsed.feesFirstTerm = parsed.feesFirstTerm || defaultWebsiteSettings.feesFirstTerm;
+        parsed.feesSecondTerm = parsed.feesSecondTerm || defaultWebsiteSettings.feesSecondTerm;
+        parsed.feesThirdTerm = parsed.feesThirdTerm || defaultWebsiteSettings.feesThirdTerm;
+        parsed.feesIncluded = parsed.feesIncluded || defaultWebsiteSettings.feesIncluded;
+        parsed.feesNotIncluded = parsed.feesNotIncluded || defaultWebsiteSettings.feesNotIncluded;
+        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
+      }
+      if (
+        !parsed.heroSlides ||
+        !Array.isArray(parsed.heroSlides) ||
+        parsed.heroSlides.length === 0 ||
+        !parsed.heroSlides.some((s: any) => s.imageUrl && s.imageUrl.includes('runda'))
+      ) {
+        parsed.heroSlides = defaultWebsiteSettings.heroSlides;
+        parsed.heroHeadline = defaultWebsiteSettings.heroHeadline;
+        parsed.heroTagline = defaultWebsiteSettings.heroTagline;
+        parsed.heroIntervalSeconds = defaultWebsiteSettings.heroIntervalSeconds || 5;
+        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
+      }
+      return { ...defaultWebsiteSettings, ...parsed };
+    }
   } catch (e) {
     console.error(e);
   }

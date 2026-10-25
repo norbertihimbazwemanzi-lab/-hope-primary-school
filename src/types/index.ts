@@ -1,4 +1,4 @@
-export type PageId = 'home' | 'about' | 'academics' | 'admissions' | 'campus-life' | 'contact' | 'admin';
+export type PageId = 'home' | 'about' | 'academics' | 'admissions' | 'fees' | 'campus-life' | 'contact' | 'admin';
 
 export interface TimelineEvent {
   time: string;

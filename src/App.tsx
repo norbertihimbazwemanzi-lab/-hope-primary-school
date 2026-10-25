@@ -6,6 +6,7 @@ import { HomePage } from './pages/HomePage';
 import { AboutPage } from './pages/AboutPage';
 import { AcademicsPage } from './pages/AcademicsPage';
 import { AdmissionsPage } from './pages/AdmissionsPage';
+import { SchoolFeesPage } from './pages/SchoolFeesPage';
 import { CampusLifePage } from './pages/CampusLifePage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminPage } from './pages/AdminPage';
@@ -232,9 +233,66 @@ export default function App() {
     };
   }, []);
 
+  // Scroll-spy to automatically highlight active nav item when scrolling through sections
+  useEffect(() => {
+    if (currentPage === 'admin') return;
+
+    const sectionIds: PageId[] = [
+      'home',
+      'about',
+      'academics',
+      'admissions',
+      'fees',
+      'campus-life',
+      'contact',
+    ];
+
+    const handleScrollSpy = () => {
+      const scrollPosition = window.scrollY + 240;
+      for (let i = sectionIds.length - 1; i >= 0; i--) {
+        const id = sectionIds[i];
+        const el = document.getElementById(id);
+        if (el) {
+          const top = el.offsetTop;
+          if (scrollPosition >= top) {
+            setCurrentPage((prev) => (prev === id || prev === 'admin' ? prev : id));
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScrollSpy, { passive: true });
+    return () => window.removeEventListener('scroll', handleScrollSpy);
+  }, [currentPage]);
+
   const handleNavigate = (page: PageId) => {
+    if (page === 'admin') {
+      setCurrentPage('admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (currentPage === 'admin') {
+      setCurrentPage(page);
+      setTimeout(() => {
+        const el = document.getElementById(page);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 100);
+      return;
+    }
+
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const el = document.getElementById(page);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleOpenApply = (grade?: string) => {
@@ -281,66 +339,82 @@ export default function App() {
 
       {/* Main Page Content */}
       <main className="flex-1">
-        {currentPage === 'home' && (
-          <HomePage
-            onNavigate={handleNavigate}
-            onOpenApply={() => handleOpenApply()}
-            onOpenTour={() => setIsTourModalOpen(true)}
-          />
-        )}
-
-        {currentPage === 'about' && (
-          <AboutPage
-            onNavigate={handleNavigate}
-            onOpenApply={() => handleOpenApply()}
-            onOpenTour={() => setIsTourModalOpen(true)}
-          />
-        )}
-
-        {currentPage === 'academics' && (
-          <AcademicsPage
-            onNavigate={handleNavigate}
-            onOpenApplyWithGrade={(grade) => handleOpenApply(grade)}
-          />
-        )}
-
-        {currentPage === 'admissions' && (
-          <AdmissionsPage
-            onNavigate={handleNavigate}
-            onOpenApply={() => handleOpenApply()}
-            onOpenPrintableForm={() => setIsPrintableModalOpen(true)}
-            onOpenTour={() => setIsTourModalOpen(true)}
-            onOpenChatTracker={(refCode) => {
-              setChatTrackerRefCode(refCode || '');
-              setIsChatTrackerOpen(true);
-            }}
-          />
-        )}
-
-        {currentPage === 'campus-life' && (
-          <CampusLifePage
-            onNavigate={handleNavigate}
-            onOpenApply={() => handleOpenApply()}
-            onOpenTour={() => setIsTourModalOpen(true)}
-          />
-        )}
-
-        {currentPage === 'contact' && (
-          <ContactPage
-            onNavigate={handleNavigate}
-            onOpenTour={() => setIsTourModalOpen(true)}
-          />
-        )}
-
-        {currentPage === 'admin' && (
+        {currentPage === 'admin' ? (
           <AdminPage
             onNavigate={handleNavigate}
             onGalleryUpdated={() => {
-              // Trigger reload of announcements or gallery
               const list = getAnnouncements();
               setActiveAnnouncement(list.find((a) => a.isActive) || null);
             }}
           />
+        ) : (
+          <div className="space-y-12">
+            {/* 1. Home Section */}
+            <section id="home" className="scroll-mt-20">
+              <HomePage
+                onNavigate={handleNavigate}
+                onOpenApply={() => handleOpenApply()}
+                onOpenTour={() => setIsTourModalOpen(true)}
+              />
+            </section>
+
+            {/* 2. About Us Section */}
+            <section id="about" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+              <AboutPage
+                onNavigate={handleNavigate}
+                onOpenApply={() => handleOpenApply()}
+                onOpenTour={() => setIsTourModalOpen(true)}
+              />
+            </section>
+
+            {/* 3. Academics Section */}
+            <section id="academics" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+              <AcademicsPage
+                onNavigate={handleNavigate}
+                onOpenApplyWithGrade={(grade) => handleOpenApply(grade)}
+              />
+            </section>
+
+            {/* 4. Admissions Section */}
+            <section id="admissions" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+              <AdmissionsPage
+                onNavigate={handleNavigate}
+                onOpenApply={() => handleOpenApply()}
+                onOpenPrintableForm={() => setIsPrintableModalOpen(true)}
+                onOpenTour={() => setIsTourModalOpen(true)}
+                onOpenChatTracker={(refCode) => {
+                  setChatTrackerRefCode(refCode || '');
+                  setIsChatTrackerOpen(true);
+                }}
+              />
+            </section>
+
+            {/* 5. School Fees Section */}
+            <section id="fees" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+              <SchoolFeesPage
+                onNavigate={handleNavigate}
+                onOpenApply={() => handleOpenApply()}
+                onOpenTour={() => setIsTourModalOpen(true)}
+              />
+            </section>
+
+            {/* 6. Campus Life Section */}
+            <section id="campus-life" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+              <CampusLifePage
+                onNavigate={handleNavigate}
+                onOpenApply={() => handleOpenApply()}
+                onOpenTour={() => setIsTourModalOpen(true)}
+              />
+            </section>
+
+            {/* 7. Contact Us Section */}
+            <section id="contact" className="scroll-mt-20 border-t border-slate-200/80 pt-6 pb-6">
+              <ContactPage
+                onNavigate={handleNavigate}
+                onOpenTour={() => setIsTourModalOpen(true)}
+              />
+            </section>
+          </div>
         )}
       </main>
 

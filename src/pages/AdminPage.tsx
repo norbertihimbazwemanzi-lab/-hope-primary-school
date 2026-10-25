@@ -80,6 +80,7 @@ import {
   ClipboardList,
   Image as ImageIcon,
   FileText,
+  BookOpen,
   Mail,
   Bell,
   Calendar,
@@ -3384,6 +3385,455 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* 6. Public About Page: Principal Message, School Vision & Rwandan Values Charter (Screenshots 1 & 2) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-700" />
+                    <span>6. Public About Page: Principal Message, Vision & Rwandan Charter</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Customize the Principal’s photo and welcome letter, School Vision, Mission bullet points, and the Rwandan Values Charter board shown on the About page.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('about')}
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-xl border border-blue-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>View About Page</span>
+                </button>
+              </div>
+
+              {/* Sub-section A: Principal Portrait & Welcome Message (Screenshot 1) */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs">
+                    Head of School Letter & Portrait
+                  </h4>
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">
+                    Official Message Card
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  <div className="md:col-span-3 flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 text-center">
+                    <img
+                      src={websiteSettings.aboutPrincipalPhotoUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg'}
+                      alt="Head of School Portrait"
+                      className="w-24 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+                      }}
+                    />
+                    <span className="text-[10px] text-slate-500 font-bold mt-2">Active Portrait</span>
+                  </div>
+
+                  <div className="md:col-span-9 space-y-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Upload New Principal Portrait Photo (PNG, JPG, WebP)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const uploadRes = await uploadSchoolAsset(file, 'principal_headmaster_portrait', 'branding');
+                              setWebsiteSettings((prev) => ({
+                                ...prev,
+                                aboutPrincipalPhotoUrl: uploadRes.url,
+                              }));
+                            } catch (err) {
+                              console.warn('Principal portrait upload error:', err);
+                            }
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Or Enter Direct Image URL
+                      </label>
+                      <input
+                        type="text"
+                        value={websiteSettings.aboutPrincipalPhotoUrl || ''}
+                        onChange={(e) =>
+                          setWebsiteSettings({ ...websiteSettings, aboutPrincipalPhotoUrl: e.target.value })
+                        }
+                        placeholder="e.g. /images/principal_headmaster_portrait.png"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Kicker Label (Blue Uppercase Headline)
+                    </label>
+                    <input
+                      type="text"
+                      value={websiteSettings.aboutPrincipalKicker || ''}
+                      onChange={(e) =>
+                        setWebsiteSettings({ ...websiteSettings, aboutPrincipalKicker: e.target.value })
+                      }
+                      placeholder="e.g. MESSAGE FROM THE HEAD OF SCHOOL"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Welcome Title
+                    </label>
+                    <input
+                      type="text"
+                      value={websiteSettings.aboutPrincipalWelcome || ''}
+                      onChange={(e) =>
+                        setWebsiteSettings({ ...websiteSettings, aboutPrincipalWelcome: e.target.value })
+                      }
+                      placeholder="e.g. Welcome to Mugina Hope Primary & Nursery Academy!"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-xs">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Principal Letter Text (Leave an empty line between paragraphs)
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={websiteSettings.aboutPrincipalMessage || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, aboutPrincipalMessage: e.target.value })
+                    }
+                    placeholder="Enter the official message from the school head..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 leading-relaxed"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Sign-off Greeting</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.aboutPrincipalSignoff || ''}
+                      onChange={(e) =>
+                        setWebsiteSettings({ ...websiteSettings, aboutPrincipalSignoff: e.target.value })
+                      }
+                      placeholder="e.g. Sincerely and with warm regards,"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Head of School Name</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.aboutPrincipalName || ''}
+                      onChange={(e) =>
+                        setWebsiteSettings({ ...websiteSettings, aboutPrincipalName: e.target.value })
+                      }
+                      placeholder="e.g. Norbert Ihimbazwe Manzi"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Designation / Role Title</label>
+                    <input
+                      type="text"
+                      value={websiteSettings.aboutPrincipalTitle || ''}
+                      onChange={(e) =>
+                        setWebsiteSettings({ ...websiteSettings, aboutPrincipalTitle: e.target.value })
+                      }
+                      placeholder="e.g. Head of School & Chief Administrator, Mugina Hope Academy"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-section B: School Vision, Mission & Values Charter (Screenshot 2) */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs">
+                    School Vision, Mission & Rwandan Values Charter (Screenshot 2)
+                  </h4>
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">
+                    Vision & Charter Board
+                  </span>
+                </div>
+
+                <div className="text-xs">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    School Vision Text
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={websiteSettings.aboutVisionText || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, aboutVisionText: e.target.value })
+                    }
+                    placeholder="Enter school vision..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 leading-relaxed"
+                  />
+                </div>
+
+                <div className="text-xs">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    School Mission Points (Enter one bullet point per line)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(websiteSettings.aboutMissionPoints || []).join('\n')}
+                    onChange={(e) => {
+                      const points = e.target.value.split('\n');
+                      setWebsiteSettings({ ...websiteSettings, aboutMissionPoints: points });
+                    }}
+                    placeholder="Deliver high-quality REB curriculum...&#10;Nurture Christian integrity and cultural pride...&#10;Equip learners with digital literacy..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  <div className="md:col-span-4 p-2 bg-white rounded-xl border border-slate-200 flex justify-center">
+                    <img
+                      src={websiteSettings.aboutValuesBannerUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg'}
+                      alt="Campus Visual Preview"
+                      className="w-full h-auto max-h-36 object-cover rounded-lg"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+                      }}
+                    />
+                  </div>
+
+                  <div className="md:col-span-8 space-y-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Upload Custom Values Charter Graphic / Poster
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const uploadRes = await uploadSchoolAsset(file, 'rwanda_values_charter_board', 'branding');
+                              setWebsiteSettings((prev) => ({
+                                ...prev,
+                                aboutValuesBannerUrl: uploadRes.url,
+                              }));
+                            } catch (err) {
+                              console.warn('Charter upload error:', err);
+                            }
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Or Direct Charter Image URL
+                      </label>
+                      <input
+                        type="text"
+                        value={websiteSettings.aboutValuesBannerUrl || ''}
+                        onChange={(e) =>
+                          setWebsiteSettings({ ...websiteSettings, aboutValuesBannerUrl: e.target.value })
+                        }
+                        placeholder="e.g. /images/rwanda_school_values_charter.png"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 7. School Staff Leadership Showcase (Matching esr.PNG) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-700" />
+                    <span>7. School Staff Leadership Showcase</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Configure the key school leadership team members displayed across the website (Head Teacher, DoS, DoD, Bursar).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = websiteSettings.staffShowcase || [];
+                    const newMember = {
+                      id: `staff-${Date.now()}`,
+                      name: 'New Staff Member',
+                      role: 'Teacher / Staff',
+                      email: 'staff@muginahopeschool.com',
+                      phone: '+250 788 000 000',
+                      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+                      order: current.length + 1,
+                    };
+                    setWebsiteSettings({
+                      ...websiteSettings,
+                      staffShowcase: [...current, newMember],
+                    });
+                  }}
+                  className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-xl border border-blue-200 transition-colors shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Staff Member</span>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {(websiteSettings.staffShowcase || []).map((staff, sIdx) => (
+                  <div
+                    key={staff.id || sIdx}
+                    className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                      <span className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                        Staff #{sIdx + 1}: {staff.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = (websiteSettings.staffShowcase || []).filter((_, i) => i !== sIdx);
+                          setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                        }}
+                        className="cursor-pointer text-rose-600 hover:text-rose-800 text-xs font-semibold inline-flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Full Name</label>
+                        <input
+                          type="text"
+                          value={staff.name}
+                          onChange={(e) => {
+                            const updated = [...(websiteSettings.staffShowcase || [])];
+                            updated[sIdx] = { ...updated[sIdx], name: e.target.value };
+                            setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Role / Position</label>
+                        <input
+                          type="text"
+                          value={staff.role}
+                          onChange={(e) => {
+                            const updated = [...(websiteSettings.staffShowcase || [])];
+                            updated[sIdx] = { ...updated[sIdx], role: e.target.value };
+                            setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Email</label>
+                        <input
+                          type="email"
+                          value={staff.email || ''}
+                          onChange={(e) => {
+                            const updated = [...(websiteSettings.staffShowcase || [])];
+                            updated[sIdx] = { ...updated[sIdx], email: e.target.value };
+                            setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-bold text-slate-700 mb-1">Phone</label>
+                        <input
+                          type="text"
+                          value={staff.phone || ''}
+                          onChange={(e) => {
+                            const updated = [...(websiteSettings.staffShowcase || [])];
+                            updated[sIdx] = { ...updated[sIdx], phone: e.target.value };
+                            setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center text-xs">
+                      <div className="sm:col-span-2 flex items-center gap-2">
+                        <img
+                          src={staff.imageUrl}
+                          alt={staff.name}
+                          className="w-10 h-10 rounded-full object-cover border-2 border-[#003380]"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/public/assets/aistudio/esr_cd160bb9.PNG';
+                          }}
+                        />
+                        <span className="text-[11px] text-slate-500 font-medium">Avatar</span>
+                      </div>
+                      <div className="sm:col-span-5">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const uploadRes = await uploadSchoolAsset(file, `staff_${staff.id}`, 'branding');
+                                const updated = [...(websiteSettings.staffShowcase || [])];
+                                updated[sIdx] = { ...updated[sIdx], imageUrl: uploadRes.url };
+                                setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                              } catch (err) {
+                                console.warn('Upload error:', err);
+                              }
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs cursor-pointer"
+                        />
+                      </div>
+                      <div className="sm:col-span-5">
+                        <input
+                          type="text"
+                          value={staff.imageUrl}
+                          onChange={(e) => {
+                            const updated = [...(websiteSettings.staffShowcase || [])];
+                            updated[sIdx] = { ...updated[sIdx], imageUrl: e.target.value };
+                            setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                          }}
+                          placeholder="e.g. /images/staff_jean_headteacher.png"
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
