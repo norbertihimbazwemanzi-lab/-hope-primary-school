@@ -180,13 +180,13 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   ];
 
   return (
-    <section className={`w-full py-12 px-4 sm:px-6 lg:px-8 bg-slate-50/70 ${className}`}>
+    <section className={`w-full py-8 sm:py-12 px-3 xs:px-4 sm:px-6 lg:px-8 bg-slate-50/70 ${className}`}>
       {/* Admin Live Edit Quick Access Bar */}
       {isAdmin && (
-        <div className="max-w-6xl mx-auto mb-8">
-          <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-4 shadow-md flex items-center justify-between gap-4 border border-blue-700">
+        <div className="max-w-6xl mx-auto mb-6 sm:mb-8">
+          <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-3 sm:p-4 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border border-blue-700">
             <div className="flex items-center gap-3">
-              <span className="p-2 bg-amber-400 text-blue-950 rounded-xl font-bold">
+              <span className="p-2 bg-amber-400 text-blue-950 rounded-xl font-bold shrink-0">
                 <Edit3 className="w-4 h-4" />
               </span>
               <div>
@@ -200,7 +200,7 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
             </div>
             <button
               onClick={handleOpenEdit}
-              className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-blue-950 font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 shrink-0"
+              className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-blue-950 font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 shrink-0 self-end sm:self-auto"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>Edit Fees</span>

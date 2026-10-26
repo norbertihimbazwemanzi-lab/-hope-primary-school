@@ -19,6 +19,11 @@ import {
   deleteStaffMemberFromFirebase,
   saveStaffMembersBatchToFirebase,
   fetchEnrolledStudentsFromFirebase,
+  savePaymentTransactionToFirebase,
+  saveApplicationToFirebase,
+  saveAttendanceBatchToFirebase,
+  saveDisciplineRecordToFirebase,
+  saveInquiryToFirebase,
 } from './firebaseStore';
 
 export type UserRole = 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD' | 'Student';
@@ -1130,6 +1135,7 @@ export const saveAttendanceBatch = (newRecords: AttendanceRecord[]) => {
 
     localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updated));
     persistToServer('/api/attendance', { items: updated });
+    saveAttendanceBatchToFirebase(newRecords).catch((e) => console.warn('Attendance firestore notice:', e));
   } catch (e) {
     console.error(e);
   }
@@ -1579,6 +1585,9 @@ export const confirmApplicationByDOSOrAdmin = (
 export const saveApplications = (list: AdminApplication[]) => {
   localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(list));
   persistToServer('/api/applications', { items: list });
+  list.forEach((app) => {
+    saveApplicationToFirebase(app).catch((e) => console.warn('Application firestore notice:', e));
+  });
 };
 
 export const deleteApplication = (id: string): AdminApplication[] => {
@@ -1954,6 +1963,9 @@ export const getPaymentTransactions = (): PaymentTransaction[] => {
 export const savePaymentTransactions = (txs: PaymentTransaction[]) => {
   localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(txs));
   persistToServer('/api/payments', { items: txs });
+  txs.forEach((tx) => {
+    savePaymentTransactionToFirebase(tx).catch((e) => console.warn('Payment firestore notice:', e));
+  });
 };
 
 export const recordPaymentTransaction = (
@@ -2239,6 +2251,9 @@ export const getDisciplineRecords = (): DisciplineRecord[] => {
 export const saveDisciplineRecords = (records: DisciplineRecord[]) => {
   localStorage.setItem(STORAGE_KEYS.DISCIPLINE, JSON.stringify(records));
   persistToServer('/api/discipline', { items: records });
+  records.forEach((rec) => {
+    saveDisciplineRecordToFirebase(rec).catch((e) => console.warn('Discipline firestore notice:', e));
+  });
 };
 
 export const addDisciplineRecord = (

@@ -3,10 +3,13 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-display: "Outfit", "Plus Jakarta Sans", system-ui, sans-serif;
+  --breakpoint-xs: 375px;
 }
 
 @layer base {
-  body {
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
     font-family: var(--font-sans);
   }
   h1, h2, h3, h4 {

@@ -240,8 +240,8 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
       )}
 
       {/* Hero Container with Background Slider */}
-      <section className="relative overflow-hidden bg-slate-950 text-white rounded-3xl mx-4 sm:mx-6 lg:mx-8 border border-slate-800 shadow-xl">
-        <div className="relative min-h-[520px] sm:min-h-[580px] lg:min-h-[640px] w-full flex items-center justify-center p-4 sm:p-8 lg:p-12 overflow-hidden">
+      <section className="relative overflow-hidden bg-slate-950 text-white rounded-2xl sm:rounded-3xl mx-2 xs:mx-4 sm:mx-6 lg:mx-8 border border-slate-800 shadow-xl">
+        <div className="relative min-h-[460px] xs:min-h-[500px] sm:min-h-[580px] lg:min-h-[640px] w-full flex items-center justify-center p-2 xs:p-4 sm:p-8 lg:p-12 overflow-hidden">
           {/* Background Images Carousel with 5-Second Crossfade */}
           {slides.map((slide, index) => (
             <div
@@ -268,41 +268,41 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
           ))}
 
           {/* Center Box - Exact Visual Design Matching Capture.PNG */}
-          <div className="relative z-10 w-full max-w-4xl mx-auto text-center px-4 sm:px-6">
-            <div className="relative bg-black/40 backdrop-blur-xs border-2 border-[#3b82f6] rounded-none sm:rounded-lg px-6 sm:px-12 py-8 sm:py-14 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
+          <div className="relative z-10 w-full max-w-4xl mx-auto text-center px-1 xs:px-3 sm:px-6">
+            <div className="relative bg-black/45 backdrop-blur-xs border-2 border-[#3b82f6] rounded-lg px-3 py-6 xs:px-6 xs:py-8 sm:px-12 sm:py-14 shadow-2xl animate-in fade-in zoom-in-95 duration-500">
               {/* Blue Horizontal Accent Line */}
-              <div className="w-16 sm:w-20 h-1 bg-[#3b82f6] mx-auto mb-4 sm:mb-6 rounded-full" />
+              <div className="w-12 sm:w-20 h-1 bg-[#3b82f6] mx-auto mb-3 sm:mb-6 rounded-full" />
 
               {/* Title */}
-              <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight font-display mb-4 drop-shadow-md leading-tight">
+              <h1 className="text-xl xs:text-2xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight font-display mb-3 sm:mb-4 drop-shadow-md leading-tight">
                 {settings.heroHeadline || 'Welcome to Runda Technical Secondary School'}
               </h1>
 
               {/* Subtitle / Description */}
-              <p className="text-xs sm:text-sm md:text-base text-white/95 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm">
+              <p className="text-xs xs:text-sm md:text-base text-white/95 max-w-2xl mx-auto font-normal leading-relaxed drop-shadow-sm px-1">
                 {settings.heroTagline ||
                   "Welcome to Runda Technical Secondary School, located in Kamonyi District, South Rwanda. We're proud to offer a blend of academic and technical education, preparing students for success in the modern world."}
               </p>
 
               {/* Action Buttons */}
-              <div className="pt-6 flex flex-wrap items-center justify-center gap-3">
+              <div className="pt-4 sm:pt-6 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3">
                 {onOpenApply && (
                   <button
                     type="button"
                     onClick={onOpenApply}
-                    className="cursor-pointer px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-lg shadow-md transition-all inline-flex items-center gap-1.5"
+                    className="cursor-pointer px-4 xs:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-lg shadow-md transition-all inline-flex items-center gap-1.5"
                   >
                     <span>Enroll Now</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                 )}
                 {onOpenTour && (
                   <button
                     type="button"
                     onClick={onOpenTour}
-                    className="cursor-pointer px-5 py-2.5 bg-white/20 hover:bg-white/30 active:scale-95 text-white font-semibold text-xs sm:text-sm rounded-lg backdrop-blur-md border border-white/30 transition-all inline-flex items-center gap-1.5"
+                    className="cursor-pointer px-3.5 xs:px-5 py-2 sm:py-2.5 bg-white/20 hover:bg-white/30 active:scale-95 text-white font-semibold text-xs sm:text-sm rounded-lg backdrop-blur-md border border-white/30 transition-all inline-flex items-center gap-1.5"
                   >
-                    <Calendar className="w-4 h-4 text-amber-300" />
+                    <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
                     <span>Book Campus Tour</span>
                   </button>
                 )}
@@ -315,17 +315,17 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
             <>
               <button
                 onClick={prevSlide}
-                className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-full bg-black/50 hover:bg-black/75 text-white border border-white/20 backdrop-blur-md transition-all active:scale-90 cursor-pointer"
+                className="absolute left-1 xs:left-2 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-1.5 sm:p-3 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 backdrop-blur-md transition-all active:scale-90 cursor-pointer"
                 aria-label="Previous Slide"
               >
-                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                <ChevronLeft className="w-4 h-4 sm:w-6 sm:h-6" />
               </button>
               <button
                 onClick={nextSlide}
-                className="absolute right-4 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-2.5 sm:p-3 rounded-full bg-black/50 hover:bg-black/75 text-white border border-white/20 backdrop-blur-md transition-all active:scale-90 cursor-pointer"
+                className="absolute right-1 xs:right-2 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-1.5 sm:p-3 rounded-full bg-black/60 hover:bg-black/80 text-white border border-white/20 backdrop-blur-md transition-all active:scale-90 cursor-pointer"
                 aria-label="Next Slide"
               >
-                <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                <ChevronRight className="w-4 h-4 sm:w-6 sm:h-6" />
               </button>
             </>
           )}

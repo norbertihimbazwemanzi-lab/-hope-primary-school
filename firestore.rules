@@ -41,6 +41,46 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow read, write: if true;
     }
+
+    // Payment & Accounting Transactions (Ledger records)
+    match /payment_transactions/{txId} {
+      allow read, write: if true;
+    }
+
+    // Admissions Applications & Registrations
+    match /admissions_applications/{appId} {
+      allow read, write: if true;
+    }
+
+    // Applicant & Parent Chat Messages
+    match /applicant_chats/{chatId} {
+      allow read, write: if true;
+    }
+
+    // Student Attendance Records
+    match /attendance_records/{attId} {
+      allow read, write: if true;
+    }
+
+    // Teacher & Staff Duty Attendance Records
+    match /teacher_attendance_records/{tAttId} {
+      allow read, write: if true;
+    }
+
+    // Student Discipline & Conduct Records
+    match /discipline_records/{discId} {
+      allow read, write: if true;
+    }
+
+    // Visitor Contact Inquiries
+    match /visitor_inquiries/{inqId} {
+      allow read, write: if true;
+    }
+
+    // Campus Tour Bookings
+    match /campus_tour_bookings/{tourId} {
+      allow read, write: if true;
+    }
   }
 }
 

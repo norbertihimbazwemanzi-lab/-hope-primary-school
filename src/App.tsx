@@ -14,7 +14,7 @@ import { ApplicationModal } from './components/ApplicationModal';
 import { CampusTourModal } from './components/CampusTourModal';
 import { PrintableApplicationModal } from './components/PrintableApplicationModal';
 import { ApplicantChatTrackerModal } from './components/ApplicantChatTrackerModal';
-import { Sparkles, Phone, ArrowUp, Megaphone, X, MessageSquare } from 'lucide-react';
+import { ArrowUp, Megaphone, X } from 'lucide-react';
 import { SCHOOL_INFO } from './data/schoolData';
 import {
   getAnnouncements,
@@ -29,6 +29,7 @@ import {
   syncServerStudents,
   getStaffMembers,
   getEnrolledStudents,
+  syncAllStoresWithServerDatabase,
 } from './services/adminStore';
 import {
   fetchSchoolLogoFromFirebase,
@@ -72,6 +73,9 @@ export default function App() {
   // Multi-Device Real-Time Sync & Public Data Ingestion
   // Ensures all public visitors (unauthenticated) and authenticated users see identical data across devices
   useEffect(() => {
+    // Sync all databases and local stores with server database
+    syncAllStoresWithServerDatabase().catch((e) => console.warn('Global store sync notice:', e));
+
     // 1. Initial Logo Fetch & Real-time Subscription
     fetchSchoolLogoFromFirebase().then((firebaseLogoUrl) => {
       if (firebaseLogoUrl) {
@@ -425,50 +429,18 @@ export default function App() {
         onOpenTour={() => setIsTourModalOpen(true)}
       />
 
-      {/* Bright Floating "Apply Now" & Quick Dial Action Stack */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end gap-2 sm:gap-3 print:hidden">
-        {/* Scroll To Top Button */}
-        {showScrollTop && (
+      {/* Floating Scroll-To-Top Control (Call, Chat Tracker, and Floating Apply Now disabled per user request) */}
+      {showScrollTop && (
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 print:hidden">
           <button
             onClick={scrollToTop}
-            className="p-2.5 sm:p-3 bg-white text-slate-700 hover:text-slate-950 rounded-full shadow-lg border border-slate-200 transition-all hover:-translate-y-0.5 active:translate-y-0"
+            className="p-2.5 sm:p-3 bg-white/95 hover:bg-white text-slate-700 hover:text-slate-950 rounded-full shadow-lg border border-slate-200 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer backdrop-blur-xs"
             aria-label="Scroll to top"
           >
-            <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <ArrowUp className="w-4 h-4" />
           </button>
-        )}
-
-        {/* Floating Call Button */}
-        <a
-          href={`tel:${SCHOOL_INFO.contact.phone.replace(/\s+/g, '')}`}
-          className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-1.5 sm:py-2 bg-slate-900/90 hover:bg-slate-900 text-white text-[11px] sm:text-xs font-bold rounded-full shadow-lg backdrop-blur-md border border-slate-700 transition-all hover:scale-105"
-          title="Direct Call to School"
-        >
-          <Phone className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">{SCHOOL_INFO.contact.phone}</span>
-          <span className="sm:hidden">Call School</span>
-        </a>
-
-        {/* Floating Applicant Chat & Status Tracker Button */}
-        <button
-          onClick={() => setIsChatTrackerOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-900/95 hover:bg-blue-950 text-white text-[11px] sm:text-xs font-bold rounded-full shadow-lg backdrop-blur-md border border-blue-700/80 transition-all hover:scale-105 cursor-pointer"
-          title="Track Application Status & View Chat History"
-        >
-          <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
-          <span className="hidden sm:inline">Track Status & Chat</span>
-          <span className="sm:hidden">Chat</span>
-        </button>
-
-        {/* Bright Floating "Apply Now" Button */}
-        <button
-          onClick={() => handleOpenApply()}
-          className="inline-flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2.5 sm:py-3.5 bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-slate-950 font-black text-xs sm:text-sm tracking-wide rounded-full shadow-xl shadow-amber-500/30 hover:shadow-2xl hover:shadow-amber-500/45 ring-2 sm:ring-4 ring-amber-400/30 transition-all transform hover:-translate-y-1 active:translate-y-0"
-        >
-          <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950 animate-pulse" />
-          <span>Apply Now</span>
-        </button>
-      </div>
+        </div>
+      )}
 
       {/* Interactive Admissions Application Modal */}
       <ApplicationModal

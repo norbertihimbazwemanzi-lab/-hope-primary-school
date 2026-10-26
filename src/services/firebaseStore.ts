@@ -741,3 +741,266 @@ export const subscribeToEnrolledStudents = (callback: (items: any[]) => void): U
     return () => {};
   }
 };
+
+/**
+ * Save Payment / Accounting Transaction to Firestore
+ */
+export const savePaymentTransactionToFirebase = async (tx: any): Promise<boolean> => {
+  try {
+    const txId = tx.id || `tx-${Date.now()}`;
+    const docRef = doc(db, 'payment_transactions', txId);
+    await setDoc(
+      docRef,
+      {
+        ...tx,
+        id: txId,
+        updatedAt: new Date().toISOString(),
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    console.log('[Firebase Store] Payment transaction synced to Firestore:', txId);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore payment write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Payment Transactions from Firestore
+ */
+export const fetchPaymentTransactionsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'payment_transactions');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore payments fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Subscribe to Payment Transactions in real-time
+ */
+export const subscribeToPaymentTransactions = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'payment_transactions');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        callback(items);
+      },
+      (err) => {
+        console.warn('[Firebase Store] Payment subscription notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register payment listener:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Save Admissions Application to Firestore
+ */
+export const saveApplicationToFirebase = async (appData: any): Promise<boolean> => {
+  try {
+    const appId = appData.id || `app-${Date.now()}`;
+    const docRef = doc(db, 'admissions_applications', appId);
+    await setDoc(
+      docRef,
+      {
+        ...appData,
+        id: appId,
+        updatedAt: new Date().toISOString(),
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    console.log('[Firebase Store] Application synced to Firestore:', appId);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore application write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Applications from Firestore
+ */
+export const fetchApplicationsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'admissions_applications');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Firestore applications fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Subscribe to Admissions Applications in real-time
+ */
+export const subscribeToApplications = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    const colRef = collection(db, 'admissions_applications');
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((docSnap) => {
+          items.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        callback(items);
+      },
+      (err) => {
+        console.warn('[Firebase Store] Applications subscription notice:', err);
+      }
+    );
+  } catch (err) {
+    console.warn('[Firebase Store] Could not register applications listener:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Save Student Attendance Batch to Firestore
+ */
+export const saveAttendanceBatchToFirebase = async (records: any[]): Promise<boolean> => {
+  try {
+    const promises = records.map((r) => {
+      const attId = r.id || `${r.date}_${r.studentId}`;
+      const docRef = doc(db, 'attendance_records', attId);
+      return setDoc(
+        docRef,
+        {
+          ...r,
+          id: attId,
+          serverTimestamp: Timestamp.now(),
+        },
+        { merge: true }
+      );
+    });
+    await Promise.all(promises);
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Attendance batch write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Student Attendance Records from Firestore
+ */
+export const fetchAttendanceRecordsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'attendance_records');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Attendance fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Save Discipline Record to Firestore
+ */
+export const saveDisciplineRecordToFirebase = async (record: any): Promise<boolean> => {
+  try {
+    const discId = record.id || `disc-${Date.now()}`;
+    const docRef = doc(db, 'discipline_records', discId);
+    await setDoc(
+      docRef,
+      {
+        ...record,
+        id: discId,
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Discipline write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Discipline Records from Firestore
+ */
+export const fetchDisciplineRecordsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'discipline_records');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Discipline fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Save Visitor Contact Inquiry to Firestore
+ */
+export const saveInquiryToFirebase = async (inquiry: any): Promise<boolean> => {
+  try {
+    const inqId = inquiry.id || `inq-${Date.now()}`;
+    const docRef = doc(db, 'visitor_inquiries', inqId);
+    await setDoc(
+      docRef,
+      {
+        ...inquiry,
+        id: inqId,
+        serverTimestamp: Timestamp.now(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Inquiry write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Visitor Contact Inquiries from Firestore
+ */
+export const fetchInquiriesFromFirebase = async (): Promise<any[]> => {
+  try {
+    const colRef = collection(db, 'visitor_inquiries');
+    const snapshot = await getDocs(colRef);
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Inquiries fetch notice:', err);
+    return [];
+  }
+};
+
