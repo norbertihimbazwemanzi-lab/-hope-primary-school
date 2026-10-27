@@ -2,6 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Users & User Attributes (Cross-device user profiles & attributes stored in Firestore)
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
     // School Settings & Branding (Public read/write so all devices see the school logo & data)
     match /school_settings/{settingId} {
       allow read, write: if true;

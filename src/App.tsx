@@ -30,7 +30,11 @@ import {
   getStaffMembers,
   getEnrolledStudents,
   syncAllStoresWithServerDatabase,
+  syncCurrentSessionUserFromFirestore,
+  setCurrentSessionUser,
+  getCurrentSessionUser,
 } from './services/adminStore';
+import { initAuth, resolveStaffRoleForFirebaseUser } from './services/authService';
 import {
   fetchSchoolLogoFromFirebase,
   fetchSchoolGalleryFromFirebase,
@@ -55,6 +59,38 @@ export default function App() {
   const [chatTrackerRefCode, setChatTrackerRefCode] = useState('');
   const [preselectedGrade, setPreselectedGrade] = useState<string>('N-BABY');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [, setSessionRevision] = useState(0);
+
+  // Sync user attributes from Firestore on session or Firebase Auth events
+  useEffect(() => {
+    const sessionHandler = () => setSessionRevision((r) => r + 1);
+    window.addEventListener('mugina-session-updated', sessionHandler);
+
+    const unsubAuth = initAuth(
+      async (firebaseUser) => {
+        if (firebaseUser) {
+          const synced = await syncCurrentSessionUserFromFirestore(firebaseUser.uid);
+          if (!synced && firebaseUser.email) {
+            await syncCurrentSessionUserFromFirestore(firebaseUser.email);
+          }
+          if (!getCurrentSessionUser()) {
+            const res = resolveStaffRoleForFirebaseUser(firebaseUser);
+            if (res.authorized) {
+              setCurrentSessionUser(res.session);
+            }
+          }
+        }
+      },
+      () => {
+        // Logged out
+      }
+    );
+
+    return () => {
+      window.removeEventListener('mugina-session-updated', sessionHandler);
+      unsubAuth();
+    };
+  }, []);
   const [activeAnnouncement, setActiveAnnouncement] = useState(() => {
     const list = getAnnouncements();
     return list.find((a) => a.isActive) || null;
@@ -116,29 +152,24 @@ export default function App() {
       syncServerGalleryItems(),
       fetchSchoolGalleryFromFirebase(),
     ]).then(([serverItems, firestoreItems]) => {
-      const local = getGalleryItems();
-      const map = new Map();
-      [...local, ...serverItems, ...firestoreItems].forEach((rawItem) => {
-        const item = sanitizeItem(rawItem);
-        if (item && item.id) map.set(item.id, item);
-      });
-      const merged = Array.from(map.values());
-      if (merged.length > 0) {
-        saveGalleryItems(merged);
+      // Database source of truth: prioritize remote Firestore or server items over stale local cache
+      let authoritative: any[] = [];
+      if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
+        authoritative = firestoreItems;
+      } else if (Array.isArray(serverItems) && serverItems.length > 0) {
+        authoritative = serverItems;
+      }
+      if (authoritative.length > 0) {
+        const sanitized = authoritative.map(sanitizeItem);
+        saveGalleryItems(sanitized);
       }
     }).catch((e) => console.warn('Gallery sync notice:', e));
 
-    // Real-time Gallery Subscription for instant photo display across all devices
+    // Real-time Gallery Subscription: authoritative live updates across all devices
     const unsubGallery = subscribeToSchoolGallery((liveItems) => {
       if (Array.isArray(liveItems) && liveItems.length > 0) {
-        const local = getGalleryItems();
-        const map = new Map();
-        [...local, ...liveItems].forEach((rawItem) => {
-          const item = sanitizeItem(rawItem);
-          if (item && item.id) map.set(item.id, item);
-        });
-        const merged = Array.from(map.values());
-        saveGalleryItems(merged);
+        const sanitized = liveItems.map(sanitizeItem);
+        saveGalleryItems(sanitized);
       }
     });
 
@@ -312,25 +343,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-amber-200 selection:text-amber-950">
-      {/* Optional Top Active Announcement Bar */}
-      {activeAnnouncement && !announcementDismissed && (
-        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-950 text-white text-xs py-2 px-4 border-b border-blue-800">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 truncate">
-              <Megaphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="font-bold text-amber-300">{activeAnnouncement.badge || 'Notice'}:</span>
-              <span className="truncate">{activeAnnouncement.title} — {activeAnnouncement.content}</span>
-            </div>
-            <button
-              onClick={() => setAnnouncementDismissed(true)}
-              className="text-slate-300 hover:text-white p-0.5"
-              aria-label="Dismiss banner"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {/* Global Header Navigation Bar */}
       <Header

@@ -1,8 +1,8 @@
 import React from 'react';
 import { PageId } from '../types';
 import { SchoolFeesSection } from '../components/SchoolFeesSection';
+import { CreditCard, ShieldCheck, Phone, Mail, ArrowRight } from 'lucide-react';
 import { SCHOOL_INFO } from '../data/schoolData';
-import { CreditCard, ShieldCheck, HelpCircle, Phone, Mail, ArrowRight, FileText } from 'lucide-react';
 
 interface SchoolFeesPageProps {
   onNavigate: (page: PageId) => void;
@@ -16,123 +16,115 @@ export const SchoolFeesPage: React.FC<SchoolFeesPageProps> = ({
   onOpenTour,
 }) => {
   return (
-    <div className="w-full bg-slate-50 min-h-screen">
-      {/* Page Hero Banner */}
-      <div className="bg-gradient-to-b from-blue-950 via-slate-900 to-slate-950 text-white py-16 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
-        <div className="max-w-5xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/60 border border-blue-700/60 text-blue-200 text-xs font-semibold uppercase tracking-wider">
+    <div className="w-full bg-white min-h-screen">
+      {/* Page Hero Header - Professional Institutional Banner */}
+      <div className="bg-slate-900 text-white py-12 sm:py-16 px-4 sm:px-6 lg:px-8 border-b border-slate-800">
+        <div className="max-w-5xl mx-auto text-center space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300 text-xs font-semibold uppercase tracking-wider">
             <CreditCard className="w-3.5 h-3.5 text-amber-400" />
-            <span>Academic Year 2026/2027</span>
+            <span>Academic Year 2026 / 2027</span>
           </div>
-          <h1 className="text-3xl sm:text-5xl font-black font-display tracking-tight text-white">
-            Official School Fee Schedule
+          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-white">
+            Official Tuition & Term Fee Schedule
           </h1>
-          <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed">
-            Transparent, predictable tuition and term fee structures for all academic terms.
+          <p className="text-xs sm:text-sm text-slate-300 max-w-2xl mx-auto leading-relaxed">
+            Transparent, predictable term fees established according to Rwanda Ministry of Education guidelines for Nursery and Primary education.
           </p>
         </div>
       </div>
 
-      {/* Main School Fees Section (Matching Capture_fff547f5.PNG) */}
+      {/* Main School Fees Section */}
       <SchoolFeesSection
         onOpenApply={onOpenApply}
         onOpenTour={onOpenTour}
-        className="pt-12 pb-16"
+        className="pt-8 pb-12"
       />
 
-      {/* Payment Options & Guidelines */}
+      {/* Official Payment Channels & Guidelines */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
-        <div className="bg-white rounded-3xl p-6 sm:p-10 border border-slate-200 shadow-xs space-y-8">
-          <div className="border-b border-slate-100 pb-5">
-            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display">
-              Payment Methods & Official Channels
+        <div className="bg-slate-50 rounded-lg p-6 sm:p-8 border border-slate-200 space-y-6">
+          <div className="border-b border-slate-200 pb-4">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+              Payment Channels & Official Instructions
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              All term payments must be completed via official school banking channels or registered merchant numbers.
+            <p className="text-xs text-slate-600 mt-1">
+              All term payments must be completed via official school banking accounts or registered merchant numbers. Cash payments are accepted only at the campus bursar desk.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* BK Bank Slip */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-              <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+            <div className="p-5 rounded-lg bg-white border border-slate-200 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2 text-blue-900 font-bold text-sm">
                 <CreditCard className="w-4 h-4" />
                 <span>Bank of Kigali (BK)</span>
               </div>
-              <p className="text-xs text-slate-600">
-                Deposit directly at any Bank of Kigali branch nationwide or through BK App.
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Deposit directly at any Bank of Kigali branch nationwide or through the BK Mobile Banking App.
               </p>
-              <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900">
+              <div className="p-2.5 bg-slate-50 rounded-md border border-slate-200 text-xs font-mono font-bold text-slate-900">
                 Account: 00040-0694852-33
               </div>
               <span className="text-[11px] text-slate-500 block">
-                Reference: Child&apos;s Full Name & Grade
+                Slip Reference: Student Full Name & Grade
               </span>
             </div>
 
             {/* MTN Mobile Money */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="p-5 rounded-lg bg-white border border-slate-200 space-y-3 shadow-xs">
               <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
                 <CreditCard className="w-4 h-4" />
                 <span>MTN MoMo Pay Merchant</span>
               </div>
-              <p className="text-xs text-slate-600">
-                Dial *182*8*1# and enter the official school merchant code:
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Dial *182*8*1# and enter the verified official school merchant code:
               </p>
-              <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-900">
+              <div className="p-2.5 bg-slate-50 rounded-md border border-slate-200 text-xs font-mono font-bold text-slate-900">
                 Merchant Code: 788258
               </div>
               <span className="text-[11px] text-slate-500 block">
-                Save SMS transaction confirmation for registry
+                Retain SMS confirmation for bursar receipt verification
               </span>
             </div>
 
             {/* Bursar & Accounting Desk */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+            <div className="p-5 rounded-lg bg-white border border-slate-200 space-y-3 shadow-xs">
               <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
                 <ShieldCheck className="w-4 h-4" />
-                <span>Bursar Accounting Desk</span>
+                <span>Campus Bursar Desk</span>
               </div>
-              <p className="text-xs text-slate-600">
-                Submit payment receipts or bank slips at the campus administrative building.
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Present bank deposit slips or payment receipts directly at the school administrative building.
               </p>
-              <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 font-medium">
-                Mon - Fri: 7:30 AM - 4:30 PM
+              <div className="p-2.5 bg-slate-50 rounded-md border border-slate-200 text-xs text-slate-800 font-medium">
+                Monday – Friday: 7:30 AM – 4:30 PM
               </div>
               <span className="text-[11px] text-slate-500 block">
-                Official printed receipts issued on the spot
+                Official stamped receipts issued immediately
               </span>
             </div>
           </div>
 
-          {/* Quick Contact & Action CTA */}
-          <div className="bg-gradient-to-r from-blue-900 to-indigo-900 rounded-2xl p-6 sm:p-8 text-white flex flex-col sm:flex-row items-center justify-between gap-6">
-            <div className="space-y-1 text-center sm:text-left">
-              <h3 className="text-lg sm:text-xl font-bold font-display">
-                Need Flexible Installment Plans?
-              </h3>
-              <p className="text-xs sm:text-sm text-blue-200 max-w-xl">
-                Our finance office works with families requiring tailored term installment structures. Contact our accounts desk today.
-              </p>
+          <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-600">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-slate-500" />
+                Bursar Contact: {SCHOOL_INFO.contact.phone}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-slate-500" />
+                finance@muginahopeschool.com
+              </span>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <a
-                href={`tel:${SCHOOL_INFO.contact.phone.replace(/\s+/g, '')}`}
-                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5"
+            {onOpenApply && (
+              <button
+                onClick={onOpenApply}
+                className="px-4 py-2 bg-blue-950 hover:bg-blue-900 text-white font-semibold rounded-md shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <Phone className="w-3.5 h-3.5" />
-                <span>Call Bursar Desk</span>
-              </a>
-              {onOpenApply && (
-                <button
-                  onClick={onOpenApply}
-                  className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-blue-950 text-xs font-bold rounded-xl shadow-md transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1.5"
-                >
-                  <span>Apply for Admission</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+                <span>Proceed to Admission Form</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

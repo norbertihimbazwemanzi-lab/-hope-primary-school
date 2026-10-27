@@ -29,6 +29,9 @@ export interface FacilityItem {
   description: string;
   imageSrc: string;
   caption: string;
+  altText?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Testimonial {

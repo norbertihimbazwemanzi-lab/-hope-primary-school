@@ -253,14 +253,14 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
             <h2 className="text-lg font-black tracking-tight font-display">
               Student Progress Log
             </h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-emerald-400" />
-              <span>Firebase Firestore Store</span>
+            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              <span>Official Academic Registry</span>
             </span>
           </div>
           <p className="text-xs text-indigo-200 mt-1 max-w-2xl">
             Record daily academic performance, subject comprehension, and behavioral conduct notes for learners in{' '}
-            <strong className="text-amber-300">{activeGrade}</strong>. All entries persist in real-time to the cloud database.
+            <strong className="text-amber-300">{activeGrade}</strong>. All entries persist across all devices.
           </p>
         </div>
 
@@ -570,7 +570,7 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
               <div className="flex items-center gap-2 text-slate-500 text-[11px]">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 <span>
-                  Saved directly to Firebase collection <code>student_progress_logs</code>
+                  Saved directly to official school academic records
                 </span>
               </div>
 
@@ -582,7 +582,7 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
                 {isSaving ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin text-amber-300" />
-                    <span>Saving to Firebase Store...</span>
+                    <span>Saving Progress Log...</span>
                   </>
                 ) : (
                   <>
@@ -632,7 +632,7 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
                   onClick={loadLogs}
                   disabled={isLoadingLogs}
                   className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-indigo-600 cursor-pointer"
-                  title="Reload from Firebase"
+                  title="Reload Records"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLogs ? 'animate-spin' : ''}`} />
                 </button>
@@ -857,7 +857,7 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
                         Logged by: <strong>{log.teacherName}</strong>
                         {log.source === 'firebase-firestore' && (
                           <span className="ml-2 text-emerald-600 font-semibold text-[10px]">
-                            • Synced to Firebase
+                            • Verified
                           </span>
                         )}
                       </div>

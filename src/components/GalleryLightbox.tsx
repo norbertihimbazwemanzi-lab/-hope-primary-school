@@ -31,7 +31,7 @@ export const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ item, onClose 
         <div className="relative max-h-[65vh] flex items-center justify-center bg-black overflow-hidden">
           <img
             src={item.imageSrc}
-            alt={item.title}
+            alt={item.altText || item.title}
             referrerPolicy="no-referrer"
             onError={(e) => {
               const target = e.target as HTMLImageElement;

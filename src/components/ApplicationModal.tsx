@@ -316,10 +316,10 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
   const selectedGradeObj = ACADEMIC_GRADES.find(g => g.code === formData.gradeCode);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
+      <div className="bg-white rounded-xl sm:rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
         {/* Header */}
-        <div className="sticky top-0 bg-white/95 backdrop-blur-md px-6 py-4 border-b border-slate-200 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-white/95 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 flex items-center justify-between z-10">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold text-sm">
               MH
@@ -532,7 +532,7 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
                         </label>
                         {formData.parentEmail && (
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                               emailValidation.isValid
                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                                 : 'bg-rose-100 text-rose-800 border border-rose-200'
@@ -742,7 +742,7 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
                       <span className="text-xs font-bold text-amber-900 uppercase tracking-wider block">
                         Required Registration Documents:
                       </span>
-                      <span className="text-[10px] font-bold bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] font-bold bg-amber-200/70 text-amber-900 px-2 py-0.5 rounded-md">
                         Admin Checklist
                       </span>
                     </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { FacilityItem, PageId } from '../types';
 import { GalleryLightbox } from '../components/GalleryLightbox';
-import { getGalleryItems, syncServerGalleryItems, saveGalleryItems } from '../services/adminStore';
+import { getGalleryItems, syncServerGalleryItems, saveGalleryItems, getWebsiteSettings } from '../services/adminStore';
 import { fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
 import {
   Sparkles,
@@ -39,19 +39,16 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
     // 2. Sync from server and Firebase Firestore so photos uploaded on any computer/device show here
     let isMounted = true;
     Promise.all([
-      syncServerGalleryItems(),
       fetchSchoolGalleryFromFirebase(),
-    ]).then(([serverItems, firestoreItems]) => {
+      syncServerGalleryItems(),
+    ]).then(([firestoreItems, serverItems]) => {
       if (!isMounted) return;
-      const local = getGalleryItems();
-      const map = new Map<string, FacilityItem>();
-      [...local, ...serverItems, ...firestoreItems].forEach((item) => {
-        if (item && item.id) map.set(item.id, item);
-      });
-      const merged = Array.from(map.values());
-      if (merged.length > 0) {
-        setFacilities(merged);
-        saveGalleryItems(merged);
+      if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
+        setFacilities(firestoreItems);
+        saveGalleryItems(firestoreItems);
+      } else if (Array.isArray(serverItems) && serverItems.length > 0) {
+        setFacilities(serverItems);
+        saveGalleryItems(serverItems);
       }
     }).catch((err) => console.warn('Gallery sync notice:', err));
 
@@ -140,41 +137,39 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
       </div>
 
       {/* 2. Traditional Rwandan Culture & Itorero Spotlight */}
-      <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white rounded-3xl overflow-hidden border border-amber-800/80 shadow-xl grid grid-cols-1 lg:grid-cols-2">
-        <div className="p-8 sm:p-12 flex flex-col justify-between space-y-6">
+      <div className="bg-slate-900 text-white rounded-xl overflow-hidden border border-slate-800 shadow-sm grid grid-cols-1 lg:grid-cols-2">
+        <div className="p-8 sm:p-10 flex flex-col justify-between space-y-6">
           <div className="space-y-3">
             <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
               <Flame className="w-4 h-4" />
               Rwandan Cultural Heritage (Umuco w&apos;u Rwanda)
             </span>
-            <h2 className="text-2xl sm:text-3xl font-black font-display text-white">
+            <h2 className="text-2xl sm:text-3xl font-bold font-display text-white">
               Itorero ry&apos;Abato: Traditional Dance & Drumming
             </h2>
-            <p className="text-xs sm:text-sm text-slate-200 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               Every pupil at Mugina Hope Academy is immersed in Rwanda’s rich cultural tradition. Through traditional Intore warrior dance, graceful Umushayayo, and rhythmic drumming, children develop poise, national pride, and teamwork.
             </p>
-
             <div className="space-y-2 pt-2 text-xs text-slate-300">
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Authentic traditional costumes and traditional drums (Ingoma)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Regular performances during national days and Kamonyi festivals</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-amber-400 shrink-0" />
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Instilling core values: Ubutwari, Ubupfura, and Gukunda Igihugu</span>
               </div>
             </div>
           </div>
-
-          <div className="pt-4 border-t border-amber-800/60 flex items-center justify-between text-xs text-amber-300 font-medium">
+          <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-300">
             <span>Open to both Nursery & Primary learners</span>
             <button
               onClick={onOpenTour}
-              className="text-white bg-amber-600 hover:bg-amber-500 font-bold px-4 py-2 rounded-lg transition-colors"
+              className="text-white bg-blue-700 hover:bg-blue-600 font-bold px-4 py-2 rounded-lg transition-colors shadow-xs"
             >
               Experience a Session
             </button>
@@ -183,8 +178,8 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
 
         <div className="relative min-h-[300px] lg:min-h-full">
           <img
-            src={SCHOOL_INFO.images.culturalDance}
-            alt="Mugina Hope Academy children performing traditional Rwandan cultural dance"
+            src={getWebsiteSettings().culturalDancePhotoUrl || SCHOOL_INFO.images.culturalDance}
+            alt={getWebsiteSettings().culturalDanceAlt || "Mugina Hope Academy children performing traditional Rwandan cultural dance"}
             referrerPolicy="no-referrer"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
@@ -321,7 +316,7 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
               <div className="relative h-56 bg-slate-100 overflow-hidden">
                 <img
                   src={fac.imageSrc}
-                  alt={fac.title}
+                  alt={fac.altText || fac.title}
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
@@ -335,11 +330,6 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
                   }}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
-                {fac.imageSrc?.includes('firebasestorage') && (
-                  <span className="absolute top-2.5 left-2.5 text-[9px] font-bold bg-blue-900/80 text-blue-200 px-2 py-0.5 rounded-md shadow-2xs flex items-center gap-1 backdrop-blur-xs">
-                    ☁️ Firebase Cloud Media
-                  </span>
-                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-4">
                   <span className="text-xs text-white font-medium flex items-center gap-1">
                     <Maximize2 className="w-3.5 h-3.5" /> View Photo

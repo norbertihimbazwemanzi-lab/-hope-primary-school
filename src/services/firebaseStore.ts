@@ -1004,3 +1004,127 @@ export const fetchInquiriesFromFirebase = async (): Promise<any[]> => {
   }
 };
 
+/**
+ * User Profile & Attributes Management in Firestore
+ * Replaces localStorage with persistent Firestore storage for all user attributes
+ */
+export interface UserAttributes {
+  id: string; // Firebase Auth UID or Staff ID
+  email: string;
+  name: string;
+  role: string;
+  username: string;
+  phoneNumber?: string;
+  assignedSubjectOrGrade?: string;
+  status?: string;
+  photoUrl?: string;
+  permissions?: string[];
+  lastLogin?: string;
+  attributes?: Record<string, any>;
+  updatedAt: string;
+}
+
+/**
+ * Save user attributes to Firestore
+ */
+export const saveUserAttributesToFirebase = async (
+  userData: Partial<UserAttributes> & { id: string; email?: string }
+): Promise<boolean> => {
+  try {
+    const docRef = doc(db, 'users', userData.id);
+    const payload = {
+      ...userData,
+      updatedAt: new Date().toISOString(),
+      serverTimestamp: Timestamp.now(),
+    };
+    await setDoc(docRef, payload, { merge: true });
+
+    // Also index under sanitized email key if email exists, ensuring multi-device recovery
+    if (userData.email) {
+      const cleanEmail = userData.email.toLowerCase().trim();
+      const emailDocId = `email_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+      const emailRef = doc(db, 'users', emailDocId);
+      await setDoc(emailRef, payload, { merge: true });
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Save user attributes notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch user attributes from Firestore by ID or UID
+ */
+export const fetchUserAttributesFromFirebase = async (
+  userId: string
+): Promise<UserAttributes | null> => {
+  try {
+    const docRef = doc(db, 'users', userId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data() as UserAttributes;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[Firebase Store] Fetch user attributes notice:', err);
+    return null;
+  }
+};
+
+/**
+ * Fetch user attributes from Firestore by email
+ */
+export const fetchUserByEmailFromFirebase = async (
+  email: string
+): Promise<UserAttributes | null> => {
+  if (!email) return null;
+  const cleanEmail = email.toLowerCase().trim();
+  try {
+    // 1. Try direct lookup by emailDocId
+    const emailDocId = `email_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+    const directDoc = await getDoc(doc(db, 'users', emailDocId));
+    if (directDoc.exists()) {
+      return directDoc.data() as UserAttributes;
+    }
+
+    // 2. Query collection where email == cleanEmail
+    const colRef = collection(db, 'users');
+    const q = query(colRef, where('email', '==', cleanEmail));
+    const snapshot = await getDocs(q);
+    if (!snapshot.empty) {
+      const docSnap = snapshot.docs[0];
+      return docSnap.data() as UserAttributes;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[Firebase Store] Fetch user by email notice:', err);
+    return null;
+  }
+};
+
+/**
+ * Real-time subscription to user attributes
+ */
+export const subscribeToUserAttributes = (
+  userId: string,
+  callback: (user: UserAttributes | null) => void
+): Unsubscribe => {
+  const docRef = doc(db, 'users', userId);
+  return onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        callback(docSnap.data() as UserAttributes);
+      } else {
+        callback(null);
+      }
+    },
+    (err) => {
+      console.warn('[Firebase Store] User attributes subscription notice:', err);
+      callback(null);
+    }
+  );
+};
+
+

@@ -225,10 +225,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
           }`}
         >
           <BookOpen className="w-4 h-4 text-amber-500" />
-          <span>Student Progress Log (Firebase)</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-            Cloud
-          </span>
+          <span>Student Progress Log</span>
         </button>
       </div>
 

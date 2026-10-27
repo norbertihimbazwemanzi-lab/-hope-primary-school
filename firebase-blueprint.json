@@ -224,9 +224,57 @@
         }
       },
       "required": ["id", "title", "description", "isRequired", "applicableGrades"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile, permissions, and attributes stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique user UID or ID"
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name or display name"
+        },
+        "role": {
+          "type": "string",
+          "description": "User role: Admin, DOS, Teacher, Finance, Registrar, or DOD"
+        },
+        "username": {
+          "type": "string",
+          "description": "Institutional username"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Contact phone number"
+        },
+        "assignedSubjectOrGrade": {
+          "type": "string",
+          "description": "Assigned grade level or subject area"
+        },
+        "status": {
+          "type": "string",
+          "description": "Account status: Active, Inactive, On Leave"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of update"
+        }
+      },
+      "required": ["id", "email", "role"]
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User attributes, profiles, and session state saved in Firestore"
+    },
     "/school_settings/{settingId}": {
       "schema": "SchoolSetting",
       "description": "Global school branding and public website settings"

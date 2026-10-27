@@ -5,7 +5,7 @@ import {
   getCurrentSessionUser,
   WebsiteSettings,
 } from '../services/adminStore';
-import { Check, X, Edit3, CheckCircle2, Plus, Trash2, ArrowRight, Download, HelpCircle } from 'lucide-react';
+import { Check, X, Edit3, Plus, Trash2, ArrowRight, ShieldCheck, CreditCard } from 'lucide-react';
 
 interface SchoolFeesSectionProps {
   className?: string;
@@ -26,10 +26,10 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   // Form State
-  const [feesBadge, setFeesBadge] = useState<string>(settings.feesBadge || 'SCHOOL FEES');
+  const [feesBadge, setFeesBadge] = useState<string>(settings.feesBadge || 'OFFICIAL FEE SCHEDULE');
   const [feesSubtitle, setFeesSubtitle] = useState<string>(
     settings.feesSubtitle ||
-      'Discover the fee structure for each academic term at RUNDA TECHNICAL SECONDARY SCHOOL for seasoned students (L4, L5).'
+      'Transparent tuition and term schedule approved for all academic terms at Mugina Hope Academy.'
   );
   const [firstTermPrice, setFirstTermPrice] = useState<string>(settings.feesFirstTerm || '92000.0');
   const [secondTermPrice, setSecondTermPrice] = useState<string>(settings.feesSecondTerm || '92000.0');
@@ -38,21 +38,20 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   const [period, setPeriod] = useState<string>(settings.feesPeriod || '/ Term');
   const [includedList, setIncludedList] = useState<string[]>(
     settings.feesIncluded || [
-      'Tuition Fees',
-      'Administrative Charges',
-      'Classroom Materials (Books, Stationery)',
-      'ICT and Technical Education Resources',
-      'Laboratory Fees (For Science students)',
-      'Sports and Physical Education Fees',
-      'Co-curricular activities',
+      'Core Classroom Tuition & CBC Teaching',
+      'Daily Learning Materials (Books & Stationery)',
+      'Science & Practical Laboratory Sessions',
+      'ICT Technology & Computer Lab Access',
+      'Physical Education, Sports & Co-Curriculars',
+      'Continuous Assessment & Term Report Booklets',
     ]
   );
   const [notIncludedList, setNotIncludedList] = useState<string[]>(
     settings.feesNotIncluded || [
-      'Uniform (Students must purchase separately)',
-      'School Transport (If applicable)',
-      'External Examination Fees (e.g., National Exams)',
-      'Extra-Curricular Activity Fees (e.g., Clubs, Workshops)',
+      'Official School Uniform & Sports Kit (Purchased at Bursar Desk)',
+      'Daily School Van Transport (Optional by settlement/route)',
+      'Mid-Day Hot Lunch & Nutrition Program (Optional term subscription)',
+      'National Primary Leaving Examination (PLE) Registration (P6 Candidate Class)',
     ]
   );
 
@@ -60,10 +59,10 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
     const handleUpdate = (e: any) => {
       const updated = e.detail || getWebsiteSettings();
       setSettings(updated);
-      setFeesBadge(updated.feesBadge || 'SCHOOL FEES');
+      setFeesBadge(updated.feesBadge || 'OFFICIAL FEE SCHEDULE');
       setFeesSubtitle(
         updated.feesSubtitle ||
-          'Discover the fee structure for each academic term at RUNDA TECHNICAL SECONDARY SCHOOL for seasoned students (L4, L5).'
+          'Transparent tuition and term schedule approved for all academic terms at Mugina Hope Academy.'
       );
       setFirstTermPrice(updated.feesFirstTerm || '92000.0');
       setSecondTermPrice(updated.feesSecondTerm || '92000.0');
@@ -85,10 +84,10 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
 
   const handleOpenEdit = () => {
     const current = getWebsiteSettings();
-    setFeesBadge(current.feesBadge || 'SCHOOL FEES');
+    setFeesBadge(current.feesBadge || 'OFFICIAL FEE SCHEDULE');
     setFeesSubtitle(
       current.feesSubtitle ||
-        'Discover the fee structure for each academic term at RUNDA TECHNICAL SECONDARY SCHOOL for seasoned students (L4, L5).'
+        'Transparent tuition and term schedule approved for all academic terms at Mugina Hope Academy.'
     );
     setFirstTermPrice(current.feesFirstTerm || '92000.0');
     setSecondTermPrice(current.feesSecondTerm || '92000.0');
@@ -101,7 +100,7 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   };
 
   const handleAddIncluded = () => {
-    setIncludedList([...includedList, 'New Included Item']);
+    setIncludedList([...includedList, 'New Included Provision']);
   };
 
   const handleRemoveIncluded = (idx: number) => {
@@ -109,7 +108,7 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   };
 
   const handleAddNotIncluded = () => {
-    setNotIncludedList([...notIncludedList, 'New Non-Included Item']);
+    setNotIncludedList([...notIncludedList, 'New Optional/Separate Item']);
   };
 
   const handleRemoveNotIncluded = (idx: number) => {
@@ -144,149 +143,143 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   const activeThirdTerm = settings.feesThirdTerm || '92000.0';
   const activeCurrency = settings.feesCurrency || 'Rwf';
   const activePeriod = settings.feesPeriod || '/ Term';
-  const activeIncluded = settings.feesIncluded || [
-    'Tuition Fees',
-    'Administrative Charges',
-    'Classroom Materials (Books, Stationery)',
-    'ICT and Technical Education Resources',
-    'Laboratory Fees (For Science students)',
-    'Sports and Physical Education Fees',
-    'Co-curricular activities',
-  ];
-  const activeNotIncluded = settings.feesNotIncluded || [
-    'Uniform (Students must purchase separately)',
-    'School Transport (If applicable)',
-    'External Examination Fees (e.g., National Exams)',
-    'Extra-Curricular Activity Fees (e.g., Clubs, Workshops)',
-  ];
+  const activeIncluded = settings.feesIncluded || includedList;
+  const activeNotIncluded = settings.feesNotIncluded || notIncludedList;
 
   const termCards = [
     {
-      termName: 'First Term',
+      termName: 'First Term (Term 1)',
+      periodDates: 'January – April',
       price: activeFirstTerm,
-      hasRibbon: false,
+      status: 'Academic Term 1',
     },
     {
-      termName: 'Second Term',
+      termName: 'Second Term (Term 2)',
+      periodDates: 'May – July',
       price: activeSecondTerm,
-      hasRibbon: false,
+      status: 'Academic Term 2',
     },
     {
-      termName: 'Third Term',
+      termName: 'Third Term (Term 3)',
+      periodDates: 'September – November',
       price: activeThirdTerm,
-      hasRibbon: true,
-      ribbonText: 'Third Term',
+      status: 'Academic Term 3',
     },
   ];
 
   return (
-    <section className={`w-full py-8 sm:py-12 px-3 xs:px-4 sm:px-6 lg:px-8 bg-slate-50/70 ${className}`}>
+    <section className={`w-full py-12 px-4 sm:px-6 lg:px-8 bg-white border-t border-b border-slate-200/80 ${className}`}>
       {/* Admin Live Edit Quick Access Bar */}
       {isAdmin && (
-        <div className="max-w-6xl mx-auto mb-6 sm:mb-8">
-          <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-3 sm:p-4 shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border border-blue-700">
+        <div className="max-w-6xl mx-auto mb-8">
+          <div className="bg-slate-900 text-white rounded-lg p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-slate-800">
             <div className="flex items-center gap-3">
-              <span className="p-2 bg-amber-400 text-blue-950 rounded-xl font-bold shrink-0">
+              <span className="p-1.5 bg-blue-900 text-white rounded-md shrink-0">
                 <Edit3 className="w-4 h-4" />
               </span>
               <div>
-                <span className="text-xs font-bold text-amber-300 uppercase tracking-wider block">
-                  School Fees Structure Editor
+                <span className="text-xs font-bold text-white block">
+                  School Fee Structure Editor
                 </span>
-                <span className="text-xs text-blue-100">
-                  Logged in as {sessionUser?.name || 'Staff'}. Edits save permanently to the database for all visitors and staff.
+                <span className="text-[11px] text-slate-400">
+                  Logged in as {sessionUser?.name || 'Administrator'}. Changes sync permanently to Firestore.
                 </span>
               </div>
             </div>
             <button
               onClick={handleOpenEdit}
-              className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 bg-amber-400 hover:bg-amber-300 text-blue-950 font-bold text-xs rounded-xl shadow-xs transition-all active:scale-95 shrink-0 self-end sm:self-auto"
+              className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs rounded-md shadow-xs transition-colors self-end sm:self-auto"
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit Fees</span>
+              <span>Edit Fee Schedule</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Header Pill Badge & Subtitle - Exact Matching Capture_fff547f5.PNG */}
+      {/* Header Label & Subtitle - Clean Editorial Typography */}
       {showTitle && (
-        <div className="text-center max-w-3xl mx-auto mb-12">
-          <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full border border-slate-300 bg-white text-slate-800 text-xs sm:text-sm font-bold tracking-wider uppercase shadow-xs mb-3">
-            {settings.feesBadge || 'SCHOOL FEES'}
+        <div className="text-center max-w-3xl mx-auto mb-10">
+          <div className="inline-flex items-center justify-center px-3 py-1 rounded-md border border-slate-300 bg-slate-50 text-slate-700 text-xs font-semibold tracking-wider uppercase mb-3">
+            {settings.feesBadge || 'OFFICIAL FEE SCHEDULE'}
           </div>
-          <p className="text-sm sm:text-base text-slate-600 font-normal leading-relaxed">
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-2">
+            Tuition & Academic Term Fees
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto font-normal leading-relaxed">
             {settings.feesSubtitle ||
-              'Discover the fee structure for each academic term at RUNDA TECHNICAL SECONDARY SCHOOL for seasoned students (L4, L5).'}
+              'Transparent tuition and term schedule approved for all academic terms at Mugina Hope Academy.'}
           </p>
         </div>
       )}
 
-      {/* 3 Term Cards Grid - Exact Layout Matching Capture_fff547f5.PNG */}
+      {/* 3 Term Cards - Clean Educational Table Grid */}
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
           {termCards.map((card, index) => (
             <div
               key={index}
-              className="relative bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md transition-all duration-300 p-6 sm:p-8 flex flex-col overflow-hidden group"
+              className="bg-slate-50 rounded-lg border border-slate-200 p-6 flex flex-col justify-between"
             >
-              {/* Corner Diagonal Blue Ribbon for Third Term (Exact Capture_fff547f5.PNG match) */}
-              {card.hasRibbon && (
-                <div className="absolute top-0 right-0 w-32 h-32 overflow-hidden pointer-events-none rounded-tr-2xl">
-                  <div className="absolute top-6 -right-9 w-40 bg-[#0052cc] text-white text-[11px] font-bold text-center py-1.5 rotate-45 shadow-md uppercase tracking-wider">
-                    {card.ribbonText}
+              <div>
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-4">
+                  <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+                    {card.termName}
+                  </h3>
+                  <span className="text-[11px] font-medium text-slate-500 bg-white px-2 py-0.5 rounded-sm border border-slate-200">
+                    {card.periodDates}
+                  </span>
+                </div>
+
+                {/* Price Display */}
+                <div className="mb-5">
+                  <span className="text-xs font-medium text-slate-500 block mb-0.5">Approved Term Fee</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-sm font-semibold text-slate-700">{activeCurrency}</span>
+                    <span className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+                      {card.price}
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">{activePeriod}</span>
                   </div>
                 </div>
-              )}
 
-              {/* Term Title */}
-              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight font-display mb-2">
-                {card.termName}
-              </h3>
+                {/* What's Included */}
+                <div className="mb-5">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
+                    Included in Term Tuition
+                  </h4>
+                  <ul className="space-y-1.5 text-xs text-slate-600">
+                    {activeIncluded.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-              {/* Price display */}
-              <div className="text-lg sm:text-xl font-bold text-slate-800 mb-6">
-                <span>{activeCurrency} </span>
-                <span>{card.price} </span>
-                <span className="text-slate-500 font-medium text-base">{activePeriod}</span>
+                {/* What's Not Included */}
+                <div className="pt-4 border-t border-slate-200">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                    Additional Requirements
+                  </h4>
+                  <ul className="space-y-1.5 text-xs text-slate-500">
+                    {activeNotIncluded.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
 
-              {/* What's Included */}
-              <div className="mb-6 flex-1">
-                <h4 className="font-bold text-slate-900 text-sm mb-3">
-                  What&apos;s Included:
-                </h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-slate-600">
-                  {activeIncluded.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* What's Not Included */}
-              <div className="pt-4 border-t border-slate-100">
-                <h4 className="font-bold text-slate-900 text-sm mb-3">
-                  What&apos;s Not Included:
-                </h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-slate-600">
-                  {activeNotIncluded.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-2 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Optional Quick Action */}
+              {/* Action Button */}
               {onOpenApply && (
-                <div className="mt-6 pt-4 border-t border-slate-100">
+                <div className="mt-6 pt-4 border-t border-slate-200">
                   <button
                     onClick={onOpenApply}
-                    className="w-full py-2.5 px-4 bg-slate-900 hover:bg-blue-900 active:scale-95 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    className="w-full py-2 px-3 bg-blue-950 hover:bg-blue-900 text-white text-xs font-semibold rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     <span>Apply for {card.termName}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -296,234 +289,172 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
             </div>
           ))}
         </div>
+
+        {/* Official Bursar & Bank Channels Note */}
+        <div className="mt-8 p-4 bg-slate-50 rounded-lg border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-600">
+          <div className="flex items-center gap-2.5">
+            <CreditCard className="w-4 h-4 text-slate-700 shrink-0" />
+            <span>
+              <strong>Bank of Kigali (BK):</strong> Account 00040-0694852-33 &nbsp;|&nbsp; <strong>MTN MoMo Pay Merchant:</strong> 788258
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            Official bank slips or transaction confirmations must be presented to Bursar for verified receipt.
+          </span>
+        </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* ADMIN IN-PLACE LIVE EDIT MODAL */}
-      {/* ========================================================================= */}
+      {/* Admin Live Edit Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 space-y-6 shadow-2xl border border-slate-200 my-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 bg-blue-50 text-blue-800 rounded-xl">
-                  <Edit3 className="w-5 h-5" />
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-xl border border-slate-200 my-8 max-h-[90vh] overflow-y-auto text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-blue-50 text-blue-900 rounded-md">
+                  <Edit3 className="w-4 h-4" />
                 </span>
-                <div>
-                  <h3 className="font-black text-slate-900 text-lg font-display">
-                    Edit School Fees Structure
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Changes save permanently to the database and sync across all devices for visitors and staff.
-                  </p>
-                </div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Edit School Fees Schedule
+                </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer p-1"
+                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {saveSuccessMsg && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-bold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-md flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600" />
                 <span>{saveSuccessMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveFees} className="space-y-6 text-xs">
-              {/* Header Badge & Subtitle */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="font-bold text-slate-900 uppercase tracking-wider text-xs">
-                  Section Header & Subtitle
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-700">Pill Badge Text</label>
-                    <input
-                      type="text"
-                      value={feesBadge}
-                      onChange={(e) => setFeesBadge(e.target.value)}
-                      placeholder="e.g. SCHOOL FEES"
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg font-bold text-slate-900"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="font-bold block mb-1 text-slate-700">Subtitle Description</label>
-                    <input
-                      type="text"
-                      value={feesSubtitle}
-                      onChange={(e) => setFeesSubtitle(e.target.value)}
-                      placeholder="Discover the fee structure..."
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg text-slate-900"
-                    />
-                  </div>
+            <form onSubmit={handleSaveFees} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 1 Rate (Rwf)</label>
+                  <input
+                    type="text"
+                    value={firstTermPrice}
+                    onChange={(e) => setFirstTermPrice(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 2 Rate (Rwf)</label>
+                  <input
+                    type="text"
+                    value={secondTermPrice}
+                    onChange={(e) => setSecondTermPrice(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 3 Rate (Rwf)</label>
+                  <input
+                    type="text"
+                    value={thirdTermPrice}
+                    onChange={(e) => setThirdTermPrice(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                  />
                 </div>
               </div>
 
-              {/* Term Prices & Currency */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="font-bold text-slate-900 uppercase tracking-wider text-xs">
-                  Term Pricing Configuration
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-700">Currency</label>
-                    <input
-                      type="text"
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value)}
-                      placeholder="Rwf"
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg font-bold text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-700">Period</label>
-                    <input
-                      type="text"
-                      value={period}
-                      onChange={(e) => setPeriod(e.target.value)}
-                      placeholder="/ Term"
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg text-slate-900"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-700">First Term</label>
-                    <input
-                      type="text"
-                      value={firstTermPrice}
-                      onChange={(e) => setFirstTermPrice(e.target.value)}
-                      placeholder="92000.0"
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg font-bold text-slate-900"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-700">Second Term</label>
-                    <input
-                      type="text"
-                      value={secondTermPrice}
-                      onChange={(e) => setSecondTermPrice(e.target.value)}
-                      placeholder="92000.0"
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg font-bold text-slate-900"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold block mb-1 text-slate-700">Third Term</label>
-                    <input
-                      type="text"
-                      value={thirdTermPrice}
-                      onChange={(e) => setThirdTermPrice(e.target.value)}
-                      placeholder="92000.0"
-                      className="w-full bg-white border border-slate-300 p-2 rounded-lg font-bold text-slate-900"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* What's Included */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              {/* Inclusions */}
+              <div className="space-y-2 pt-2 border-t border-slate-200">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-xs">
-                    What&apos;s Included ({includedList.length} items)
-                  </h4>
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Included Items ({includedList.length})
+                  </label>
                   <button
                     type="button"
                     onClick={handleAddIncluded}
-                    className="cursor-pointer text-blue-700 hover:text-blue-900 font-bold inline-flex items-center gap-1 text-xs"
+                    className="cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-blue-900 bg-blue-50 rounded-md border border-blue-200"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3 h-3" />
                     <span>Add Item</span>
                   </button>
                 </div>
-                <div className="space-y-2">
-                  {includedList.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item}
-                        onChange={(e) => {
-                          const next = [...includedList];
-                          next[idx] = e.target.value;
-                          setIncludedList(next);
-                        }}
-                        className="flex-1 bg-white border border-slate-300 p-2 rounded-lg text-slate-900"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveIncluded(idx)}
-                        className="cursor-pointer text-rose-500 hover:text-rose-700 p-1.5"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                {includedList.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const updated = [...includedList];
+                        updated[idx] = e.target.value;
+                        setIncludedList(updated);
+                      }}
+                      className="flex-1 px-2.5 py-1 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveIncluded(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
               </div>
 
-              {/* What's Not Included */}
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              {/* Exclusions */}
+              <div className="space-y-2 pt-2 border-t border-slate-200">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-900 uppercase tracking-wider text-xs">
-                    What&apos;s Not Included ({notIncludedList.length} items)
-                  </h4>
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Additional Requirements ({notIncludedList.length})
+                  </label>
                   <button
                     type="button"
                     onClick={handleAddNotIncluded}
-                    className="cursor-pointer text-blue-700 hover:text-blue-900 font-bold inline-flex items-center gap-1 text-xs"
+                    className="cursor-pointer inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-blue-900 bg-blue-50 rounded-md border border-blue-200"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3 h-3" />
                     <span>Add Item</span>
                   </button>
                 </div>
-                <div className="space-y-2">
-                  {notIncludedList.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item}
-                        onChange={(e) => {
-                          const next = [...notIncludedList];
-                          next[idx] = e.target.value;
-                          setNotIncludedList(next);
-                        }}
-                        className="flex-1 bg-white border border-slate-300 p-2 rounded-lg text-slate-900"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveNotIncluded(idx)}
-                        className="cursor-pointer text-rose-500 hover:text-rose-700 p-1.5"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                {notIncludedList.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const updated = [...notIncludedList];
+                        updated[idx] = e.target.value;
+                        setNotIncludedList(updated);
+                      }}
+                      className="flex-1 px-2.5 py-1 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveNotIncluded(idx)}
+                      className="text-slate-400 hover:text-rose-600 p-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              {/* Submit Buttons */}
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="cursor-pointer px-4 py-2 font-semibold text-slate-600 hover:text-slate-900"
+                  className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-md cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="cursor-pointer px-5 py-2.5 bg-blue-700 hover:bg-blue-800 active:scale-95 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-md transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Save to Database</span>
+                  <span>Save Fees</span>
                 </button>
               </div>
             </form>

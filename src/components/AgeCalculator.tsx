@@ -177,11 +177,11 @@ export const AgeCalculator: React.FC<AgeCalculatorProps> = ({ onSelectGradeForAp
         </div>
 
         {/* Output & Recommendation Card */}
-        <div className="bg-gradient-to-br from-blue-50/70 via-white to-amber-50/40 rounded-xl p-6 border border-blue-100/80 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              Enrollment Placement
+        <div className="bg-slate-50 rounded-xl p-6 border border-slate-200 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-blue-700" />
+              Enrollment Placement Guidance
             </span>
             <span className="text-xs text-slate-500 font-mono">
               Academic Year 2026/2027
@@ -205,7 +205,7 @@ export const AgeCalculator: React.FC<AgeCalculatorProps> = ({ onSelectGradeForAp
               </div>
 
               {/* Key Milestones */}
-              <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
+              <div className="space-y-1.5 pt-2 border-t border-slate-200">
                 <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                   Key Curriculum Focus:
                 </span>
@@ -213,7 +213,7 @@ export const AgeCalculator: React.FC<AgeCalculatorProps> = ({ onSelectGradeForAp
                   {recommendation.grade.keySubjects.map((subj) => (
                     <span
                       key={subj}
-                      className="text-xs bg-white text-slate-700 px-2.5 py-1 rounded-md border border-slate-200/80 shadow-2xs"
+                      className="text-xs bg-white text-slate-700 px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs font-medium"
                     >
                       {subj}
                     </span>
@@ -232,7 +232,7 @@ export const AgeCalculator: React.FC<AgeCalculatorProps> = ({ onSelectGradeForAp
                 <button
                   type="button"
                   onClick={() => onSelectGradeForApplication(recommendation.grade!.code)}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-sm rounded-lg shadow-sm transition-all"
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold text-sm rounded-lg shadow-sm transition-all"
                 >
                   <span>Apply for {recommendation.grade.name}</span>
                   <ArrowRight className="w-4 h-4" />

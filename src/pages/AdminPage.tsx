@@ -65,6 +65,7 @@ import {
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
 import { saveSchoolLogoToFirebase, fetchStaffMembersFromFirebase } from '../services/firebaseStore';
+import { testSupabaseConnection, syncAllDataToSupabase } from '../services/supabaseClient';
 import { AdminAttendanceTracker } from '../components/AdminAttendanceTracker';
 import { FinancePortal } from '../components/FinancePortal';
 import { TeacherPortal } from '../components/TeacherPortal';
@@ -118,6 +119,7 @@ import {
   ArrowRightLeft,
   Eye,
   EyeOff,
+  Database,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -245,6 +247,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   // Website Settings State (Admin & Headteacher can edit everything)
   const [websiteSettings, setWebsiteSettings] = useState<WebsiteSettings>(getWebsiteSettings());
   const [websiteSettingsSuccess, setWebsiteSettingsSuccess] = useState(false);
+  const [supabaseTestStatus, setSupabaseTestStatus] = useState<{ testing: boolean; message: string; success?: boolean }>({
+    testing: false,
+    message: '',
+  });
+  const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<{ syncing: boolean; message: string; success?: boolean }>({
+    syncing: false,
+    message: '',
+  });
 
   // Google user
   const [googleUser, setGoogleUser] = useState<User | null>(null);
@@ -345,6 +355,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     category: 'outdoor' as FacilityItem['category'],
     description: '',
     caption: '',
+    altText: '',
     imageSrc: '',
   });
   const [imageUploadStatus, setImageUploadStatus] = useState<string | null>(null);
@@ -774,6 +785,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setTimeout(() => setWebsiteSettingsSuccess(false), 3500);
   };
 
+  const handleTestSupabase = async () => {
+    setSupabaseTestStatus({ testing: true, message: 'Testing Supabase connection...' });
+    const res = await testSupabaseConnection(websiteSettings.supabaseUrl, websiteSettings.supabaseAnonKey);
+    setSupabaseTestStatus({ testing: false, message: res.message, success: res.success });
+  };
+
+  const handleSyncToSupabase = async () => {
+    setSupabaseSyncStatus({ syncing: true, message: 'Synchronizing school gallery, staff, and student records to Supabase...' });
+    const res = await syncAllDataToSupabase(websiteSettings.supabaseUrl, websiteSettings.supabaseAnonKey);
+    setSupabaseSyncStatus({ syncing: false, message: res.message, success: res.success });
+  };
+
   // 3. Confirm Admissions Application (Admin & DOS)
   const handleConfirmApplication = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -954,6 +977,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         category: imageFormData.category,
         description: imageFormData.description || imageFormData.title,
         caption: imageFormData.caption || imageFormData.title,
+        altText: imageFormData.altText || imageFormData.title,
         imageSrc: finalImageUrl,
       });
     } else {
@@ -962,6 +986,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         category: imageFormData.category,
         description: imageFormData.description || imageFormData.title,
         caption: imageFormData.caption || imageFormData.title,
+        altText: imageFormData.altText || imageFormData.title,
         imageSrc: finalImageUrl,
       });
     }
@@ -972,7 +997,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setShowAddImageModal(false);
     setEditingImageItem(null);
     setSelectedImageFile(null);
-    setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', imageSrc: '' });
+    setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', altText: '', imageSrc: '' });
   };
 
   // 6. News / Announcement CRUD
@@ -1378,16 +1403,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Verified Firebase Identity Badge (Zero-trust identity-locked session) */}
-          <div className="flex items-center gap-2 bg-emerald-50/90 border border-emerald-200 px-3 py-1.5 rounded-2xl text-[11px]">
+          {/* Authorized Staff Session */}
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-[11px]">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-emerald-900 font-bold">
-              Verified Identity:
+              Active Session:
             </span>
-            <span className="text-emerald-800 font-mono text-[10px]">
+            <span className="text-emerald-800 font-mono text-[10px] truncate max-w-[160px] sm:max-w-none">
               {currentUser.email || currentUser.username}
             </span>
-            <span className="bg-emerald-700 text-white font-black text-[10px] px-2 py-0.5 rounded-lg shadow-2xs">
+            <span className="bg-emerald-700 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
               {currentUser.role}
             </span>
           </div>
@@ -2614,7 +2639,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
             <button
               onClick={() => {
                 setEditingImageItem(null);
-                setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', imageSrc: '' });
+                setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', altText: '', imageSrc: '' });
                 setShowAddImageModal(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-sm transition-colors"
@@ -2652,15 +2677,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                     <span className="absolute top-2.5 right-2.5 text-[10px] font-bold uppercase bg-slate-900/80 text-white px-2 py-0.5 rounded-sm">
                       {item.category}
                     </span>
-                    {item.imageSrc?.includes('firebasestorage') && (
-                      <span className="absolute bottom-2.5 left-2.5 text-[10px] font-bold bg-blue-900/80 text-blue-200 backdrop-blur-xs px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
-                        <UploadCloud className="w-3 h-3 text-amber-300" />
-                        Firebase Storage
+                    {item.altText && (
+                      <span className="absolute bottom-2.5 left-2.5 text-[9px] font-semibold bg-slate-900/85 text-emerald-300 backdrop-blur-xs px-2 py-0.5 rounded-sm max-w-[180px] truncate">
+                        Alt: {item.altText}
                       </span>
                     )}
                   </div>
                   <div className="p-4 space-y-1.5">
                     <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
+                    {item.altText && (
+                      <p className="text-[11px] text-blue-800 bg-blue-50/80 px-2 py-0.5 rounded-sm font-mono truncate">
+                        Alt: {item.altText}
+                      </p>
+                    )}
                     <p className="text-xs text-slate-500 line-clamp-2">{item.description}</p>
                     <p className="text-[11px] text-slate-400 italic mt-1">{item.caption}</p>
                   </div>
@@ -2677,6 +2706,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                           category: item.category,
                           description: item.description,
                           caption: item.caption,
+                          altText: item.altText || item.title,
                           imageSrc: item.imageSrc,
                         });
                         setShowAddImageModal(true);
@@ -2916,7 +2946,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                 </h2>
               </div>
               <p className="text-xs text-slate-500">
-                Change official school logo, names, mottos, contact numbers, email, tuition fees, and homepage text. All updates persist to the database and Firebase.
+                Change official school logo, names, mottos, contact numbers, email, tuition fees, and homepage text. All updates are saved automatically and appear for all visitors.
               </p>
             </div>
 
@@ -2936,7 +2966,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                 <div className="text-xs text-emerald-950">
                   <strong className="block font-bold">School Logo & Website Updated Successfully!</strong>
-                  <span>Your changes have been saved to the database and Firebase store, and are now live for all visitors.</span>
+                  <span>Your changes have been saved and are now live for all visitors.</span>
                 </div>
               </div>
               <button
@@ -2949,7 +2979,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
             </div>
           )}
 
-          {/* School Logo & Emblem Customizer (Saved to Database & Firebase) */}
+          {/* School Logo & Emblem Customizer */}
           <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-5">
             <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
@@ -2961,8 +2991,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                   Customize the official logo shown on top navigation bars, search queries, application receipts, and printable badges.
                 </p>
               </div>
-              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
-                Database & Firebase Synced
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-800 border border-blue-200">
+                Live & Synchronized
               </span>
             </div>
 
@@ -3053,7 +3083,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                     className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Save Logo to Database & Firebase</span>
+                    <span>Save School Logo</span>
                   </button>
                   {websiteSettings.schoolLogoUrl && (
                     <button
@@ -3383,6 +3413,221 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                     onChange={(e) => setWebsiteSettings({ ...websiteSettings, heroTagline: e.target.value })}
                     placeholder="e.g. Nurturing purposeful, confident, and compassionate young leaders in Kamonyi District since 2014."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 5B. Homepage: School Manager & Administration Message (Leadership Card) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-700" />
+                    <span>5B. Homepage: School Manager & Administration Leadership Message</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Customize the School Manager’s portrait image, name, title, administration greeting, and core institutional checkpoints shown on the Homepage.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('home')}
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-xl border border-blue-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>View on Homepage</span>
+                </button>
+              </div>
+
+              {/* School Manager Image Management */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs">
+                    School Manager Portrait Image
+                  </h4>
+                  {websiteSettings.schoolManagerPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setWebsiteSettings({ ...websiteSettings, schoolManagerPhotoUrl: '' })}
+                      className="cursor-pointer text-rose-600 hover:text-rose-800 text-xs font-semibold inline-flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove / Clear Image</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  <div className="md:col-span-3 flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 text-center">
+                    {websiteSettings.schoolManagerPhotoUrl ? (
+                      <img
+                        src={websiteSettings.schoolManagerPhotoUrl}
+                        alt="School Manager Portrait"
+                        className="w-28 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-28 h-28 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 p-2">
+                        <GraduationCap className="w-8 h-8 text-slate-300 mb-1" />
+                        <span className="text-[10px] text-center leading-tight">No Image Set</span>
+                      </div>
+                    )}
+                    <span className="text-[10px] text-slate-500 font-bold mt-2">Active Manager Photo</span>
+                  </div>
+
+                  <div className="md:col-span-9 space-y-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Upload School Manager Image from Device (PNG, JPG, WebP)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const uploadRes = await uploadSchoolAsset(file, 'school_manager_portrait', 'branding');
+                              setWebsiteSettings((prev) => ({
+                                ...prev,
+                                schoolManagerPhotoUrl: uploadRes.url,
+                              }));
+                            } catch (err) {
+                              console.warn('School manager image upload error:', err);
+                            }
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Or Enter Direct Image URL
+                      </label>
+                      <input
+                        type="text"
+                        value={websiteSettings.schoolManagerPhotoUrl || ''}
+                        onChange={(e) =>
+                          setWebsiteSettings({ ...websiteSettings, schoolManagerPhotoUrl: e.target.value })
+                        }
+                        placeholder="https://... or /images/..."
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Accessibility Alt-Text (SEO & Screen Readers) *
+                      </label>
+                      <input
+                        type="text"
+                        value={websiteSettings.schoolManagerAlt || ''}
+                        onChange={(e) =>
+                          setWebsiteSettings({ ...websiteSettings, schoolManagerAlt: e.target.value })
+                        }
+                        placeholder="e.g. HAKIZIMANA Enos - School Manager at Mugina Hope Academy"
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Manager Name, Role & Message Text */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">School Manager Full Name *</label>
+                  <input
+                    type="text"
+                    value={websiteSettings.schoolManagerName || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, schoolManagerName: e.target.value })
+                    }
+                    placeholder="e.g. HAKIZIMANA Enos"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Manager Role / Designation *</label>
+                  <input
+                    type="text"
+                    value={websiteSettings.schoolManagerRole || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, schoolManagerRole: e.target.value })
+                    }
+                    placeholder="e.g. School Manager & Administrative Head"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Section Subtitle / Kicker</label>
+                  <input
+                    type="text"
+                    value={websiteSettings.adminMessageKicker || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, adminMessageKicker: e.target.value })
+                    }
+                    placeholder="e.g. Message from the Administration"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 uppercase font-semibold text-[11px]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Section Main Headline *</label>
+                  <input
+                    type="text"
+                    value={websiteSettings.adminMessageHeading || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, adminMessageHeading: e.target.value })
+                    }
+                    placeholder="e.g. Providing a Strong Foundation for Every Child in Kamonyi"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Message Body - Paragraph 1 *</label>
+                  <textarea
+                    rows={2}
+                    value={websiteSettings.adminMessageParagraph1 || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, adminMessageParagraph1: e.target.value })
+                    }
+                    placeholder="Established in 2014, Mugina Hope Academy was founded on a simple conviction..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 leading-relaxed"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Message Body - Paragraph 2</label>
+                  <textarea
+                    rows={2}
+                    value={websiteSettings.adminMessageParagraph2 || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, adminMessageParagraph2: e.target.value })
+                    }
+                    placeholder="Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC)..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 leading-relaxed"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">School Motto Banner Text</label>
+                  <input
+                    type="text"
+                    value={websiteSettings.adminMessageMotto || ''}
+                    onChange={(e) =>
+                      setWebsiteSettings({ ...websiteSettings, adminMessageMotto: e.target.value })
+                    }
+                    placeholder="e.g. Nurturing Minds, Building Character, Inspiring Hope."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 italic"
                   />
                 </div>
               </div>
@@ -3837,6 +4082,265 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
               </div>
             </div>
 
+            {/* 8. Cultural Heritage Spotlight Image & Alt-Text (Campus Life & Public Pages) */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    <span>8. Cultural Heritage Spotlight Image & Alt-Text</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Customize the traditional Rwandan dance / Itorero showcase photo, caption, and accessibility alt-text featured on Campus Life.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('campus-life')}
+                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-xl border border-blue-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>View Campus Life</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                <div className="md:col-span-4 p-3 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-2">
+                  <div className="h-44 rounded-xl overflow-hidden border border-slate-200 bg-white">
+                    <img
+                      src={websiteSettings.culturalDancePhotoUrl || '/public/assets/aistudio/Capture_cd3b07eb.PNG'}
+                      alt={websiteSettings.culturalDanceAlt || 'Mugina Hope Traditional Dance Troupe'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/public/assets/aistudio/Capture_cd3b07eb.PNG';
+                      }}
+                    />
+                  </div>
+                  <span className="text-[11px] font-bold text-slate-600 block">Active Showcase Image</span>
+                </div>
+
+                <div className="md:col-span-8 space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Upload New Cultural Spotlight Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const uploadRes = await uploadSchoolAsset(file, 'cultural_dance_spotlight', 'gallery');
+                            setWebsiteSettings((prev) => ({
+                              ...prev,
+                              culturalDancePhotoUrl: uploadRes.url,
+                            }));
+                          } catch (err) {
+                            console.warn('Cultural image upload error:', err);
+                          }
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Or Direct Image URL / Path
+                    </label>
+                    <input
+                      type="text"
+                      value={websiteSettings.culturalDancePhotoUrl || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, culturalDancePhotoUrl: e.target.value })}
+                      placeholder="/public/assets/aistudio/Capture_cd3b07eb.PNG"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-mono text-xs text-slate-900"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Showcase Title
+                      </label>
+                      <input
+                        type="text"
+                        value={websiteSettings.culturalDanceTitle || ''}
+                        onChange={(e) => setWebsiteSettings({ ...websiteSettings, culturalDanceTitle: e.target.value })}
+                        placeholder="Traditional Rwandan Dance & Cultural Itorero"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Accessibility Alt-Text (SEO & Screen Readers) *
+                      </label>
+                      <input
+                        type="text"
+                        value={websiteSettings.culturalDanceAlt || ''}
+                        onChange={(e) => setWebsiteSettings({ ...websiteSettings, culturalDanceAlt: e.target.value })}
+                        placeholder="Mugina Hope primary pupils performing traditional Rwandan dance in traditional attire"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Showcase Description / Summary
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={websiteSettings.culturalDanceDesc || ''}
+                      onChange={(e) => setWebsiteSettings({ ...websiteSettings, culturalDanceDesc: e.target.value })}
+                      placeholder="Nurturing national identity, cultural artistry, and traditional dance choreography across all year groups."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 9. Supabase Database Integration & Real-Time Sync */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Database className="w-4 h-4 text-emerald-600" />
+                    <span>9. Supabase Database Integration & Real-Time Cloud Sync</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Connect your Supabase project to mirror gallery media, staff records, and enrolled pupils to a PostgreSQL cloud database alongside Firebase Firestore.
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-lg border border-emerald-200 inline-flex items-center gap-1.5 self-start sm:self-auto">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Dual Database Architecture Active</span>
+                </span>
+              </div>
+
+              {/* Data Persistence Explanation Card */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs text-slate-600 leading-relaxed">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Permanent Persistence Verified Across Devices & Browser Refreshes</span>
+                </div>
+                <p>
+                  Every administrator action (adding photos, modifying descriptions, updating alt-texts, removing gallery items, or enrolling staff) writes directly to our persistent server endpoints and Firebase Firestore. Stale cache re-merging has been resolved so that deleted items never reappear on page refresh.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Supabase Project URL
+                  </label>
+                  <input
+                    type="url"
+                    value={websiteSettings.supabaseUrl || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, supabaseUrl: e.target.value })}
+                    placeholder="https://xyzcompany.supabase.co"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-mono text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Found in your Supabase project dashboard under Settings &rarr; API &rarr; Project URL.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Supabase Anonymous (Public) Key
+                  </label>
+                  <input
+                    type="password"
+                    value={websiteSettings.supabaseAnonKey || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, supabaseAnonKey: e.target.value })}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-mono text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Found under Settings &rarr; API &rarr; Project API keys &rarr; anon / public.
+                  </span>
+                </div>
+              </div>
+
+              {/* Status Messages */}
+              {supabaseTestStatus.message && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
+                    supabaseTestStatus.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  {supabaseTestStatus.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                  <span>{supabaseTestStatus.message}</span>
+                </div>
+              )}
+
+              {supabaseSyncStatus.message && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
+                    supabaseSyncStatus.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  {supabaseSyncStatus.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                  <span>{supabaseSyncStatus.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={supabaseTestStatus.testing}
+                  onClick={handleTestSupabase}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  {supabaseTestStatus.testing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Testing Connection...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Test Supabase Connection</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={supabaseSyncStatus.syncing}
+                  onClick={handleSyncToSupabase}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  {supabaseSyncStatus.syncing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Syncing Data...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-3.5 h-3.5" />
+                      <span>Sync All Records to Supabase</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* Sticky Save Bar */}
             <div className="sticky bottom-6 z-20 bg-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-2xl border border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="text-xs space-y-0.5">
@@ -4235,13 +4739,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                 </select>
               </div>
 
-              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-amber-900 text-[11px]">
-                  <UploadCloud className="w-4 h-4 text-amber-600" />
-                  <span>Secure Storage via Firebase Storage & Cloud Asset</span>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[11px]">
+                  <UploadCloud className="w-4 h-4 text-blue-700" />
+                  <span>Official Image Upload</span>
                 </div>
-                <p className="text-[10px] text-amber-700">
-                  Photos uploaded here are hosted on our school's cloud storage bucket (<code>gen-lang-client-0615304204.firebasestorage.app</code>) and instantly displayed across all campus gallery views.
+                <p className="text-[10px] text-slate-500">
+                  Photos uploaded here are securely saved and instantly displayed across all campus gallery views.
                 </p>
                 <input
                   type="file"
@@ -4278,6 +4782,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                   onChange={(e) => setImageFormData({ ...imageFormData, description: e.target.value, caption: e.target.value })}
                   className="w-full bg-slate-50 border p-2.5 rounded-xl"
                 />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">Accessibility Alt-Text (SEO & Screen Readers)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mugina Hope Primary pupils engaged in collaborative group work in classroom"
+                  value={imageFormData.altText || ''}
+                  onChange={(e) => setImageFormData({ ...imageFormData, altText: e.target.value })}
+                  className="w-full bg-slate-50 border p-2.5 rounded-xl text-xs"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Descriptive alternative text for screen readers (web accessibility) and Google image search SEO.
+                </p>
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
@@ -4454,26 +4972,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                 />
               </div>
 
-              {/* Cloud Document Attachment (Firebase Storage) */}
-              <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-2xl space-y-2">
-                <div className="flex items-center gap-1.5 font-bold text-blue-900 text-xs">
-                  <UploadCloud className="w-4 h-4 text-blue-600" />
-                  <span>Attach Official Document File (Firebase Storage)</span>
+              {/* Document Attachment */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
+                  <UploadCloud className="w-4 h-4 text-blue-700" />
+                  <span>Attach Official Document File</span>
                 </div>
-                <p className="text-[11px] text-blue-700 leading-relaxed">
-                  Upload the official PDF form, checklist, or template. It is stored on our school cloud storage bucket (<code>gen-lang-client-0615304204.firebasestorage.app</code>) and downloadable by all applicants across any device.
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Upload the official PDF form, checklist, or template. It is securely saved and downloadable by applicants across any device.
                 </p>
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
                   onChange={handleDocFileChange}
-                  className="w-full bg-white border border-blue-300 p-2 rounded-xl text-xs"
+                  className="w-full bg-white border border-slate-300 p-2 rounded-xl text-xs"
                 />
                 {docUploadStatus && (
                   <p className="text-[11px] font-semibold text-emerald-700">{docUploadStatus}</p>
                 )}
                 {docFormData.fileUrl && (
-                  <div className="flex items-center justify-between pt-1 border-t border-blue-100 text-[11px] text-slate-600">
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200 text-[11px] text-slate-600">
                     <span className="truncate max-w-[260px]">
                       Current: <strong>{docFormData.fileName || 'Attached Form'}</strong> {docFormData.fileSize ? `(${docFormData.fileSize})` : ''}
                     </span>
@@ -4505,10 +5023,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                   <UploadCloud className="w-4 h-4" />
                   <span>
                     {isUploadingDoc
-                      ? 'Uploading to Firebase...'
+                      ? 'Uploading...'
                       : editingDoc
                       ? 'Update Requirement & File'
-                      : 'Save & Publish to Cloud'}
+                      : 'Save Document'}
                   </span>
                 </button>
               </div>

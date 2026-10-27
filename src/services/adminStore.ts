@@ -24,6 +24,9 @@ import {
   saveAttendanceBatchToFirebase,
   saveDisciplineRecordToFirebase,
   saveInquiryToFirebase,
+  saveUserAttributesToFirebase,
+  fetchUserAttributesFromFirebase,
+  fetchUserByEmailFromFirebase,
 } from './firebaseStore';
 
 export type UserRole = 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD' | 'Student';
@@ -254,6 +257,7 @@ export interface WebsiteSettings {
     id: string;
     imageUrl: string;
     title?: string;
+    altText?: string;
   }>;
   heroIntervalSeconds?: number;
   nurseryTuition?: string;
@@ -262,6 +266,27 @@ export interface WebsiteSettings {
   transportFee?: string;
   googleSearchConsoleVerification?: string;
   schoolLogoUrl?: string;
+  // School Manager & Administration Leadership Message (Homepage)
+  schoolManagerPhotoUrl?: string;
+  schoolManagerName?: string;
+  schoolManagerRole?: string;
+  schoolManagerAlt?: string;
+  adminMessageKicker?: string;
+  adminMessageHeading?: string;
+  adminMessageParagraph1?: string;
+  adminMessageParagraph2?: string;
+  adminMessageMotto?: string;
+  adminCommitments?: string[];
+
+  // Cultural Dance & Itorero Image (Campus Life & Homepage)
+  culturalDancePhotoUrl?: string;
+  culturalDanceAlt?: string;
+  culturalDanceTitle?: string;
+  culturalDanceDesc?: string;
+
+  // Supabase Database Connection Settings
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
 
   // About Page: Principal Message Section (Screenshot 1)
   aboutPrincipalPhotoUrl?: string;
@@ -351,7 +376,32 @@ export const defaultWebsiteSettings: WebsiteSettings = {
   nurseryTuition: '45,000 RWF / Term',
   primaryTuition: '60,000 RWF / Term',
   lunchFee: '25,000 RWF / Term (Hot balanced lunch & porridge)',
-  transportFee: '30,000 RWF / Term (Kamonyi van pickup & drop-off)',
+  // School Manager & Administration Leadership Message defaults (Homepage)
+  schoolManagerPhotoUrl: '',
+  schoolManagerName: 'HAKIZIMANA Enos',
+  schoolManagerRole: 'School Manager & Administrative Head',
+  schoolManagerAlt: 'HAKIZIMANA Enos - School Manager & Administrative Head at Mugina Hope Academy',
+  adminMessageKicker: 'Message from the Administration',
+  adminMessageHeading: 'Providing a Strong Foundation for Every Child in Kamonyi',
+  adminMessageParagraph1: 'Established in 2014, Mugina Hope Academy was founded on a simple, enduring conviction: that every child in Rwanda deserves access to high-quality education rooted in discipline, moral integrity, and modern competence.',
+  adminMessageParagraph2: 'Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC), our dual nursery and primary curriculum prepares learners not only for national examination excellence (PLE) but also for responsible citizenship, creative problem-solving, and fluent trilingual communication.',
+  adminMessageMotto: 'Nurturing Minds, Building Character, Inspiring Hope.',
+  adminCommitments: [
+    'Competency-Based Curriculum: Aligned with Rwanda REB standards.',
+    '24/7 Campus Security: Direct boundary with Mugina Police Station.',
+    '18:1 Low Pupil Ratio: Individualized attention for every learner.',
+    'STEM & Computer Lab: Practical hands-on ICT education.',
+  ],
+
+  // Cultural Dance & Itorero defaults
+  culturalDancePhotoUrl: '/images/campus_life_traditional_dance_1791823290926.jpg',
+  culturalDanceAlt: 'Mugina Hope Academy children performing traditional Rwandan cultural dance',
+  culturalDanceTitle: "Itorero ry'Abato: Traditional Dance & Drumming",
+  culturalDanceDesc: "Every pupil at Mugina Hope Academy is immersed in Rwanda’s rich cultural tradition. Through traditional Intore warrior dance, graceful Umushayayo, and rhythmic drumming, children develop poise, national pride, and teamwork.",
+
+  // Supabase defaults
+  supabaseUrl: '',
+  supabaseAnonKey: '',
 
   // Default About Page content matching Mugina Hope Academy's official leadership and mission
   aboutPrincipalPhotoUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
@@ -1283,9 +1333,9 @@ export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | nul
 export const getGalleryItems = (): FacilityItem[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.GALLERY);
-    if (raw) {
+    if (raw !== null) {
       const parsed: FacilityItem[] = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed.map((item) => {
           if (item?.imageSrc && typeof item.imageSrc === 'string' && item.imageSrc.startsWith('/src/assets/images/')) {
             const filename = item.imageSrc.replace('/src/assets/images/', '');
@@ -1314,15 +1364,8 @@ export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.items) && data.items.length > 0) {
-        const local = getGalleryItems();
-        const combined = [...data.items];
-        local.forEach((l) => {
-          if (!combined.some((c) => c.id === l.id)) {
-            combined.push(l);
-          }
-        });
-        saveGalleryItems(combined);
-        return combined;
+        saveGalleryItems(data.items);
+        return data.items;
       }
     }
   } catch (err) {
@@ -1633,7 +1676,7 @@ export const getAnnouncements = (): SchoolAnnouncement[] => {
       title: 'Term Enrollment Open for 2026/2027',
       content: 'Registration is actively ongoing for Nursery (Baby, Middle, Pre-Primary) and Primary (P1–P6). Online applicants will receive immediate DOS confirmation and feedback.',
       badge: 'Admissions Open',
-      isActive: true,
+      isActive: false,
       publishedAt: '2026-10-12',
     },
   ];
@@ -1691,30 +1734,76 @@ export interface CurrentSessionUser {
   assignedSubjectOrGrade?: string;
 }
 
+let inMemorySessionUser: CurrentSessionUser | null = null;
+let inMemoryAdminNotificationEmail = 'norbertihimbazwemanzi@gmail.com';
+
 export const getCurrentSessionUser = (): CurrentSessionUser | null => {
+  return inMemorySessionUser;
+};
+
+export const setCurrentSessionUser = (user: CurrentSessionUser | null) => {
+  inMemorySessionUser = user;
+  if (user) {
+    // Persist all user attributes to Firestore users collection
+    saveUserAttributesToFirebase({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      username: user.username,
+      assignedSubjectOrGrade: user.assignedSubjectOrGrade || '',
+      status: 'Active',
+      lastLogin: new Date().toISOString(),
+    }).catch((err) => console.warn('[Admin Store] Firestore user attributes save notice:', err));
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('mugina-session-updated', { detail: user }));
+  }
+};
+
+export const syncCurrentSessionUserFromFirestore = async (
+  userIdOrEmail: string
+): Promise<CurrentSessionUser | null> => {
+  if (!userIdOrEmail) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error(e);
+    let userAttr = await fetchUserAttributesFromFirebase(userIdOrEmail);
+    if (!userAttr && userIdOrEmail.includes('@')) {
+      userAttr = await fetchUserByEmailFromFirebase(userIdOrEmail);
+    }
+    if (userAttr) {
+      const session: CurrentSessionUser = {
+        id: userAttr.id,
+        name: userAttr.name,
+        role: userAttr.role as UserRole,
+        username: userAttr.username || userAttr.email,
+        email: userAttr.email,
+        assignedSubjectOrGrade: userAttr.assignedSubjectOrGrade,
+      };
+      inMemorySessionUser = session;
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('mugina-session-updated', { detail: session }));
+      }
+      return session;
+    }
+  } catch (err) {
+    console.warn('[Admin Store] Error syncing user attributes from Firestore:', err);
   }
   return null;
 };
 
-export const setCurrentSessionUser = (user: CurrentSessionUser | null) => {
-  if (user) {
-    localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(user));
-  } else {
-    localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
-  }
-};
-
 export const getAdminNotificationEmail = (): string => {
-  return localStorage.getItem(STORAGE_KEYS.ADMIN_EMAIL) || 'norbertihimbazwemanzi@gmail.com';
+  return inMemoryAdminNotificationEmail;
 };
 
 export const setAdminNotificationEmail = (email: string) => {
-  localStorage.setItem(STORAGE_KEYS.ADMIN_EMAIL, email);
+  inMemoryAdminNotificationEmail = email;
+  saveUserAttributesToFirebase({
+    id: 'admin_notification_config',
+    email: email,
+    name: 'Admin Notification Destination',
+    role: 'Admin',
+    username: 'admin_config',
+  }).catch((err) => console.warn('[Admin Store] Save admin notification email notice:', err));
 };
 
 export const isAdminAuthenticated = (): boolean => {
