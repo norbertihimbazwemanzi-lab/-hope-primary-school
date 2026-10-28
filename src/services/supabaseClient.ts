@@ -8,20 +8,38 @@ export interface SupabaseConfig {
   anonKey: string;
 }
 
+export const DEFAULT_SUPABASE_URL = 'https://egwzhnzpsgwkhvhesode.supabase.co';
+export const DEFAULT_SUPABASE_KEY = 'sb_publishable_982vUUyz9dc8qOU1eCWhAg_TkWcGJj_';
+
 /**
- * Retrieve current Supabase configuration from environment variables or stored settings
+ * Retrieve current Supabase configuration from environment variables, stored settings, or defaults
  */
 export const getSupabaseConfig = (): SupabaseConfig => {
-  const envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  const envUrl = (
+    import.meta.env.VITE_SUPABASE_URL ||
+    (import.meta.env as any).NEXT_PUBLIC_SUPABASE_URL ||
+    ''
+  ).trim();
+  const envKey = (
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    (import.meta.env as any).NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    (import.meta.env as any).NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    ''
+  ).trim();
 
-  const settings = getWebsiteSettings();
-  const storedUrl = (settings.supabaseUrl || '').trim();
-  const storedKey = (settings.supabaseAnonKey || '').trim();
+  let storedUrl = '';
+  let storedKey = '';
+  try {
+    const settings = getWebsiteSettings();
+    storedUrl = (settings.supabaseUrl || '').trim();
+    storedKey = (settings.supabaseAnonKey || '').trim();
+  } catch (err) {
+    // fallback
+  }
 
   return {
-    url: storedUrl || envUrl,
-    anonKey: storedKey || envKey,
+    url: storedUrl || envUrl || DEFAULT_SUPABASE_URL,
+    anonKey: storedKey || envKey || DEFAULT_SUPABASE_KEY,
   };
 };
 
@@ -218,6 +236,18 @@ export const syncAllDataToSupabase = async (
       }
     }
 
+    // 4. Sync Website Settings
+    try {
+      const currentSettings = getWebsiteSettings();
+      await client.from('website_settings').upsert({
+        id: 'general',
+        data: currentSettings,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+    } catch (sErr) {
+      console.warn('[Supabase] Website settings sync notice:', sErr);
+    }
+
     return {
       success: true,
       message: `Supabase database synchronized successfully! (${galleryCount} gallery images, ${staffCount} staff, ${studentsCount} students).`,
@@ -229,5 +259,139 @@ export const syncAllDataToSupabase = async (
       message: `Error syncing data to Supabase: ${err.message || 'Unknown error'}`,
       syncedCount: { gallery: galleryCount, staff: staffCount, students: studentsCount },
     };
+  }
+};
+
+/**
+ * Save Website Settings to Supabase
+ */
+export const saveWebsiteSettingsToSupabase = async (settings: any): Promise<boolean> => {
+  const client = getSupabaseClient();
+  if (!client) return false;
+  try {
+    const { error } = await client.from('website_settings').upsert(
+      {
+        id: 'general',
+        data: settings,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+    if (!error) {
+      console.log('[Supabase Store] Website settings saved to Supabase');
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Supabase Store] Website settings write notice:', err);
+  }
+  return false;
+};
+
+/**
+ * Fetch Website Settings from Supabase
+ */
+export const fetchWebsiteSettingsFromSupabase = async (): Promise<any | null> => {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client
+      .from('website_settings')
+      .select('data')
+      .eq('id', 'general')
+      .maybeSingle();
+
+    if (!error && data && data.data) {
+      return data.data;
+    }
+  } catch (err) {
+    console.warn('[Supabase Store] Fetch website settings notice:', err);
+  }
+  return null;
+};
+
+/**
+ * Fetch School Gallery from Supabase
+ */
+export const fetchSchoolGalleryFromSupabase = async (): Promise<any[] | null> => {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client
+      .from('school_gallery')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data.map((item) => ({
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        description: item.description,
+        imageSrc: item.image_src || item.imageSrc,
+        caption: item.caption || item.description,
+        altText: item.alt_text || item.altText || item.title,
+      }));
+    }
+  } catch (err) {
+    console.warn('[Supabase Store] Fetch gallery notice:', err);
+  }
+  return null;
+};
+
+/**
+ * Fetch Staff Members from Supabase
+ */
+export const fetchStaffMembersFromSupabase = async (): Promise<any[] | null> => {
+  const client = getSupabaseClient();
+  if (!client) return null;
+  try {
+    const { data, error } = await client
+      .from('staff_members')
+      .select('*');
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data.map((item) => ({
+        id: item.id,
+        name: item.name,
+        role: item.role,
+        email: item.email,
+        phone: item.phone,
+        username: item.username,
+        assignedSubjectOrGrade: item.assigned_subject_or_grade || '',
+        status: item.status || 'Active',
+      }));
+    }
+  } catch (err) {
+    console.warn('[Supabase Store] Fetch staff notice:', err);
+  }
+  return null;
+};
+
+/**
+ * Real-time listener for Website Settings via Supabase channel
+ */
+export const subscribeToSupabaseWebsiteSettings = (callback: (settings: any) => void): (() => void) => {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+  try {
+    const channel = client
+      .channel('public:website_settings')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'website_settings' },
+        (payload) => {
+          if (payload.new && (payload.new as any).data) {
+            callback((payload.new as any).data);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('[Supabase Store] Could not register Supabase settings channel:', err);
+    return () => {};
   }
 };

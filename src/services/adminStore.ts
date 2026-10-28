@@ -399,9 +399,9 @@ export const defaultWebsiteSettings: WebsiteSettings = {
   culturalDanceTitle: "Itorero ry'Abato: Traditional Dance & Drumming",
   culturalDanceDesc: "Every pupil at Mugina Hope Academy is immersed in Rwanda’s rich cultural tradition. Through traditional Intore warrior dance, graceful Umushayayo, and rhythmic drumming, children develop poise, national pride, and teamwork.",
 
-  // Supabase defaults
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  // Supabase defaults (Configured project credentials)
+  supabaseUrl: 'https://egwzhnzpsgwkhvhesode.supabase.co',
+  supabaseAnonKey: 'sb_publishable_982vUUyz9dc8qOU1eCWhAg_TkWcGJj_',
 
   // Default About Page content matching Mugina Hope Academy's official leadership and mission
   aboutPrincipalPhotoUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
@@ -1225,57 +1225,6 @@ export const getWebsiteSettings = (): WebsiteSettings => {
     const raw = localStorage.getItem(STORAGE_KEYS.WEBSITE_SETTINGS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (
-        parsed.aboutPrincipalName === 'HAKIZIMANA Enos' ||
-        (parsed.aboutPrincipalWelcome && parsed.aboutPrincipalWelcome.includes('Runda Technical')) ||
-        (parsed.aboutVisionText && parsed.aboutVisionText.includes('RUNDA TECHNICAL'))
-      ) {
-        delete parsed.aboutPrincipalName;
-        delete parsed.aboutPrincipalTitle;
-        delete parsed.aboutPrincipalWelcome;
-        delete parsed.aboutPrincipalMessage;
-        delete parsed.aboutPrincipalKicker;
-        delete parsed.aboutPrincipalPhotoUrl;
-        delete parsed.aboutPrincipalSignoff;
-        delete parsed.aboutVisionText;
-        delete parsed.aboutVisionTitle;
-        delete parsed.aboutMissionPoints;
-        delete parsed.aboutMissionTitle;
-        delete parsed.aboutValuesBannerUrl;
-        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
-      }
-      if (
-        !parsed.staffShowcase ||
-        !parsed.staffShowcase.some((s: any) => s.name === 'HAKIZIMANA Enos') ||
-        !parsed.staffShowcase.some((s: any) => s.name === 'NSENGIMANA Bonaventure')
-      ) {
-        parsed.staffShowcase = defaultWebsiteSettings.staffShowcase;
-        parsed.staffBadge = defaultWebsiteSettings.staffBadge;
-        parsed.staffSubtitle = defaultWebsiteSettings.staffSubtitle;
-        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
-      }
-      if (!parsed.feesBadge || !parsed.feesSubtitle) {
-        parsed.feesBadge = defaultWebsiteSettings.feesBadge;
-        parsed.feesSubtitle = defaultWebsiteSettings.feesSubtitle;
-        parsed.feesFirstTerm = parsed.feesFirstTerm || defaultWebsiteSettings.feesFirstTerm;
-        parsed.feesSecondTerm = parsed.feesSecondTerm || defaultWebsiteSettings.feesSecondTerm;
-        parsed.feesThirdTerm = parsed.feesThirdTerm || defaultWebsiteSettings.feesThirdTerm;
-        parsed.feesIncluded = parsed.feesIncluded || defaultWebsiteSettings.feesIncluded;
-        parsed.feesNotIncluded = parsed.feesNotIncluded || defaultWebsiteSettings.feesNotIncluded;
-        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
-      }
-      if (
-        !parsed.heroSlides ||
-        !Array.isArray(parsed.heroSlides) ||
-        parsed.heroSlides.length === 0 ||
-        !parsed.heroSlides.some((s: any) => s.imageUrl && s.imageUrl.includes('runda'))
-      ) {
-        parsed.heroSlides = defaultWebsiteSettings.heroSlides;
-        parsed.heroHeadline = defaultWebsiteSettings.heroHeadline;
-        parsed.heroTagline = defaultWebsiteSettings.heroTagline;
-        parsed.heroIntervalSeconds = defaultWebsiteSettings.heroIntervalSeconds || 5;
-        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify({ ...defaultWebsiteSettings, ...parsed }));
-      }
       return { ...defaultWebsiteSettings, ...parsed };
     }
   } catch (e) {
@@ -1298,6 +1247,13 @@ export const saveWebsiteSettings = (settings: WebsiteSettings) => {
   saveWebsiteSettingsToFirebase(settings).catch((e) =>
     console.warn('Firebase website settings sync notice:', e)
   );
+
+  // Sync complete settings to Supabase
+  import('./supabaseClient').then(({ saveWebsiteSettingsToSupabase }) => {
+    saveWebsiteSettingsToSupabase(settings).catch((e) =>
+      console.warn('Supabase website settings sync notice:', e)
+    );
+  }).catch(() => {});
 
   try {
     fetch('/api/settings', {

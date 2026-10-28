@@ -173,7 +173,10 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
       : defaultShowcaseMembers;
 
   return (
-    <section className={`w-full py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 border-t border-b border-slate-200/80 ${className}`}>
+    <section
+      id="staff"
+      className={`w-full scroll-mt-20 py-12 px-4 sm:px-6 lg:px-8 bg-slate-50 border-t border-b border-slate-200/80 ${className}`}
+    >
       {/* Admin Live Edit Quick Access Bar */}
       {isAdmin && (
         <div className="max-w-6xl mx-auto mb-8">

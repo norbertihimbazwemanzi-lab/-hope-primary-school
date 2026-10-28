@@ -27,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   const navItems: { id: PageId; label: string }[] = [
     { id: 'home', label: 'Home' },
     { id: 'about', label: 'About Us' },
+    { id: 'staff', label: 'School Staff' },
     { id: 'academics', label: 'Academics' },
     { id: 'admissions', label: 'Admissions' },
     { id: 'fees', label: 'School Fees' },
@@ -162,13 +163,14 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Official Admissions Button */}
+            {/* Official Admissions Link (Clickable link, not card button) */}
             <button
               onClick={onOpenApply}
-              className="cursor-pointer px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-[13px] font-semibold text-white bg-blue-950 hover:bg-blue-900 active:bg-blue-950 rounded-md transition-all shadow-xs border border-blue-900 whitespace-nowrap shrink-0"
+              className="cursor-pointer px-2 py-1 text-xs sm:text-[13px] font-bold text-blue-950 hover:text-blue-700 underline underline-offset-4 decoration-2 decoration-blue-900 hover:decoration-blue-700 transition-colors inline-flex items-center gap-1 shrink-0"
+              title="Apply for Admission"
             >
-              <span className="hidden sm:inline">Apply for Admission</span>
-              <span className="sm:hidden">Apply</span>
+              <span>Apply for Admission</span>
+              <span aria-hidden="true" className="text-amber-600 font-bold text-sm leading-none">&rarr;</span>
             </button>
 
             {/* Mobile Menu Toggle */}
@@ -241,9 +243,10 @@ export const Header: React.FC<HeaderProps> = ({
                 setMobileMenuOpen(false);
                 onOpenApply();
               }}
-              className="cursor-pointer w-full py-2.5 text-center text-sm font-semibold text-white bg-blue-950 hover:bg-blue-900 rounded-md transition-colors shadow-xs"
+              className="cursor-pointer w-full py-2.5 text-center text-sm font-bold text-blue-900 hover:text-blue-700 underline underline-offset-4 decoration-2 transition-colors inline-flex items-center justify-center gap-1.5"
             >
-              Apply for Admission
+              <span>Apply for Admission</span>
+              <span aria-hidden="true" className="text-amber-600 font-bold">&rarr;</span>
             </button>
           </div>
         </div>

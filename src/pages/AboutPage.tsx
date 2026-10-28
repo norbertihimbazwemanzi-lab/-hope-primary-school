@@ -462,9 +462,10 @@ export const AboutPage: React.FC<AboutPageProps> = ({
         <button
           type="button"
           onClick={onOpenApply}
-          className="cursor-pointer w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-md transition-colors"
+          className="cursor-pointer inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-blue-900 hover:text-blue-700 underline underline-offset-4 decoration-2 decoration-blue-900 hover:decoration-blue-700 transition-colors"
         >
-          Apply for Admission
+          <span>Apply for Admission</span>
+          <span aria-hidden="true" className="text-amber-600 font-bold">&rarr;</span>
         </button>
         <button
           type="button"

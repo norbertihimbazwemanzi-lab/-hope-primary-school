@@ -49,6 +49,12 @@ import {
   subscribeToStaffMembers,
   subscribeToEnrolledStudents,
 } from './services/firebaseStore';
+import {
+  fetchWebsiteSettingsFromSupabase,
+  fetchSchoolGalleryFromSupabase,
+  fetchStaffMembersFromSupabase,
+  subscribeToSupabaseWebsiteSettings,
+} from './services/supabaseClient';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>('home');
@@ -147,15 +153,18 @@ export default function App() {
       return item;
     };
 
-    // 2. Initial Gallery Sync from Firebase Storage/Firestore & Server
+    // 2. Initial Gallery Sync from Firebase Firestore, Supabase & Server
     Promise.all([
       syncServerGalleryItems(),
       fetchSchoolGalleryFromFirebase(),
-    ]).then(([serverItems, firestoreItems]) => {
-      // Database source of truth: prioritize remote Firestore or server items over stale local cache
+      fetchSchoolGalleryFromSupabase(),
+    ]).then(([serverItems, firestoreItems, supabaseItems]) => {
+      // Database source of truth: prioritize remote Firestore or Supabase items over stale local cache
       let authoritative: any[] = [];
       if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
         authoritative = firestoreItems;
+      } else if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
+        authoritative = supabaseItems;
       } else if (Array.isArray(serverItems) && serverItems.length > 0) {
         authoritative = serverItems;
       }
@@ -214,8 +223,30 @@ export default function App() {
       }
     });
 
-    // 5. Real-time Website Settings Subscription
+    // 5. Initial Website Settings Fetch & Real-time Subscription from Firestore & Supabase
+    Promise.all([
+      fetchWebsiteSettingsFromFirebase(),
+      fetchWebsiteSettingsFromSupabase(),
+    ]).then(([fbSettings, sbSettings]) => {
+      const remote = fbSettings || sbSettings;
+      if (remote) {
+        const current = getWebsiteSettings();
+        const updated = { ...current, ...remote };
+        localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+      }
+    }).catch((e) => console.warn('Website settings initial fetch notice:', e));
+
     const unsubSettings = subscribeToWebsiteSettings((liveSettings) => {
+      if (liveSettings) {
+        const current = getWebsiteSettings();
+        const updated = { ...current, ...liveSettings };
+        localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+      }
+    });
+
+    const unsubSupabaseSettings = subscribeToSupabaseWebsiteSettings((liveSettings) => {
       if (liveSettings) {
         const current = getWebsiteSettings();
         const updated = { ...current, ...liveSettings };
@@ -227,6 +258,20 @@ export default function App() {
     // 6. Cross-Device Staff Accounts Real-time Sync & Subscription
     // Guarantees accounts enrolled by Admin on one device exist on any other device/phone
     syncServerStaff().catch((e) => console.warn('Staff initial sync notice:', e));
+    fetchStaffMembersFromSupabase().then((sbStaff) => {
+      if (Array.isArray(sbStaff) && sbStaff.length > 0) {
+        const local = getStaffMembers();
+        const map = new Map<string, any>();
+        local.forEach((s) => map.set(s.username.toLowerCase(), s));
+        sbStaff.forEach((s) => {
+          if (s && s.username) map.set(s.username.toLowerCase(), s);
+        });
+        const merged = Array.from(map.values());
+        localStorage.setItem('mugina_staff_members_v3', JSON.stringify(merged));
+        window.dispatchEvent(new CustomEvent('mugina-staff-updated', { detail: merged }));
+      }
+    }).catch((e) => console.warn('Supabase staff sync notice:', e));
+
     const unsubStaff = subscribeToStaffMembers((liveStaff) => {
       if (Array.isArray(liveStaff) && liveStaff.length > 0) {
         const local = getStaffMembers();
@@ -263,6 +308,7 @@ export default function App() {
       unsubDocs();
       unsubAnn();
       unsubSettings();
+      unsubSupabaseSettings();
       unsubStaff();
       unsubStudents();
     };
@@ -275,6 +321,7 @@ export default function App() {
     const sectionIds: PageId[] = [
       'home',
       'about',
+      'staff',
       'academics',
       'admissions',
       'fees',
@@ -311,7 +358,8 @@ export default function App() {
     if (currentPage === 'admin') {
       setCurrentPage(page);
       setTimeout(() => {
-        const el = document.getElementById(page);
+        const targetId = page === 'staff' ? 'staff' : page;
+        const el = document.getElementById(targetId) || document.getElementById('about');
         if (el) {
           el.scrollIntoView({ behavior: 'smooth' });
         } else {
@@ -322,7 +370,8 @@ export default function App() {
     }
 
     setCurrentPage(page);
-    const el = document.getElementById(page);
+    const targetId = page === 'staff' ? 'staff' : page;
+    const el = document.getElementById(targetId) || document.getElementById('about');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     } else {
