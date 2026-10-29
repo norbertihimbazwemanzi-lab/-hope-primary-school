@@ -4,6 +4,7 @@ import { FacilityItem, PageId } from '../types';
 import { GalleryLightbox } from '../components/GalleryLightbox';
 import { getGalleryItems, syncServerGalleryItems, saveGalleryItems, getWebsiteSettings } from '../services/adminStore';
 import { fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
+import { fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
 import {
   Sparkles,
   Trophy,
@@ -36,19 +37,25 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
     // 1. Load initial cache
     setFacilities(getGalleryItems());
 
-    // 2. Sync from server and Firebase Firestore so photos uploaded on any computer/device show here
+    // 2. Sync from Firebase Firestore, Supabase & server so photos uploaded on any computer/device show here
     let isMounted = true;
     Promise.all([
       fetchSchoolGalleryFromFirebase(),
+      fetchSchoolGalleryFromSupabase(),
       syncServerGalleryItems(),
-    ]).then(([firestoreItems, serverItems]) => {
+    ]).then(([firestoreItems, supabaseItems, serverItems]) => {
       if (!isMounted) return;
+      let authoritative: FacilityItem[] = [];
       if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
-        setFacilities(firestoreItems);
-        saveGalleryItems(firestoreItems);
+        authoritative = firestoreItems;
+      } else if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
+        authoritative = supabaseItems;
       } else if (Array.isArray(serverItems) && serverItems.length > 0) {
-        setFacilities(serverItems);
-        saveGalleryItems(serverItems);
+        authoritative = serverItems;
+      }
+      if (authoritative.length > 0) {
+        setFacilities(authoritative);
+        saveGalleryItems(authoritative);
       }
     }).catch((err) => console.warn('Gallery sync notice:', err));
 

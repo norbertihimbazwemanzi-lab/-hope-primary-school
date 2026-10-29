@@ -54,6 +54,7 @@ import {
   fetchSchoolGalleryFromSupabase,
   fetchStaffMembersFromSupabase,
   subscribeToSupabaseWebsiteSettings,
+  subscribeToSupabaseGallery,
 } from './services/supabaseClient';
 
 export default function App() {
@@ -176,6 +177,13 @@ export default function App() {
 
     // Real-time Gallery Subscription: authoritative live updates across all devices
     const unsubGallery = subscribeToSchoolGallery((liveItems) => {
+      if (Array.isArray(liveItems) && liveItems.length > 0) {
+        const sanitized = liveItems.map(sanitizeItem);
+        saveGalleryItems(sanitized);
+      }
+    });
+
+    const unsubSupabaseGallery = subscribeToSupabaseGallery((liveItems) => {
       if (Array.isArray(liveItems) && liveItems.length > 0) {
         const sanitized = liveItems.map(sanitizeItem);
         saveGalleryItems(sanitized);
@@ -305,6 +313,7 @@ export default function App() {
     return () => {
       unsubLogo();
       unsubGallery();
+      unsubSupabaseGallery();
       unsubDocs();
       unsubAnn();
       unsubSettings();

@@ -395,3 +395,79 @@ export const subscribeToSupabaseWebsiteSettings = (callback: (settings: any) => 
     return () => {};
   }
 };
+
+/**
+ * Save / Upsert Single Gallery Item to Supabase
+ */
+export const saveSchoolGalleryItemToSupabase = async (item: any): Promise<boolean> => {
+  const client = getSupabaseClient();
+  if (!client || !item) return false;
+  try {
+    const payload = {
+      id: item.id,
+      title: item.title,
+      category: item.category || 'outdoor',
+      description: item.description || item.title,
+      image_src: item.imageSrc || item.image_src,
+      caption: item.caption || item.description || item.title,
+      alt_text: item.altText || item.alt_text || item.title,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await client.from('school_gallery').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      console.log('[Supabase Store] Gallery item saved to Supabase:', item.id);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Supabase Store] Gallery item write notice:', err);
+  }
+  return false;
+};
+
+/**
+ * Delete Single Gallery Item from Supabase
+ */
+export const deleteSchoolGalleryItemFromSupabase = async (id: string): Promise<boolean> => {
+  const client = getSupabaseClient();
+  if (!client || !id) return false;
+  try {
+    const { error } = await client.from('school_gallery').delete().eq('id', id);
+    if (!error) {
+      console.log('[Supabase Store] Gallery item deleted from Supabase:', id);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[Supabase Store] Gallery item delete notice:', err);
+  }
+  return false;
+};
+
+/**
+ * Real-time listener for School Gallery photos via Supabase channel
+ */
+export const subscribeToSupabaseGallery = (callback: (items: any[]) => void): (() => void) => {
+  const client = getSupabaseClient();
+  if (!client) return () => {};
+  try {
+    const channel = client
+      .channel('public:school_gallery')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'school_gallery' },
+        async () => {
+          const freshItems = await fetchSchoolGalleryFromSupabase();
+          if (freshItems) {
+            callback(freshItems);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('[Supabase Store] Could not register Supabase gallery channel:', err);
+    return () => {};
+  }
+};

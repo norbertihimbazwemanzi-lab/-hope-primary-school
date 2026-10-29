@@ -64,8 +64,8 @@ import {
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
-import { saveSchoolLogoToFirebase, fetchStaffMembersFromFirebase } from '../services/firebaseStore';
-import { testSupabaseConnection, syncAllDataToSupabase } from '../services/supabaseClient';
+import { saveSchoolLogoToFirebase, fetchStaffMembersFromFirebase, fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
+import { testSupabaseConnection, syncAllDataToSupabase, fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
 import { AdminAttendanceTracker } from '../components/AdminAttendanceTracker';
 import { FinancePortal } from '../components/FinancePortal';
 import { TeacherPortal } from '../components/TeacherPortal';
@@ -401,10 +401,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       setDocList(docs);
     });
 
-    syncServerGalleryItems().then((items) => {
-      setGalleryItems(items);
-      if (onGalleryUpdated) onGalleryUpdated();
-    });
+    Promise.all([
+      fetchSchoolGalleryFromFirebase(),
+      fetchSchoolGalleryFromSupabase(),
+      syncServerGalleryItems(),
+    ]).then(([firestoreItems, supabaseItems, serverItems]) => {
+      let authoritative: FacilityItem[] = [];
+      if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
+        authoritative = firestoreItems;
+      } else if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
+        authoritative = supabaseItems;
+      } else if (Array.isArray(serverItems) && serverItems.length > 0) {
+        authoritative = serverItems;
+      }
+      if (authoritative.length > 0) {
+        setGalleryItems(authoritative);
+        if (onGalleryUpdated) onGalleryUpdated();
+      }
+    }).catch((e) => console.warn('Gallery sync notice in admin:', e));
 
     const handleStaffUpdate = (e: any) => {
       if (e.detail && Array.isArray(e.detail)) {

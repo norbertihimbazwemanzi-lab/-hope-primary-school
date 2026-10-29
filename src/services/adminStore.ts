@@ -1342,6 +1342,11 @@ export const addGalleryItem = (item: Omit<FacilityItem, 'id'>): FacilityItem => 
   // Sync to Firebase Firestore so all users and devices immediately see this image
   saveSchoolGalleryItemToFirebase(newItem).catch((e) => console.warn('Firebase gallery save error:', e));
 
+  // Sync to Supabase PostgreSQL database
+  import('./supabaseClient').then(({ saveSchoolGalleryItemToSupabase }) => {
+    saveSchoolGalleryItemToSupabase(newItem).catch((e) => console.warn('Supabase gallery save notice:', e));
+  }).catch(() => {});
+
   // Sync to server so visible on all devices
   fetch('/api/gallery', {
     method: 'POST',
@@ -1360,6 +1365,9 @@ export const updateGalleryItem = (id: string, updates: Partial<FacilityItem>): F
   const target = updated.find((i) => i.id === id);
   if (target) {
     saveSchoolGalleryItemToFirebase(target).catch((e) => console.warn('Firebase gallery update error:', e));
+    import('./supabaseClient').then(({ saveSchoolGalleryItemToSupabase }) => {
+      saveSchoolGalleryItemToSupabase(target).catch((e) => console.warn('Supabase gallery update notice:', e));
+    }).catch(() => {});
     fetch('/api/gallery', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1377,6 +1385,11 @@ export const deleteGalleryItem = (id: string): FacilityItem[] => {
 
   // Delete from Firebase Firestore
   deleteSchoolGalleryItemFromFirebase(id).catch((e) => console.warn('Firebase gallery delete error:', e));
+
+  // Delete from Supabase PostgreSQL database
+  import('./supabaseClient').then(({ deleteSchoolGalleryItemFromSupabase }) => {
+    deleteSchoolGalleryItemFromSupabase(id).catch((e) => console.warn('Supabase gallery delete notice:', e));
+  }).catch(() => {});
 
   // Delete from server
   fetch(`/api/gallery/${id}`, { method: 'DELETE' }).catch((e) => console.warn('Gallery delete error:', e));
