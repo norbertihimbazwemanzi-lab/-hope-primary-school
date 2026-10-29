@@ -19,9 +19,12 @@ import {
   getAttendanceRecords,
   saveAttendanceBatch,
   getGalleryItems,
+  saveGalleryItems,
   addGalleryItem,
   updateGalleryItem,
   deleteGalleryItem,
+  saveStaffMembers,
+  saveEnrolledStudents,
   syncServerGalleryItems,
   getInquiries,
   updateInquiryStatus,
@@ -66,6 +69,7 @@ import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageServ
 import { SchoolLogo } from '../components/SchoolLogo';
 import { saveSchoolLogoToFirebase, fetchStaffMembersFromFirebase, fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
 import { testSupabaseConnection, syncAllDataToSupabase, fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
+import { dispatchOfficialEmail } from '../services/emailService';
 import { AdminAttendanceTracker } from '../components/AdminAttendanceTracker';
 import { FinancePortal } from '../components/FinancePortal';
 import { TeacherPortal } from '../components/TeacherPortal';
@@ -120,6 +124,10 @@ import {
   Eye,
   EyeOff,
   Database,
+  Copy,
+  FileDown,
+  FolderArchive,
+  HardDrive,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -811,6 +819,190 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setSupabaseSyncStatus({ syncing: false, message: res.message, success: res.success });
   };
 
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+
+  const handleCopySupabaseSQL = () => {
+    const sql = `-- MUGINA HOPE PRIMARY ACADEMY - SUPABASE SCHEMA
+-- Run in your Supabase SQL Editor: https://supabase.com/dashboard
+CREATE TABLE IF NOT EXISTS public.website_settings (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.website_settings ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "Public Read Website Settings" ON public.website_settings FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Public Write Website Settings" ON public.website_settings FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.school_gallery (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  category TEXT DEFAULT 'outdoor',
+  description TEXT,
+  image_src TEXT NOT NULL,
+  caption TEXT,
+  alt_text TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.school_gallery ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "Public Read Gallery" ON public.school_gallery FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Public Write Gallery" ON public.school_gallery FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.staff_members (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  email TEXT,
+  phone TEXT,
+  username TEXT UNIQUE NOT NULL,
+  assigned_subject_or_grade TEXT,
+  status TEXT DEFAULT 'Active',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.staff_members ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "Public Read Staff" ON public.staff_members FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Public Write Staff" ON public.staff_members FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.enrolled_students (
+  id TEXT PRIMARY KEY,
+  full_name TEXT NOT NULL,
+  reg_number TEXT UNIQUE NOT NULL,
+  grade_code TEXT NOT NULL,
+  status TEXT DEFAULT 'Active',
+  parent_name TEXT,
+  parent_phone TEXT,
+  parent_email TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.enrolled_students ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY "Public Read Students" ON public.enrolled_students FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Public Write Students" ON public.enrolled_students FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.website_settings;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.school_gallery;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_members;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
+
+    navigator.clipboard.writeText(sql);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3500);
+  };
+
+  const handleExportDatabaseBackup = () => {
+    try {
+      const backupData = {
+        metadata: {
+          school: 'Mugina Hope Primary & Nursery Academy',
+          district: 'Kamonyi District, Rwanda',
+          exportedAt: new Date().toISOString(),
+          version: '3.0',
+        },
+        websiteSettings: getWebsiteSettings(),
+        staffMembers: getStaffMembers(),
+        enrolledStudents: getEnrolledStudents(),
+        galleryItems: getGalleryItems(),
+        attendanceRecords: getAttendanceRecords(),
+        paymentTransactions: getPaymentTransactions(),
+        inquiries: getInquiries(),
+        applications: getApplications(),
+        requiredDocuments: getRequiredDocuments(),
+        announcements: getAnnouncements(),
+      };
+
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.href = url;
+      a.download = `mugina_hope_database_backup_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setBackupMsg('Complete database snapshot exported successfully (JSON)!');
+      setTimeout(() => setBackupMsg(null), 4500);
+    } catch (err: any) {
+      alert(`Error exporting backup: ${err?.message || 'Failed'}`);
+    }
+  };
+
+  const handleExportStudentsCSV = () => {
+    try {
+      const students = getEnrolledStudents();
+      const headers = ['ID', 'Reg Number', 'Full Name', 'Gender', 'Date of Birth', 'Grade Code', 'Parent Name', 'Parent Phone', 'Parent Email', 'Status'];
+      const rows = students.map((s) => [
+        s.id,
+        s.regNumber,
+        `"${(s.fullName || '').replace(/"/g, '""')}"`,
+        s.gender || 'N/A',
+        s.dob || 'N/A',
+        s.gradeCode,
+        `"${(s.parentName || '').replace(/"/g, '""')}"`,
+        s.parentPhone || '',
+        s.parentEmail || '',
+        s.status || 'Active',
+      ]);
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.href = url;
+      a.download = `mugina_hope_students_roster_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setBackupMsg('Pupils enrollment roster exported as CSV (Ready for MINEDUC / District)!');
+      setTimeout(() => setBackupMsg(null), 4500);
+    } catch (err: any) {
+      alert(`Error exporting CSV: ${err?.message || 'Failed'}`);
+    }
+  };
+
+  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (!parsed.websiteSettings && !parsed.enrolledStudents && !parsed.staffMembers) {
+          alert('Invalid backup file format. Expected a Mugina Hope Academy database backup JSON file.');
+          return;
+        }
+        if (confirm('Are you sure you want to restore this database backup? Existing records will be updated with the backup data.')) {
+          if (parsed.websiteSettings) saveWebsiteSettings(parsed.websiteSettings);
+          if (Array.isArray(parsed.staffMembers)) saveStaffMembers(parsed.staffMembers);
+          if (Array.isArray(parsed.enrolledStudents)) saveEnrolledStudents(parsed.enrolledStudents);
+          if (Array.isArray(parsed.galleryItems)) saveGalleryItems(parsed.galleryItems);
+          alert('Database backup restored successfully! Reloading...');
+          window.location.reload();
+        }
+      } catch (err: any) {
+        alert(`Error reading backup file: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   // 3. Confirm Admissions Application (Admin & DOS)
   const handleConfirmApplication = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -826,22 +1018,39 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         confirmStudentPass || 'mugina@2026'
       );
 
-      // Trigger Gmail confirmation email via backend Express endpoint
-      fetch('/api/admissions/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          refCode: confirmAppTarget.refCode,
-          studentName: student.fullName,
-          studentId: student.regNumber,
-          grade: student.gradeCode,
-          parentName: student.parentName,
-          parentEmail: student.parentEmail,
-          studentUsername: student.studentUsername,
-          studentPassword: student.studentPassword,
-          feedbackNotes: confirmFeedbackNotes,
-        }),
-      }).catch(console.error);
+      // Dispatch multi-tier confirmation email (Vercel serverless / Express / Cloud notification)
+      if (student.parentEmail) {
+        dispatchOfficialEmail({
+          to: student.parentEmail,
+          subject: `[Mugina Hope Academy] Official Admission Confirmation: ${student.fullName}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #93c5fd; border-radius: 8px;">
+              <h2 style="color: #1e3a8a;">Mugina Hope Primary & Nursery Academy</h2>
+              <p>Dear ${student.parentName || 'Parent / Guardian'},</p>
+              <p>Registration for <strong>${student.fullName}</strong> (${student.gradeCode}) has been officially <strong>CONFIRMED & APPROVED</strong>.</p>
+              <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; margin: 15px 0;">
+                <p><strong>Registration ID:</strong> <code>${student.regNumber}</code></p>
+                <p><strong>Student Portal Username:</strong> <code>${student.studentUsername}</code></p>
+                <p><strong>Temporary Password:</strong> <code>${student.studentPassword}</code></p>
+              </div>
+              ${confirmFeedbackNotes ? `<p><strong>Feedback from Administration:</strong> ${confirmFeedbackNotes}</p>` : ''}
+              <p style="font-size: 11px; color: #64748b;">Mugina Sector, Kamonyi District, Rwanda · Adjacent to Mugina Police Station</p>
+            </div>
+          `,
+          type: 'admission_confirm',
+          details: {
+            refCode: confirmAppTarget.refCode,
+            studentName: student.fullName,
+            studentId: student.regNumber,
+            grade: student.gradeCode,
+            parentName: student.parentName,
+            parentEmail: student.parentEmail,
+            studentUsername: student.studentUsername,
+            studentPassword: student.studentPassword,
+            feedbackNotes: confirmFeedbackNotes,
+          },
+        }).catch((e) => console.warn('Admission email dispatch notice:', e));
+      }
 
       // Update local states
       setApplications(getApplications());
@@ -4352,6 +4561,113 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
                     </>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleCopySupabaseSQL}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-2 border border-slate-300 cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{copiedSql ? 'Copied SQL Setup Script!' : 'Copy Supabase SQL Setup Script'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 10. Automated Database Backup & Disaster Recovery */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-6">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <HardDrive className="w-4 h-4 text-indigo-600" />
+                    <span>10. Automated Database Backup & Disaster Recovery</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Export offline snapshots of your school database (staff, students, applications, fees, settings) or restore from an earlier backup.
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-800 text-[11px] font-bold rounded-lg border border-indigo-200 inline-flex items-center gap-1.5 self-start sm:self-auto">
+                  <FolderArchive className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Disaster Recovery Ready</span>
+                </span>
+              </div>
+
+              {backupMsg && (
+                <div className="p-3.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-900 text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>{backupMsg}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBackupMsg(null)}
+                    className="text-xs text-indigo-700 hover:text-indigo-900 font-bold px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
+                      <FileDown className="w-4 h-4 text-blue-600" />
+                      <span>Full Database Snapshot</span>
+                    </div>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Exports all website settings, staff profiles, student records, fee transactions, and admissions applications in structured JSON format.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportDatabaseBackup}
+                    className="w-full py-2 px-3 bg-blue-700 hover:bg-blue-800 text-white font-bold rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download JSON Backup</span>
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>MINEDUC Pupils Roster (CSV)</span>
+                    </div>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Exports enrolled pupils with registration numbers, grade levels, and emergency guardian contacts for official Kamonyi district reporting.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportStudentsCSV}
+                    className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV Roster</span>
+                  </button>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 font-bold text-slate-800 mb-1">
+                      <RotateCcw className="w-4 h-4 text-amber-600" />
+                      <span>Restore from JSON File</span>
+                    </div>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Upload a previously exported backup file to restore school settings, gallery items, and records to your database.
+                    </p>
+                  </div>
+                  <label className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors inline-flex items-center justify-center gap-2 cursor-pointer">
+                    <UploadCloud className="w-3.5 h-3.5" />
+                    <span>Upload & Restore Backup</span>
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={handleRestoreBackup}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
 
