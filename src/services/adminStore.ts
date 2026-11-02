@@ -348,19 +348,14 @@ export const defaultWebsiteSettings: WebsiteSettings = {
   termDatesNotice: 'Academic Year 2026: Term 1 underway. Term 2 registration currently open.',
   registrationFeeNotice: 'Application fee: 10,000 RWF (Registration, evaluation, student file & ID card).',
   announcementBarText: 'Term 1 2026 Admissions Open · Nursery & Primary Excellence in Kamonyi · Adjacent to Mugina Police Station',
-  heroHeadline: 'Welcome to Runda Technical Secondary School',
-  heroTagline: "Welcome to Runda Technical Secondary School, located in Kamonyi District, South Rwanda. We're proud to offer a blend of academic and technical education, preparing students for success in the modern world.",
+  heroHeadline: 'Welcome to Mugina Hope Primary School',
+  heroTagline: "Welcome to Mugina Hope Primary School, located in Kamonyi District, Southern Province, Rwanda. We are proud to offer a strong foundation of academic excellence, discipline, and moral values, preparing pupils for lifelong success.",
   heroIntervalSeconds: 5,
   heroSlides: [
     {
-      id: 'slide-1',
-      imageUrl: '/images/hero_runda_campus.png',
-      title: 'Runda Technical Secondary School Campus',
-    },
-    {
       id: 'slide-2',
       imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
-      title: 'Academic & Technical Campus Grounds',
+      title: 'Mugina Hope Primary Campus & Classroom Blocks',
     },
     {
       id: 'slide-3',
@@ -378,9 +373,9 @@ export const defaultWebsiteSettings: WebsiteSettings = {
   lunchFee: '25,000 RWF / Term (Hot balanced lunch & porridge)',
   // School Manager & Administration Leadership Message defaults (Homepage)
   schoolManagerPhotoUrl: '',
-  schoolManagerName: 'HAKIZIMANA Enos',
+  schoolManagerName: 'HAKIZIMANA Protais',
   schoolManagerRole: 'School Manager & Administrative Head',
-  schoolManagerAlt: 'HAKIZIMANA Enos - School Manager & Administrative Head at Mugina Hope Academy',
+  schoolManagerAlt: 'HAKIZIMANA Protais - School Manager & Administrative Head at Mugina Hope Primary School',
   adminMessageKicker: 'Message from the Administration',
   adminMessageHeading: 'Providing a Strong Foundation for Every Child in Kamonyi',
   adminMessageParagraph1: 'Established in 2014, Mugina Hope Academy was founded on a simple, enduring conviction: that every child in Rwanda deserves access to high-quality education rooted in discipline, moral integrity, and modern competence.',
@@ -442,9 +437,9 @@ export const defaultWebsiteSettings: WebsiteSettings = {
   ],
   aboutValuesSlogan: 'TWIGIRA EJO HACU HEZA',
 
-  // School Fees Structure (Matching Capture_fff547f5.PNG)
+  // School Fees Structure (Mugina Hope Primary School)
   feesBadge: 'SCHOOL FEES',
-  feesSubtitle: 'Discover the fee structure for each academic term at RUNDA TECHNICAL SECONDARY SCHOOL for seasoned students (L4, L5).',
+  feesSubtitle: 'Discover the transparent fee structure for each academic term at Mugina Hope Primary School for nursery and primary learners.',
   feesFirstTerm: '92000.0',
   feesSecondTerm: '92000.0',
   feesThirdTerm: '92000.0',
@@ -466,17 +461,17 @@ export const defaultWebsiteSettings: WebsiteSettings = {
     'Extra-Curricular Activity Fees (e.g., Clubs, Workshops)',
   ],
 
-  // School Staff Showcase (Matching Capture_cd3b07eb.PNG)
+  // School Staff Showcase
   staffBadge: 'SCHOOL STAFF',
   staffSubtitle: 'Meet our dedicated team of educators and support staff who ensure our students thrive in a nurturing environment.',
   staffShowcase: [
     {
       id: 'staff-lead-1',
-      name: 'HAKIZIMANA Enos',
+      name: 'HAKIZIMANA Protais',
       role: 'School Manager',
       email: 'manager@muginahopeschool.com',
       phone: '+250 788 258 786',
-      imageUrl: '/images/staff_enos_manager.png',
+      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
       order: 1,
     },
     {
@@ -1225,7 +1220,47 @@ export const getWebsiteSettings = (): WebsiteSettings => {
     const raw = localStorage.getItem(STORAGE_KEYS.WEBSITE_SETTINGS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...defaultWebsiteSettings, ...parsed };
+      const merged: WebsiteSettings = { ...defaultWebsiteSettings, ...parsed };
+
+      // Clean up legacy Runda text
+      if (merged.heroHeadline && merged.heroHeadline.toLowerCase().includes('runda')) {
+        merged.heroHeadline = defaultWebsiteSettings.heroHeadline;
+      }
+      if (merged.heroTagline && merged.heroTagline.toLowerCase().includes('runda')) {
+        merged.heroTagline = defaultWebsiteSettings.heroTagline;
+      }
+      if (merged.feesSubtitle && merged.feesSubtitle.toLowerCase().includes('runda')) {
+        merged.feesSubtitle = defaultWebsiteSettings.feesSubtitle;
+      }
+
+      // Clean up legacy HAKIZIMANA Enos -> HAKIZIMANA Protais
+      if (!merged.schoolManagerName || merged.schoolManagerName.toLowerCase().includes('enos')) {
+        merged.schoolManagerName = 'HAKIZIMANA Protais';
+      }
+      if (!merged.schoolManagerAlt || merged.schoolManagerAlt.toLowerCase().includes('enos')) {
+        merged.schoolManagerAlt = 'HAKIZIMANA Protais - School Manager & Administrative Head at Mugina Hope Primary School';
+      }
+
+      // Filter out slide-1 (runda image)
+      if (Array.isArray(merged.heroSlides)) {
+        merged.heroSlides = merged.heroSlides.filter(
+          (s) => !(s.imageUrl || '').includes('runda') && !(s.title || '').toLowerCase().includes('runda')
+        );
+        if (merged.heroSlides.length === 0) {
+          merged.heroSlides = defaultWebsiteSettings.heroSlides;
+        }
+      }
+
+      // Clean up staff showcase if present
+      if (Array.isArray(merged.staffShowcase)) {
+        merged.staffShowcase = merged.staffShowcase.map((m) =>
+          m.name.toLowerCase().includes('enos')
+            ? { ...m, name: 'HAKIZIMANA Protais' }
+            : m
+        );
+      }
+
+      return merged;
     }
   } catch (e) {
     console.error(e);

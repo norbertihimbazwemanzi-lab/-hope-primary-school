@@ -46,34 +46,40 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const defaultHeadline = 'Welcome to Mugina Hope Academy';
+  const defaultHeadline = 'Welcome to Mugina Hope Primary School';
   const defaultTagline =
     'Dedicated to foundational academic excellence, moral integrity, and Rwanda national curriculum standards. Preparing nursery and primary pupils for lifelong success in Kamonyi District.';
+
+  const defaultHeroSlides: HeroSlide[] = [
+    {
+      id: 'slide-2',
+      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+      title: 'Mugina Hope Primary Campus & Classroom Blocks',
+    },
+    {
+      id: 'slide-3',
+      imageUrl: '/images/primary_stem_computer_lab_1791823280335.jpg',
+      title: 'ICT & Science Learning Laboratory',
+    },
+    {
+      id: 'slide-4',
+      imageUrl: '/images/campus_life_traditional_dance_1791823290926.jpg',
+      title: 'Cultural Arts & Co-Curricular Excellence',
+    },
+  ];
+
+  const cleanSlides = (list?: HeroSlide[]): HeroSlide[] => {
+    if (!list || list.length === 0) return defaultHeroSlides;
+    const filtered = list.filter(
+      (s) => !(s.imageUrl || '').includes('runda') && !(s.title || '').toLowerCase().includes('runda')
+    );
+    return filtered.length > 0 ? filtered : defaultHeroSlides;
+  };
 
   const [editHeadline, setEditHeadline] = useState(settings.heroHeadline || defaultHeadline);
   const [editTagline, setEditTagline] = useState(settings.heroTagline || defaultTagline);
   const [editInterval, setEditInterval] = useState<number>(settings.heroIntervalSeconds || 5);
-  const [editSlides, setEditSlides] = useState<HeroSlide[]>(
-    settings.heroSlides && settings.heroSlides.length > 0
-      ? settings.heroSlides
-      : [
-          {
-            id: 'slide-1',
-            imageUrl: '/images/hero_runda_campus.png',
-            title: 'School Campus & Administration Grounds',
-          },
-          {
-            id: 'slide-2',
-            imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
-            title: 'Classroom Blocks & Safe Perimeter',
-          },
-          {
-            id: 'slide-3',
-            imageUrl: '/images/primary_stem_computer_lab_1791823280335.jpg',
-            title: 'ICT & Science Learning Laboratory',
-          },
-        ]
-  );
+  const [editSlides, setEditSlides] = useState<HeroSlide[]>(cleanSlides(settings.heroSlides));
 
   // Sync with global store & custom events
   useEffect(() => {
@@ -83,9 +89,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
       setEditHeadline(updated.heroHeadline || defaultHeadline);
       setEditTagline(updated.heroTagline || defaultTagline);
       setEditInterval(updated.heroIntervalSeconds || 5);
-      if (updated.heroSlides && updated.heroSlides.length > 0) {
-        setEditSlides(updated.heroSlides);
-      }
+      setEditSlides(cleanSlides(updated.heroSlides));
     };
     window.addEventListener('mugina-settings-updated', handleUpdate);
     return () => window.removeEventListener('mugina-settings-updated', handleUpdate);
@@ -97,26 +101,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
 
   const isAdmin = sessionUser?.role === 'Admin' || sessionUser?.role === 'DOS';
 
-  const slides: HeroSlide[] =
-    settings.heroSlides && settings.heroSlides.length > 0
-      ? settings.heroSlides
-      : [
-          {
-            id: 'slide-1',
-            imageUrl: '/images/hero_runda_campus.png',
-            title: 'School Campus & Administration Grounds',
-          },
-          {
-            id: 'slide-2',
-            imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
-            title: 'Classroom Blocks & Safe Perimeter',
-          },
-          {
-            id: 'slide-3',
-            imageUrl: '/images/primary_stem_computer_lab_1791823280335.jpg',
-            title: 'ICT & Science Learning Laboratory',
-          },
-        ];
+  const slides: HeroSlide[] = cleanSlides(settings.heroSlides);
 
   // Auto-advance slides every interval (configurable)
   useEffect(() => {
@@ -136,14 +121,14 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
     setEditHeadline(cur.heroHeadline || defaultHeadline);
     setEditTagline(cur.heroTagline || defaultTagline);
     setEditInterval(cur.heroIntervalSeconds || 5);
-    setEditSlides(cur.heroSlides && cur.heroSlides.length > 0 ? cur.heroSlides : slides);
+    setEditSlides(cleanSlides(cur.heroSlides));
     setIsEditModalOpen(true);
   };
 
   const handleAddSlide = () => {
     const newSlide: HeroSlide = {
       id: `slide-${Date.now()}`,
-      imageUrl: '/images/hero_runda_campus.png',
+      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
       title: 'New Campus Photograph',
     };
     setEditSlides([...editSlides, newSlide]);

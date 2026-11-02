@@ -3753,7 +3753,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                         onChange={(e) =>
                           setWebsiteSettings({ ...websiteSettings, schoolManagerAlt: e.target.value })
                         }
-                        placeholder="e.g. HAKIZIMANA Enos - School Manager at Mugina Hope Academy"
+                        placeholder="e.g. HAKIZIMANA Protais - School Manager at Mugina Hope Primary School"
                         className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs"
                       />
                     </div>
@@ -3771,7 +3771,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                     onChange={(e) =>
                       setWebsiteSettings({ ...websiteSettings, schoolManagerName: e.target.value })
                     }
-                    placeholder="e.g. HAKIZIMANA Enos"
+                    placeholder="e.g. HAKIZIMANA Protais"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold"
                   />
                 </div>

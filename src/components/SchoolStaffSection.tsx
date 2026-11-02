@@ -131,11 +131,11 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
   const defaultShowcaseMembers: StaffShowcaseMember[] = [
     {
       id: 'staff-lead-1',
-      name: 'HAKIZIMANA Enos',
+      name: 'HAKIZIMANA Protais',
       role: 'School Manager',
       email: 'manager@muginahopeschool.com',
       phone: '+250 788 258 786',
-      imageUrl: '/images/staff_enos_manager.png',
+      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
       order: 1,
     },
     {
@@ -234,9 +234,9 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
                 <div className="w-full aspect-[4/5] bg-slate-100 overflow-hidden relative border-b border-slate-100">
                   <img
                     src={
-                      ((member.name.toLowerCase().includes('enos') || member.role.toLowerCase().includes('manager')) && settings.schoolManagerPhotoUrl)
+                      ((member.name.toLowerCase().includes('protais') || member.name.toLowerCase().includes('enos') || member.role.toLowerCase().includes('manager')) && settings.schoolManagerPhotoUrl)
                         ? settings.schoolManagerPhotoUrl
-                        : member.imageUrl === '/images/staff_enos_manager.png'
+                        : (member.imageUrl === '/images/staff_enos_manager.png' || member.imageUrl.includes('enos'))
                         ? (settings.schoolManagerPhotoUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg')
                         : member.imageUrl
                     }

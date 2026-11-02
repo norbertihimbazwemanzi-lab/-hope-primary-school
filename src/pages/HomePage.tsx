@@ -51,9 +51,9 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   // Form states for in-place leadership editing
   const [managerPhotoUrl, setManagerPhotoUrl] = useState(settings.schoolManagerPhotoUrl || '');
-  const [managerName, setManagerName] = useState(settings.schoolManagerName || 'HAKIZIMANA Enos');
+  const [managerName, setManagerName] = useState(settings.schoolManagerName || 'HAKIZIMANA Protais');
   const [managerRole, setManagerRole] = useState(settings.schoolManagerRole || 'School Manager & Administrative Head');
-  const [managerAlt, setManagerAlt] = useState(settings.schoolManagerAlt || 'HAKIZIMANA Enos - School Manager at Mugina Hope Academy');
+  const [managerAlt, setManagerAlt] = useState(settings.schoolManagerAlt || 'HAKIZIMANA Protais - School Manager at Mugina Hope Primary School');
   const [messageKicker, setMessageKicker] = useState(settings.adminMessageKicker || 'Message from the Administration');
   const [messageHeading, setMessageHeading] = useState(settings.adminMessageHeading || 'Providing a Strong Foundation for Every Child in Kamonyi');
   const [messagePara1, setMessagePara1] = useState(
@@ -81,9 +81,9 @@ export const HomePage: React.FC<HomePageProps> = ({
       const updated = e.detail || getWebsiteSettings();
       setSettings(updated);
       setManagerPhotoUrl(updated.schoolManagerPhotoUrl || '');
-      setManagerName(updated.schoolManagerName || 'HAKIZIMANA Enos');
+      setManagerName(updated.schoolManagerName || 'HAKIZIMANA Protais');
       setManagerRole(updated.schoolManagerRole || 'School Manager & Administrative Head');
-      setManagerAlt(updated.schoolManagerAlt || 'HAKIZIMANA Enos - School Manager at Mugina Hope Academy');
+      setManagerAlt(updated.schoolManagerAlt || 'HAKIZIMANA Protais - School Manager at Mugina Hope Primary School');
       setMessageKicker(updated.adminMessageKicker || 'Message from the Administration');
       setMessageHeading(updated.adminMessageHeading || 'Providing a Strong Foundation for Every Child in Kamonyi');
       if (updated.adminMessageParagraph1) setMessagePara1(updated.adminMessageParagraph1);
@@ -104,9 +104,9 @@ export const HomePage: React.FC<HomePageProps> = ({
   const handleOpenEditModal = () => {
     const cur = getWebsiteSettings();
     setManagerPhotoUrl(cur.schoolManagerPhotoUrl || '');
-    setManagerName(cur.schoolManagerName || 'HAKIZIMANA Enos');
+    setManagerName(cur.schoolManagerName || 'HAKIZIMANA Protais');
     setManagerRole(cur.schoolManagerRole || 'School Manager & Administrative Head');
-    setManagerAlt(cur.schoolManagerAlt || 'HAKIZIMANA Enos - School Manager at Mugina Hope Academy');
+    setManagerAlt(cur.schoolManagerAlt || 'HAKIZIMANA Protais - School Manager at Mugina Hope Primary School');
     setMessageKicker(cur.adminMessageKicker || 'Message from the Administration');
     setMessageHeading(cur.adminMessageHeading || 'Providing a Strong Foundation for Every Child in Kamonyi');
     setMessagePara1(
@@ -218,7 +218,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="font-bold block">
-                            {settings.schoolManagerName || 'HAKIZIMANA Enos'}
+                            {settings.schoolManagerName || 'HAKIZIMANA Protais'}
                           </span>
                           <span className="text-slate-300 text-[11px]">
                             {settings.schoolManagerRole || 'School Manager & Administrative Head'}
@@ -248,7 +248,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         Office of Administration
                       </span>
                       <span className="text-base font-bold text-white block mt-0.5">
-                        {settings.schoolManagerName || 'HAKIZIMANA Enos'}
+                        {settings.schoolManagerName || 'HAKIZIMANA Protais'}
                       </span>
                       <span className="text-xs text-slate-300 block">
                         {settings.schoolManagerRole || 'School Manager & Administrative Head'}
@@ -474,7 +474,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     type="text"
                     value={managerAlt}
                     onChange={(e) => setManagerAlt(e.target.value)}
-                    placeholder="e.g. HAKIZIMANA Enos - School Manager & Administrative Head at Mugina Hope Academy"
+                    placeholder="e.g. HAKIZIMANA Protais - School Manager & Administrative Head at Mugina Hope Primary School"
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs"
                   />
                 </div>

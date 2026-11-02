@@ -282,7 +282,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             <div className="max-w-xs w-full">
               <div className="w-full h-80 sm:h-96 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shadow-xs">
                 <img
-                  src={settings.aboutPrincipalPhotoUrl || '/images/staff_enos_manager.png'}
+                  src={settings.aboutPrincipalPhotoUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg'}
                   alt={settings.aboutPrincipalName || 'Head of School'}
                   className="w-full h-full object-cover object-top"
                   onError={(e) => {
