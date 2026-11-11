@@ -181,24 +181,24 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
     <div className="relative">
       {/* Admin Quick Edit Bar */}
       {isAdmin && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-3 pb-2">
-          <div className="bg-slate-900 text-white rounded-lg p-3 shadow-xs flex items-center justify-between gap-4 border border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <span className="p-1.5 bg-blue-900 text-white rounded-md">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-2">
+          <div className="bg-slate-900 text-white rounded-lg p-3 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-slate-800">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="p-1.5 bg-blue-900 text-white rounded-md shrink-0">
                 <Edit3 className="w-3.5 h-3.5" />
               </span>
-              <div>
-                <span className="text-xs font-bold text-slate-100 block">
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-100 block truncate">
                   Hero Presentation Editor
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-400 block truncate">
                   Logged in as {sessionUser?.name || 'Administrator'}. Changes sync across all devices.
                 </span>
               </div>
             </div>
             <button
               onClick={handleOpenEdit}
-              className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs rounded-md shadow-xs transition-colors"
+              className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs rounded-md shadow-xs transition-colors shrink-0 self-start sm:self-auto"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>Edit Hero Content</span>
@@ -209,7 +209,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
 
       {/* Main Hero Container */}
       <section className="relative overflow-hidden bg-slate-950 text-white mx-2 sm:mx-6 lg:mx-8 rounded-xl border border-slate-800 shadow-sm">
-        <div className="relative min-h-[440px] sm:min-h-[520px] lg:min-h-[580px] w-full flex items-center justify-center p-3 sm:p-8 lg:p-12 overflow-hidden">
+        <div className="relative min-h-[410px] sm:min-h-[520px] lg:min-h-[580px] w-full flex items-center justify-center p-2.5 sm:p-8 lg:p-12 overflow-hidden">
           {/* Background Images Carousel with Clean Crossfade */}
           {slides.map((slide, index) => (
             <div
@@ -236,21 +236,21 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
           ))}
 
           {/* Center Box - Dignified Educational Framing */}
-          <div className="relative z-10 w-full max-w-3xl mx-auto text-center px-1 sm:px-4">
-            <div className="bg-slate-900/85 backdrop-blur-xs border border-slate-700/80 rounded-xl px-4 sm:px-10 py-6 sm:py-12 shadow-xl">
+          <div className="relative z-10 w-full max-w-3xl mx-auto text-center px-0.5 sm:px-4">
+            <div className="bg-slate-900/85 backdrop-blur-xs border border-slate-700/80 rounded-xl px-3.5 sm:px-10 pt-5 pb-12 sm:py-12 shadow-xl">
               {/* Authority Kicker */}
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300 text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase mb-3 sm:mb-4">
-                <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Nursery & Primary School · Kamonyi</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300 text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase mb-2.5 sm:mb-4 max-w-full">
+                <GraduationCap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate">Nursery & Primary School · Kamonyi</span>
               </div>
 
               {/* Title */}
-              <h1 className="text-xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-snug sm:leading-tight mb-3 sm:mb-4">
+              <h1 className="text-lg sm:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-snug sm:leading-tight mb-2.5 sm:mb-4">
                 {settings.heroHeadline || defaultHeadline}
               </h1>
 
               {/* Subtitle / Description */}
-              <p className="text-xs sm:text-sm lg:text-base text-slate-200 max-w-2xl mx-auto font-normal leading-relaxed mb-5 sm:mb-6">
+              <p className="text-xs sm:text-sm lg:text-base text-slate-200 max-w-2xl mx-auto font-normal leading-relaxed mb-4 sm:mb-6">
                 {settings.heroTagline || defaultTagline}
               </p>
 
@@ -280,19 +280,21 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
             </div>
           </div>
 
-          {/* Left / Right Arrow Navigation */}
+          {/* Left / Right Arrow Navigation (Desktop/Tablet) */}
           {slides.length > 1 && (
             <>
               <button
+                type="button"
                 onClick={prevSlide}
-                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-2 rounded-md bg-slate-900/70 hover:bg-slate-900 text-white border border-slate-700 transition-colors cursor-pointer"
+                className="hidden sm:inline-flex items-center justify-center absolute left-4 top-1/2 -translate-y-1/2 z-20 p-2 rounded-md bg-slate-900/70 hover:bg-slate-900 text-white border border-slate-700 transition-colors cursor-pointer"
                 aria-label="Previous Slide"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <button
+                type="button"
                 onClick={nextSlide}
-                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-2 rounded-md bg-slate-900/70 hover:bg-slate-900 text-white border border-slate-700 transition-colors cursor-pointer"
+                className="hidden sm:inline-flex items-center justify-center absolute right-4 top-1/2 -translate-y-1/2 z-20 p-2 rounded-md bg-slate-900/70 hover:bg-slate-900 text-white border border-slate-700 transition-colors cursor-pointer"
                 aria-label="Next Slide"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -301,9 +303,20 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
           )}
 
           {/* Bottom Slide Indicators */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700 text-xs text-slate-400">
+          <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-slate-900/85 px-2.5 sm:px-3 py-1 rounded-md border border-slate-700 text-xs text-slate-400">
+            {slides.length > 1 && (
+              <button
+                type="button"
+                onClick={prevSlide}
+                className="sm:hidden p-1 text-slate-300 hover:text-white cursor-pointer"
+                aria-label="Previous Slide"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            )}
             {slides.map((_, idx) => (
               <button
+                type="button"
                 key={idx}
                 onClick={() => setCurrentSlide(idx)}
                 className={`h-1.5 rounded-sm transition-all duration-300 cursor-pointer ${
@@ -312,17 +325,27 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
                 aria-label={`Go to slide ${idx + 1}`}
               />
             ))}
-            <span className="font-mono text-[10px] ml-1 text-slate-400">
+            <span className="font-mono tabular-nums text-[10px] ml-1 text-slate-400 whitespace-nowrap">
               0{currentSlide + 1} / 0{slides.length}
             </span>
+            {slides.length > 1 && (
+              <button
+                type="button"
+                onClick={nextSlide}
+                className="sm:hidden p-1 text-slate-300 hover:text-white cursor-pointer"
+                aria-label="Next Slide"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </section>
 
       {/* Admin Live Edit Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-xl max-w-3xl w-full p-6 sm:p-8 space-y-6 shadow-xl border border-slate-200 my-8 max-h-[90vh] overflow-y-auto text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-3xl w-full p-4 sm:p-8 space-y-5 shadow-xl border border-slate-200 my-4 sm:my-8 max-h-[92vh] overflow-y-auto text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 bg-blue-50 text-blue-900 rounded-md">

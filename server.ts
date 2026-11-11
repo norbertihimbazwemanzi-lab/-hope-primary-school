@@ -963,6 +963,11 @@ app.get('/api/gallery', (req, res) => {
 
 app.post('/api/gallery', (req, res) => {
   try {
+    if (Array.isArray(req.body?.items)) {
+      const nextItems = req.body.items;
+      saveServerGallery(nextItems);
+      return res.json({ success: true, items: nextItems });
+    }
     const item = req.body;
     if (!item || !item.title) {
       return res.status(400).json({ error: 'Item data with title is required' });
@@ -1016,11 +1021,23 @@ app.get('/api/staff', (req, res) => {
 });
 app.post('/api/staff', (req, res) => {
   try {
-    const items = req.body.items || req.body;
+    const items = Array.isArray(req.body?.items) ? req.body.items : Array.isArray(req.body) ? req.body : [];
     saveServerStaff(items);
     res.json({ success: true, items });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to save staff database' });
+  }
+});
+
+app.delete('/api/staff/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentItems = loadServerStaff() ?? [];
+    const updated = currentItems.filter((s: any) => s.id !== id);
+    saveServerStaff(updated);
+    return res.json({ success: true, items: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to delete staff member' });
   }
 });
 

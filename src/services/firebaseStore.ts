@@ -306,9 +306,7 @@ export const subscribeToSchoolGallery = (callback: (items: any[]) => void): Unsu
         snapshot.forEach((docSnap) => {
           items.push({ id: docSnap.id, ...docSnap.data() });
         });
-        if (items.length > 0) {
-          callback(items);
-        }
+        callback(items);
       },
       (err) => {
         console.warn('[Firebase Store] School gallery real-time listener notice:', err);

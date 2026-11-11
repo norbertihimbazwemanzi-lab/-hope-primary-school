@@ -47,6 +47,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [sessionUser, setSessionUser] = useState(getCurrentSessionUser());
   const [isEditingLeadershipModal, setIsEditingLeadershipModal] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [managerImgError, setManagerImgError] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
 
   // Form states for in-place leadership editing
@@ -80,6 +81,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     const handleUpdate = (e: any) => {
       const updated = e.detail || getWebsiteSettings();
       setSettings(updated);
+      setManagerImgError(false);
       setManagerPhotoUrl(updated.schoolManagerPhotoUrl || '');
       setManagerName(updated.schoolManagerName || 'HAKIZIMANA Protais');
       setManagerRole(updated.schoolManagerRole || 'School Manager & Administrative Head');
@@ -146,11 +148,23 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
+  const syncManagerShowcaseImage = (base: WebsiteSettings, nextPhotoUrl: string) => {
+    if (!Array.isArray(base.staffShowcase)) return undefined;
+    return base.staffShowcase.map((m) =>
+      m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
+        ? { ...m, imageUrl: nextPhotoUrl }
+        : m
+    );
+  };
+
   const handleSaveLeadership = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanUrl = managerPhotoUrl.trim();
+    const latest = getWebsiteSettings();
+    const updatedShowcase = syncManagerShowcaseImage(latest, cleanUrl);
     const updated: WebsiteSettings = {
-      ...settings,
-      schoolManagerPhotoUrl: managerPhotoUrl.trim(),
+      ...latest,
+      schoolManagerPhotoUrl: cleanUrl,
       schoolManagerName: managerName.trim(),
       schoolManagerRole: managerRole.trim(),
       schoolManagerAlt: managerAlt.trim(),
@@ -160,9 +174,11 @@ export const HomePage: React.FC<HomePageProps> = ({
       adminMessageParagraph2: messagePara2.trim(),
       adminMessageMotto: messageMotto.trim(),
       adminCommitments: commitments,
+      ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
     };
     saveWebsiteSettings(updated);
     setSettings(updated);
+    setManagerImgError(false);
     setSaveToast('Leadership message and School Manager image saved permanently!');
     setTimeout(() => {
       setSaveToast(null);
@@ -180,8 +196,8 @@ export const HomePage: React.FC<HomePageProps> = ({
       />
 
       {/* 2. Welcome from Leadership & Institutional Purpose */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-xl border border-slate-200 p-6 sm:p-10 lg:p-12 shadow-xs relative">
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-10 lg:p-12 shadow-xs relative">
           {/* Admin In-Place Quick Edit Button */}
           {isAdmin && (
             <div className="mb-6 flex justify-end">
@@ -200,7 +216,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Left Column: School Manager Leadership Card */}
             <div className="lg:col-span-5 space-y-4">
               <div className="relative rounded-lg overflow-hidden border border-slate-200 aspect-[4/3] bg-slate-100 shadow-2xs">
-                {settings.schoolManagerPhotoUrl ? (
+                {settings.schoolManagerPhotoUrl && !managerImgError ? (
                   <>
                     <img
                       src={settings.schoolManagerPhotoUrl}
@@ -209,18 +225,15 @@ export const HomePage: React.FC<HomePageProps> = ({
                         `${settings.schoolManagerName || 'School Manager'} - Mugina Hope Academy`
                       }
                       className="w-full h-full object-cover object-top"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
-                      }}
+                      onError={() => setManagerImgError(true)}
                     />
                     <div className="absolute bottom-0 inset-x-0 bg-slate-900/85 backdrop-blur-xs p-3 text-white text-xs border-t border-white/10">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="font-bold block">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="font-bold block truncate">
                             {settings.schoolManagerName || 'HAKIZIMANA Protais'}
                           </span>
-                          <span className="text-slate-300 text-[11px]">
+                          <span className="text-slate-300 text-[11px] block truncate">
                             {settings.schoolManagerRole || 'School Manager & Administrative Head'}
                           </span>
                         </div>
@@ -228,7 +241,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                           <button
                             type="button"
                             onClick={handleOpenEditModal}
-                            className="p-1.5 bg-white/20 hover:bg-white/30 text-white rounded-md transition-colors cursor-pointer"
+                            className="p-1.5 bg-white/20 hover:bg-white/30 text-white rounded-md transition-colors cursor-pointer shrink-0"
                             title="Edit Manager Photo & Details"
                           >
                             <Camera className="w-3.5 h-3.5" />
@@ -340,8 +353,8 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       {/* Modal: Edit Leadership & School Manager Information */}
       {isEditingLeadershipModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-blue-50 text-blue-900 rounded-lg">
@@ -375,14 +388,28 @@ export const HomePage: React.FC<HomePageProps> = ({
             <form onSubmit={handleSaveLeadership} className="space-y-4 text-xs">
               {/* Image Upload Block */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
                     School Manager Portrait Photo
                   </span>
                   {managerPhotoUrl && (
                     <button
                       type="button"
-                      onClick={() => setManagerPhotoUrl('')}
+                      onClick={() => {
+                        setManagerPhotoUrl('');
+                        const latest = getWebsiteSettings();
+                        const updatedShowcase = syncManagerShowcaseImage(latest, '');
+                        const clearedSettings: WebsiteSettings = {
+                          ...latest,
+                          schoolManagerPhotoUrl: '',
+                          ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
+                        };
+                        saveWebsiteSettings(clearedSettings);
+                        setSettings(clearedSettings);
+                        setManagerImgError(false);
+                        setSaveToast('School Manager photo removed permanently across all browsers.');
+                        setTimeout(() => setSaveToast(null), 2500);
+                      }}
                       className="cursor-pointer text-rose-600 hover:text-rose-800 font-semibold text-[11px] inline-flex items-center gap-1"
                     >
                       <Trash2 className="w-3 h-3" />

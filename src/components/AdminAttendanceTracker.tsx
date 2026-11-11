@@ -15,6 +15,7 @@ import {
 } from '../services/adminStore';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
 import { sendGmailMessage } from '../services/gmailService';
+import { BulkStudentImportModal } from './BulkStudentImportModal';
 import {
   Calendar,
   CheckCircle2,
@@ -177,6 +178,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
   // Quick Add Learner & Clear Confirmation State
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showAddLearnerModal, setShowAddLearnerModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [newLearnerData, setNewLearnerData] = useState({
     fullName: '',
     gradeCode: 'P1',
@@ -988,30 +990,30 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
         {/* Mode Switcher Tabs: 1. Click to Class Hub | 2. Chosen Class Roll Call */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl">
+          <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setViewMode('class-select')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+              className={`min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
                 viewMode === 'class-select'
                   ? 'bg-blue-800 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Layers className="w-4 h-4" />
+              <Layers className="w-4 h-4 shrink-0" />
               <span>1. Choose Class (All Grades)</span>
             </button>
 
             <button
               type="button"
               onClick={() => setViewMode('class-rollcall')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+              className={`min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
                 viewMode === 'class-rollcall'
                   ? 'bg-blue-800 text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Users className="w-4 h-4 text-amber-300" />
+              <Users className="w-4 h-4 text-amber-300 shrink-0" />
               <span>2. {currentGradeObj ? currentGradeObj.name : selectedGrade} Roll Call Form</span>
             </button>
           </div>
@@ -1118,7 +1120,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl text-xs font-bold">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl text-xs font-bold w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setClassSectionTab('ALL')}
@@ -1380,10 +1382,20 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                     }));
                     setShowAddLearnerModal(true);
                   }}
-                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[40px] px-3.5 py-2 bg-blue-700 hover:bg-blue-800 active:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4 text-amber-300" />
                   <span>+ Add Learner to {selectedGrade}</span>
+                </button>
+
+                {/* Import Word (.docx) or PDF (.pdf) Student List */}
+                <button
+                  type="button"
+                  onClick={() => setShowBulkImportModal(true)}
+                  className="min-h-[40px] px-3.5 py-2 bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <FileUp className="w-4 h-4 text-amber-300" />
+                  <span>Import Word (.docx) / PDF</span>
                 </button>
 
                 {/* Excel Upload Input */}
@@ -1515,20 +1527,31 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                     You can input learner names directly to this class or connect an Excel document to start taking roll call.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setNewLearnerData((prev) => ({
-                      ...prev,
-                      gradeCode: selectedGrade === 'ALL' ? 'P1' : selectedGrade,
-                    }));
-                    setShowAddLearnerModal(true);
-                  }}
-                  className="px-4 py-2 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-amber-300" />
-                  <span>+ Add First Learner to {selectedGrade}</span>
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewLearnerData((prev) => ({
+                        ...prev,
+                        gradeCode: selectedGrade === 'ALL' ? 'P1' : selectedGrade,
+                      }));
+                      setShowAddLearnerModal(true);
+                    }}
+                    className="min-h-[42px] px-4 py-2 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-amber-300" />
+                    <span>+ Add First Learner to {selectedGrade}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkImportModal(true)}
+                    className="min-h-[42px] px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <FileUp className="w-4 h-4 text-amber-300" />
+                    <span>Upload Word (.docx) / PDF List</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -1540,7 +1563,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                   return (
                     <div
                       key={student.id}
-                      className={`p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors ${
+                      className={`p-3.5 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-colors ${
                         currentStatus === 'Absent'
                           ? 'bg-rose-50/40 hover:bg-rose-50/70'
                           : currentStatus === 'Late'
@@ -1549,7 +1572,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                       }`}
                     >
                       {/* Index, Avatar, Student & Parent Info */}
-                      <div className="flex items-start gap-3 min-w-[290px]">
+                      <div className="flex items-start gap-3 min-w-0 w-full lg:w-auto lg:min-w-[290px]">
                         <span className="text-xs font-mono font-bold text-slate-400 mt-2.5 w-5 text-right shrink-0">
                           #{idx + 1}
                         </span>
@@ -1963,11 +1986,11 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
       {/* 4. MODAL: QUICK INPUT LEARNER NAME & ADD TO ATTENDANCE */}
       {/* ========================================================================= */}
       {showAddLearnerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-4 sm:p-7 shadow-2xl border border-slate-200 space-y-4 sm:space-y-5 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
@@ -1975,7 +1998,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                     Add Learner to Attendance Table
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Input learner name to take attendance immediately. Integrates with Excel rosters.
+                    Input learner name to take attendance immediately or upload a Word/PDF list.
                   </p>
                 </div>
               </div>
@@ -1987,6 +2010,21 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddLearnerModal(false);
+                setShowBulkImportModal(true);
+              }}
+              className="w-full min-h-[42px] px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 font-bold text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer"
+            >
+              <span className="flex items-center gap-2 text-left">
+                <FileUp className="w-4 h-4 text-indigo-700 shrink-0" />
+                <span>Adding a whole class? Import Word (.docx) or PDF (.pdf) List</span>
+              </span>
+              <span className="text-indigo-700 underline whitespace-nowrap shrink-0">Open Importer →</span>
+            </button>
 
             <form onSubmit={handleAddNewLearnerAndMark} className="space-y-4 text-xs">
               <div>
@@ -2003,7 +2041,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Grade / Class *
@@ -2142,6 +2180,41 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
           </div>
         </div>
       )}
+      <BulkStudentImportModal
+        isOpen={showBulkImportModal}
+        defaultGradeCode={selectedGrade === 'ALL' ? 'P1' : selectedGrade}
+        defaultAttendanceDate={selectedDate}
+        enrolledBy={sessionUser?.name || 'Attendance Tracker'}
+        onClose={() => setShowBulkImportModal(false)}
+        onImported={(created, importedGrade, attDate, markPresent) => {
+          setStudents(getEnrolledStudents());
+          if (selectedGrade !== 'ALL' && selectedGrade !== importedGrade) {
+            setSelectedGrade(importedGrade);
+          }
+          if (attDate && attDate !== selectedDate) {
+            setSelectedDate(attDate);
+          }
+          if (markPresent) {
+            setAttendanceState((prev) => {
+              const next = { ...prev };
+              created.forEach((st) => {
+                next[st.id] = {
+                  status: 'Present',
+                  notes: 'Imported from document list',
+                  dispatched: false,
+                };
+              });
+              return next;
+            });
+          }
+          setViewMode('class-rollcall');
+          setSuccessMessage(
+            `Successfully imported ${created.length} learners into ${importedGrade} and saved them to your student list and attendance tracker.`
+          );
+          setTimeout(() => setSuccessMessage(null), 6000);
+          if (onRecordSaved) onRecordSaved();
+        }}
+      />
     </div>
   );
 };

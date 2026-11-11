@@ -6,7 +6,7 @@ import {
   WebsiteSettings,
 } from '../services/adminStore';
 import { uploadSchoolAsset } from '../services/storageService';
-import { Edit3, Check, X, Plus, Trash2, Mail, Phone, Upload, Shield } from 'lucide-react';
+import { Edit3, Check, X, Plus, Trash2, Mail, Phone, Upload, Users, GraduationCap } from 'lucide-react';
 
 export interface StaffShowcaseMember {
   id: string;
@@ -38,17 +38,19 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
   const [staffList, setStaffList] = useState<StaffShowcaseMember[]>(settings.staffShowcase || []);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [uploadingStaffId, setUploadingStaffId] = useState<string | null>(null);
+  const [failedImageIds, setFailedImageIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const handleUpdate = (e: any) => {
       const updated = e.detail || getWebsiteSettings();
       setSettings(updated);
+      setFailedImageIds({});
       setStaffBadge(updated.staffBadge || 'FACULTY & LEADERSHIP');
       setStaffSubtitle(
         updated.staffSubtitle ||
           'Meet our dedicated team of educators and administrative leaders ensuring academic excellence and moral formation in Kamonyi District.'
       );
-      setStaffList(updated.staffShowcase || []);
+      setStaffList(Array.isArray(updated.staffShowcase) ? updated.staffShowcase : []);
     };
     window.addEventListener('mugina-settings-updated', handleUpdate);
     return () => window.removeEventListener('mugina-settings-updated', handleUpdate);
@@ -84,7 +86,7 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
       role: 'Class Teacher',
       email: 'staff@muginahopeschool.com',
       phone: '+250 788 000 000',
-      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+      imageUrl: '',
       order: staffList.length + 1,
     };
     setStaffList([...staffList, newMember]);
@@ -113,14 +115,19 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
 
   const handleSaveStaff = (e: React.FormEvent) => {
     e.preventDefault();
+    const managerEntry = staffList.find(
+      (m) => m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
+    );
     const updatedSettings: WebsiteSettings = {
       ...settings,
       staffBadge,
       staffSubtitle,
       staffShowcase: staffList,
+      ...(managerEntry !== undefined ? { schoolManagerPhotoUrl: managerEntry.imageUrl || '' } : {}),
     };
     saveWebsiteSettings(updatedSettings);
     setSettings(updatedSettings);
+    setFailedImageIds({});
     setSaveSuccessMsg('School staff directory saved permanently to database!');
     setTimeout(() => {
       setSaveSuccessMsg(null);
@@ -167,10 +174,34 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
     },
   ];
 
-  const currentMembers =
-    settings.staffShowcase && settings.staffShowcase.length > 0
-      ? settings.staffShowcase
-      : defaultShowcaseMembers;
+  const currentMembers = Array.isArray(settings.staffShowcase)
+    ? settings.staffShowcase
+    : defaultShowcaseMembers;
+
+  const resolveMemberPhoto = (member: StaffShowcaseMember): string => {
+    const rawUrl = (member.imageUrl || '').trim();
+    const isLegacyEnos = rawUrl === '/images/staff_enos_manager.png' || rawUrl.includes('enos');
+    const isManagerCard =
+      member.id === 'staff-lead-1' || member.role.toLowerCase().includes('manager');
+
+    if (isManagerCard) {
+      const mgrPhoto = (settings.schoolManagerPhotoUrl || '').trim();
+      if (mgrPhoto) return mgrPhoto;
+      if (rawUrl === '' || isLegacyEnos || rawUrl === '/images/hero_mugina_hope_campus_1791823254957.jpg') {
+        return '';
+      }
+    }
+    if (isLegacyEnos) return (settings.schoolManagerPhotoUrl || '').trim();
+    return rawUrl;
+  };
+
+  const getInitials = (name: string) =>
+    (name || 'ST')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() || '')
+      .join('') || 'ST';
 
   return (
     <section
@@ -181,22 +212,23 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
       {isAdmin && (
         <div className="max-w-6xl mx-auto mb-8">
           <div className="bg-slate-900 text-white rounded-lg p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-slate-800">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <span className="p-1.5 bg-blue-900 text-white rounded-md shrink-0">
                 <Edit3 className="w-4 h-4" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <span className="text-xs font-bold text-white block">
                   Staff Leadership Directory Editor
                 </span>
-                <span className="text-[11px] text-slate-400">
-                  Logged in as {sessionUser?.name || 'Administrator'}. Changes sync permanently to Firestore.
+                <span className="text-[11px] text-slate-400 block">
+                  Logged in as {sessionUser?.name || 'Administrator'}. Changes sync permanently across all browsers.
                 </span>
               </div>
             </div>
             <button
+              type="button"
               onClick={handleOpenEdit}
-              className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs rounded-md shadow-xs transition-colors self-end sm:self-auto"
+              className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs rounded-md shadow-xs transition-colors self-end sm:self-auto shrink-0"
             >
               <Edit3 className="w-3.5 h-3.5" />
               <span>Edit Staff Directory</span>
@@ -221,79 +253,110 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
         </div>
       )}
 
-      {/* 4 Clean Rectangular Cards - Professional Academic Directory Layout */}
+      {/* Staff Directory Cards or Empty State */}
       <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-          {currentMembers.map((member, index) => {
-            return (
-              <div
-                key={member.id || index}
-                className="bg-white rounded-lg border border-slate-200 shadow-xs hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col"
+        {currentMembers.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 p-8 sm:p-12 text-center space-y-2.5">
+            <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+              <Users className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-900">No Staff Directory Cards Published</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Staff profile cards added by the school administration will appear here.
+            </p>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenEdit}
+                className="cursor-pointer mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white text-xs font-semibold rounded-md"
               >
-                {/* Rectangular Portrait Photo */}
-                <div className="w-full aspect-[4/5] bg-slate-100 overflow-hidden relative border-b border-slate-100">
-                  <img
-                    src={
-                      ((member.name.toLowerCase().includes('protais') || member.name.toLowerCase().includes('enos') || member.role.toLowerCase().includes('manager')) && settings.schoolManagerPhotoUrl)
-                        ? settings.schoolManagerPhotoUrl
-                        : (member.imageUrl === '/images/staff_enos_manager.png' || member.imageUrl.includes('enos'))
-                        ? (settings.schoolManagerPhotoUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg')
-                        : member.imageUrl
-                    }
-                    alt={member.name}
-                    className="w-full h-full object-cover object-top"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
-                    }}
-                  />
-                </div>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Staff Profile</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+            {currentMembers.map((member, index) => {
+              const memberKey = member.id || `staff-${index}`;
+              const photoSrc = resolveMemberPhoto(member);
+              const showPhoto = Boolean(photoSrc) && !failedImageIds[memberKey];
 
-                {/* Card Body: Name & Role */}
-                <div className="p-4 sm:p-5 text-center flex-1 flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-base leading-snug tracking-tight mb-1">
-                      {member.name}
-                    </h3>
-                    <p className="text-xs font-medium text-blue-900 mb-2">
-                      {member.role}
-                    </p>
+              return (
+                <div
+                  key={memberKey}
+                  className="bg-white rounded-lg border border-slate-200 shadow-xs hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col"
+                >
+                  {/* Rectangular Portrait Photo or Dignified Monogram Placeholder */}
+                  <div className="w-full aspect-[4/5] bg-slate-100 overflow-hidden relative border-b border-slate-100">
+                    {showPhoto ? (
+                      <img
+                        src={photoSrc}
+                        alt={member.name}
+                        className="w-full h-full object-cover object-top"
+                        onError={() =>
+                          setFailedImageIds((prev) => ({ ...prev, [memberKey]: true }))
+                        }
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 via-blue-950 to-slate-900 text-white p-5 text-center space-y-2.5">
+                        <div className="w-16 h-16 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-lg font-bold tracking-wide text-amber-300">
+                          {getInitials(member.name)}
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-300 font-medium">
+                          <GraduationCap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span>Mugina Hope Faculty</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Contact Info */}
-                  {(member.email || member.phone) && (
-                    <div className="pt-3 border-t border-slate-100 space-y-1">
-                      {member.email && (
-                        <a
-                          href={`mailto:${member.email}`}
-                          className="text-[11px] text-slate-600 hover:text-blue-900 flex items-center justify-center gap-1.5 transition-colors truncate"
-                        >
-                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="truncate">{member.email}</span>
-                        </a>
-                      )}
-                      {member.phone && (
-                        <a
-                          href={`tel:${member.phone.replace(/\s+/g, '')}`}
-                          className="text-[11px] text-slate-600 hover:text-blue-900 flex items-center justify-center gap-1.5 transition-colors"
-                        >
-                          <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{member.phone}</span>
-                        </a>
-                      )}
+                  {/* Card Body: Name & Role */}
+                  <div className="p-4 sm:p-5 text-center flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base leading-snug tracking-tight mb-1">
+                        {member.name}
+                      </h3>
+                      <p className="text-xs font-medium text-blue-900 mb-2">
+                        {member.role}
+                      </p>
                     </div>
-                  )}
+
+                    {/* Contact Info */}
+                    {(member.email || member.phone) && (
+                      <div className="pt-3 border-t border-slate-100 space-y-1">
+                        {member.email && (
+                          <a
+                            href={`mailto:${member.email}`}
+                            className="text-[11px] text-slate-600 hover:text-blue-900 flex items-center justify-center gap-1.5 transition-colors truncate"
+                          >
+                            <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{member.email}</span>
+                          </a>
+                        )}
+                        {member.phone && (
+                          <a
+                            href={`tel:${member.phone.replace(/\s+/g, '')}`}
+                            className="text-[11px] text-slate-600 hover:text-blue-900 flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Phone className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{member.phone}</span>
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Admin Live Edit Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-xl max-w-3xl w-full p-6 sm:p-8 space-y-6 shadow-xl border border-slate-200 my-8 max-h-[90vh] overflow-y-auto text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-3xl w-full p-4 sm:p-8 space-y-5 shadow-xl border border-slate-200 my-4 sm:my-8 max-h-[92vh] overflow-y-auto text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 bg-blue-50 text-blue-900 rounded-md">
@@ -374,15 +437,15 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-700">Staff #{index + 1}</span>
-                        {staffList.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveStaffMember(index)}
-                            className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStaffMember(index)}
+                          className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer inline-flex items-center gap-1 text-[11px] font-semibold"
+                          title="Delete this staff card permanently"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -426,17 +489,18 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 pt-1">
-                        <div className="flex-1">
+                      <div className="flex flex-col sm:flex-row sm:items-end gap-2.5 pt-1">
+                        <div className="flex-1 min-w-0">
                           <label className="block text-[11px] text-slate-600 mb-1">Portrait Image URL</label>
                           <input
                             type="text"
                             value={member.imageUrl}
                             onChange={(e) => handleStaffChange(index, 'imageUrl', e.target.value)}
+                            placeholder="Cleared / Leave empty for initials avatar"
                             className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
                           />
                         </div>
-                        <div className="pt-5">
+                        <div className="flex flex-wrap items-center gap-2">
                           <label className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 px-2.5 py-1.5 rounded-md whitespace-nowrap">
                             <Upload className="w-3 h-3 text-slate-500" />
                             <span>{uploadingStaffId === member.id ? 'Uploading...' : 'Upload Photo'}</span>
@@ -448,6 +512,16 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
                               className="hidden"
                             />
                           </label>
+                          {member.imageUrl && (
+                            <button
+                              type="button"
+                              onClick={() => handleStaffChange(index, 'imageUrl', '')}
+                              className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-md whitespace-nowrap"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Clear Photo</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

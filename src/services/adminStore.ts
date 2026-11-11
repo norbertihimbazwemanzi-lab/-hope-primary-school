@@ -397,6 +397,10 @@ export interface WebsiteSettings {
     imageUrl: string;
     order?: number;
   }>;
+  deletedGalleryIds?: string[];
+  galleryInitialized?: boolean;
+  deletedStaffIds?: string[];
+  deletedStudentIds?: string[];
   updatedAt?: string;
 }
 
@@ -972,12 +976,122 @@ const initialGalleryWithCrest: FacilityItem[] = [
   ...FACILITIES_LIST,
 ];
 
+const DELETED_TRACKER_KEY = 'mugina_deleted_ids_v1';
+
+export interface DeletedTracker {
+  gallery: string[];
+  galleryInitialized: boolean;
+  staff: string[];
+  students: string[];
+}
+
+export const getDeletedTracker = (): DeletedTracker => {
+  try {
+    const raw = localStorage.getItem(DELETED_TRACKER_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        gallery: Array.isArray(parsed.gallery) ? parsed.gallery : [],
+        galleryInitialized: Boolean(parsed.galleryInitialized),
+        staff: Array.isArray(parsed.staff) ? parsed.staff : [],
+        students: Array.isArray(parsed.students) ? parsed.students : [],
+      };
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return { gallery: [], galleryInitialized: false, staff: [], students: [] };
+};
+
+export const updateDeletedTracker = (updater: (current: DeletedTracker) => DeletedTracker): DeletedTracker => {
+  const next = updater(getDeletedTracker());
+  const deduped: DeletedTracker = {
+    gallery: Array.from(new Set(next.gallery.filter(Boolean))),
+    galleryInitialized: Boolean(next.galleryInitialized),
+    staff: Array.from(new Set(next.staff.filter(Boolean))),
+    students: Array.from(new Set(next.students.filter(Boolean))),
+  };
+  try {
+    localStorage.setItem(DELETED_TRACKER_KEY, JSON.stringify(deduped));
+  } catch {
+    // ignore storage errors
+  }
+  return deduped;
+};
+
+const readDeletedSetsFromStores = () => {
+  const tracker = getDeletedTracker();
+  let settingsDeletedGallery: string[] = [];
+  let settingsDeletedStaff: string[] = [];
+  let settingsDeletedStudents: string[] = [];
+  let settingsGalleryInitialized = false;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.WEBSITE_SETTINGS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.deletedGalleryIds)) settingsDeletedGallery = parsed.deletedGalleryIds;
+      if (Array.isArray(parsed.deletedStaffIds)) settingsDeletedStaff = parsed.deletedStaffIds;
+      if (Array.isArray(parsed.deletedStudentIds)) settingsDeletedStudents = parsed.deletedStudentIds;
+      if (parsed.galleryInitialized) settingsGalleryInitialized = true;
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return {
+    gallery: new Set([...tracker.gallery, ...settingsDeletedGallery]),
+    galleryInitialized: tracker.galleryInitialized || settingsGalleryInitialized || localStorage.getItem(STORAGE_KEYS.GALLERY) !== null,
+    staff: new Set([...tracker.staff, ...settingsDeletedStaff]),
+    students: new Set([...tracker.students, ...settingsDeletedStudents]),
+  };
+};
+
+export const isGalleryInitialized = (): boolean => readDeletedSetsFromStores().galleryInitialized;
+
+export const filterGalleryAgainstTombstones = <T extends { id?: string }>(items: T[]): T[] => {
+  const { gallery } = readDeletedSetsFromStores();
+  return items.filter((item) => item && (!item.id || !gallery.has(item.id)));
+};
+
+export const filterStaffAgainstTombstones = <T extends { id?: string; username?: string }>(items: T[]): T[] => {
+  const { staff } = readDeletedSetsFromStores();
+  return items.filter((item) => {
+    if (!item) return false;
+    const uname = String(item.username || '').toLowerCase();
+    if (uname === 'norbertihimbazwemanzi@gmail.com' || uname === 'hopeprimaryschool') return true;
+    return !item.id || !staff.has(item.id);
+  });
+};
+
+export const filterStudentsAgainstTombstones = <T extends { id?: string }>(items: T[]): T[] => {
+  const { students } = readDeletedSetsFromStores();
+  return items.filter((item) => item && (!item.id || !students.has(item.id)));
+};
+
+export const syncTombstonesFromSettings = (settings: Partial<WebsiteSettings> | null | undefined) => {
+  if (!settings) return;
+  updateDeletedTracker((cur) => ({
+    gallery: [
+      ...cur.gallery,
+      ...(Array.isArray(settings.deletedGalleryIds) ? settings.deletedGalleryIds : []),
+    ],
+    galleryInitialized: cur.galleryInitialized || Boolean(settings.galleryInitialized),
+    staff: [
+      ...cur.staff,
+      ...(Array.isArray(settings.deletedStaffIds) ? settings.deletedStaffIds : []),
+    ],
+    students: [
+      ...cur.students,
+      ...(Array.isArray(settings.deletedStudentIds) ? settings.deletedStudentIds : []),
+    ],
+  }));
+};
+
 // --- Staff Management ---
 export const getStaffMembers = (): StaffMember[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.STAFF);
     if (raw) {
-      const parsed: StaffMember[] = JSON.parse(raw);
+      const parsed: StaffMember[] = filterStaffAgainstTombstones(JSON.parse(raw));
       // Ensure requested Norbert admin and Headteacher accounts are present with exact credentials
       const hasNorbert = parsed.some(
         (s) => s.username === 'norbertihimbazwemanzi@gmail.com' && s.password === '@0798744704'
@@ -1003,7 +1117,7 @@ export const getStaffMembers = (): StaffMember[] => {
   } catch (e) {
     console.error(e);
   }
-  return defaultStaff;
+  return filterStaffAgainstTombstones(defaultStaff);
 };
 
 const dispatchStoreEvent = (eventName: string, detail?: any) => {
@@ -1118,10 +1232,23 @@ export const updateStaffMember = (id: string, updates: Partial<StaffMember>): St
 };
 
 export const deleteStaffMember = (id: string): StaffMember[] => {
+  const tracker = updateDeletedTracker((cur) => ({
+    ...cur,
+    staff: [...cur.staff, id],
+  }));
+  const currentSettings = getWebsiteSettings();
+  saveWebsiteSettings({
+    ...currentSettings,
+    deletedStaffIds: Array.from(new Set([...(currentSettings.deletedStaffIds || []), ...tracker.staff, id])),
+  });
+
   const list = getStaffMembers();
   const updated = list.filter((s) => s.id !== id);
   localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
   persistToServer('/api/staff', { items: updated });
+  fetch(`/api/staff/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch((e) =>
+    console.warn('[Staff Delete] Server delete error:', e)
+  );
   deleteStaffMemberFromFirebase(id).catch((e) =>
     console.warn('[Staff Delete] Firebase Firestore error:', e)
   );
@@ -1148,9 +1275,10 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
     const authoritative = resolveAuthoritativeCloudArray<StaffMember>(sbStaff, fbStaff as StaffMember[], serverStaff);
 
     if (authoritative && authoritative.length > 0) {
+      const filteredAuth = filterStaffAgainstTombstones(authoritative);
       // Always guarantee primary master admin logins stay accessible even if pruned remotely
       const map = new Map<string, StaffMember>();
-      authoritative.forEach((s) => {
+      filteredAuth.forEach((s) => {
         if (s && s.username) map.set(s.username.toLowerCase(), s);
       });
       defaultStaff.slice(0, 2).forEach((coreAdmin) => {
@@ -1196,9 +1324,10 @@ export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
     );
 
     if (authoritative && authoritative.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(authoritative));
-      dispatchStoreEvent('mugina-students-updated', authoritative);
-      return authoritative;
+      const filtered = filterStudentsAgainstTombstones(authoritative);
+      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
+      dispatchStoreEvent('mugina-students-updated', filtered);
+      return filtered;
     }
 
     return getEnrolledStudents();
@@ -1214,22 +1343,23 @@ export const getEnrolledStudents = (): EnrolledStudent[] => {
     const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
     if (raw !== null) {
       const parsed: EnrolledStudent[] = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) return filterStudentsAgainstTombstones(parsed);
     }
   } catch (e) {
     console.error(e);
   }
-  return defaultStudents;
+  return filterStudentsAgainstTombstones(defaultStudents);
 };
 
 export const saveEnrolledStudents = (list: EnrolledStudent[]) => {
-  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
-  persistToServer('/api/students', { items: list });
-  Promise.all(list.map((st) => saveEnrolledStudentToFirebase(st))).catch(() => {});
-  saveEnrolledStudentsBatchToSupabase(list).catch((e) =>
+  const filtered = filterStudentsAgainstTombstones(list);
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
+  persistToServer('/api/students', { items: filtered });
+  Promise.all(filtered.map((st) => saveEnrolledStudentToFirebase(st))).catch(() => {});
+  saveEnrolledStudentsBatchToSupabase(filtered).catch((e) =>
     console.warn('Supabase student batch sync notice:', e)
   );
-  dispatchStoreEvent('mugina-students-updated', list);
+  dispatchStoreEvent('mugina-students-updated', filtered);
 };
 
 export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enrolledAt'>): EnrolledStudent => {
@@ -1252,6 +1382,32 @@ export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enroll
   return newStudent;
 };
 
+export const enrollStudentsBatchByDOS = (
+  studentsInput: Array<Omit<EnrolledStudent, 'id' | 'enrolledAt'>>
+): EnrolledStudent[] => {
+  const list = getEnrolledStudents();
+  const baseTs = Date.now();
+  const today = new Date().toISOString().split('T')[0];
+
+  const created: EnrolledStudent[] = studentsInput.map((st, idx) => ({
+    ...st,
+    id: `stu-${baseTs}-${idx}`,
+    enrolledAt: today,
+  }));
+
+  const updated = [...created, ...list];
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+  persistToServer('/api/students', { items: updated });
+  Promise.all(created.map((st) => saveEnrolledStudentToFirebase(st))).catch((e) =>
+    console.warn('Firebase batch student sync notice:', e)
+  );
+  saveEnrolledStudentsBatchToSupabase(created).catch((e) =>
+    console.warn('Supabase batch student sync notice:', e)
+  );
+  dispatchStoreEvent('mugina-students-updated', updated);
+  return created;
+};
+
 export const updateEnrolledStudent = (id: string, updates: Partial<EnrolledStudent>): EnrolledStudent[] => {
   const list = getEnrolledStudents();
   const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
@@ -1271,6 +1427,16 @@ export const updateEnrolledStudent = (id: string, updates: Partial<EnrolledStude
 };
 
 export const deleteEnrolledStudent = (id: string): EnrolledStudent[] => {
+  const tracker = updateDeletedTracker((cur) => ({
+    ...cur,
+    students: [...cur.students, id],
+  }));
+  const currentSettings = getWebsiteSettings();
+  saveWebsiteSettings({
+    ...currentSettings,
+    deletedStudentIds: Array.from(new Set([...(currentSettings.deletedStudentIds || []), ...tracker.students, id])),
+  });
+
   const list = getEnrolledStudents();
   const updated = list.filter((s) => s.id !== id);
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
@@ -1419,11 +1585,27 @@ export const getWebsiteSettings = (): WebsiteSettings => {
 };
 
 export const saveWebsiteSettings = (settings: WebsiteSettings) => {
+  const tracker = getDeletedTracker();
+  const mergedDeletedGallery = Array.from(
+    new Set([...tracker.gallery, ...(settings.deletedGalleryIds || [])].filter(Boolean))
+  );
+  const mergedDeletedStaff = Array.from(
+    new Set([...tracker.staff, ...(settings.deletedStaffIds || [])].filter(Boolean))
+  );
+  const mergedDeletedStudents = Array.from(
+    new Set([...tracker.students, ...(settings.deletedStudentIds || [])].filter(Boolean))
+  );
+
   const stampedSettings: WebsiteSettings = {
     ...settings,
+    deletedGalleryIds: mergedDeletedGallery,
+    galleryInitialized: Boolean(settings.galleryInitialized || tracker.galleryInitialized || localStorage.getItem(STORAGE_KEYS.GALLERY) !== null),
+    deletedStaffIds: mergedDeletedStaff,
+    deletedStudentIds: mergedDeletedStudents,
     updatedAt: new Date().toISOString(),
   };
 
+  syncTombstonesFromSettings(stampedSettings);
   localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(stampedSettings));
 
   // Sync official school logo to Firebase Firestore for cross-device visibility
@@ -1465,6 +1647,9 @@ export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | nul
         .catch(() => null),
     ]);
 
+    const localSettings = getWebsiteSettings();
+    const localMs = localSettings?.updatedAt ? Date.parse(localSettings.updatedAt) : 0;
+
     const candidates = [sbSettings, fbSettings, serverSettings].filter(Boolean);
     if (candidates.length > 0) {
       candidates.sort((a: any, b: any) => {
@@ -1472,7 +1657,34 @@ export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | nul
         const bMs = b?.updatedAt ? Date.parse(b.updatedAt) : 0;
         return (Number.isNaN(bMs) ? 0 : bMs) - (Number.isNaN(aMs) ? 0 : aMs);
       });
-      const freshest = { ...defaultWebsiteSettings, ...candidates[0] };
+
+      const remoteTop = candidates[0] as any;
+      const remoteMs = remoteTop?.updatedAt ? Date.parse(remoteTop.updatedAt) : 0;
+
+      // Never overwrite newer local settings (e.g. just-deleted headmaster photo) with stale/unstamped remote settings
+      if (!Number.isNaN(localMs) && localMs > 0 && (Number.isNaN(remoteMs) || remoteMs <= 0 || remoteMs < localMs)) {
+        return localSettings;
+      }
+
+      const mergedTombstoneGallery = Array.from(
+        new Set([...(localSettings.deletedGalleryIds || []), ...(remoteTop.deletedGalleryIds || [])])
+      );
+      const mergedTombstoneStaff = Array.from(
+        new Set([...(localSettings.deletedStaffIds || []), ...(remoteTop.deletedStaffIds || [])])
+      );
+      const mergedTombstoneStudents = Array.from(
+        new Set([...(localSettings.deletedStudentIds || []), ...(remoteTop.deletedStudentIds || [])])
+      );
+
+      const freshest: WebsiteSettings = {
+        ...defaultWebsiteSettings,
+        ...remoteTop,
+        deletedGalleryIds: mergedTombstoneGallery,
+        galleryInitialized: Boolean(remoteTop.galleryInitialized || localSettings.galleryInitialized),
+        deletedStaffIds: mergedTombstoneStaff,
+        deletedStudentIds: mergedTombstoneStudents,
+      };
+      syncTombstonesFromSettings(freshest);
       localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(freshest));
       dispatchStoreEvent('mugina-settings-updated', freshest);
       return freshest;
@@ -1484,37 +1696,44 @@ export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | nul
 };
 
 // --- School Gallery ---
+const normalizeGalleryItem = (item: FacilityItem): FacilityItem => {
+  if (item?.imageSrc && typeof item.imageSrc === 'string' && item.imageSrc.startsWith('/src/assets/images/')) {
+    const filename = item.imageSrc.replace('/src/assets/images/', '');
+    return { ...item, imageSrc: `/images/${filename}` };
+  }
+  return item;
+};
+
 export const getGalleryItems = (): FacilityItem[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.GALLERY);
     if (raw !== null) {
       const parsed: FacilityItem[] = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.map((item) => {
-          if (item?.imageSrc && typeof item.imageSrc === 'string' && item.imageSrc.startsWith('/src/assets/images/')) {
-            const filename = item.imageSrc.replace('/src/assets/images/', '');
-            return { ...item, imageSrc: `/images/${filename}` };
-          }
-          return item;
-        });
+        return filterGalleryAgainstTombstones(parsed).map(normalizeGalleryItem);
       }
+    }
+    if (isGalleryInitialized()) {
+      return [];
     }
   } catch (e) {
     console.error(e);
   }
-  return initialGalleryWithCrest;
+  return filterGalleryAgainstTombstones(initialGalleryWithCrest).map(normalizeGalleryItem);
 };
 
 export const saveGalleryItems = (items: FacilityItem[], syncRemote = false) => {
-  localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(items));
+  const filtered = filterGalleryAgainstTombstones(items).map(normalizeGalleryItem);
+  updateDeletedTracker((cur) => ({ ...cur, galleryInitialized: true }));
+  localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(filtered));
   if (syncRemote) {
-    items.forEach((item) => {
+    filtered.forEach((item) => {
       saveSchoolGalleryItemToFirebase(item).catch(() => {});
     });
-    saveGalleryBatchToSupabase(items).catch(() => {});
-    persistToServer('/api/gallery', { items });
+    saveGalleryBatchToSupabase(filtered).catch(() => {});
+    persistToServer('/api/gallery', { items: filtered });
   }
-  dispatchStoreEvent('mugina-gallery-updated', items);
+  dispatchStoreEvent('mugina-gallery-updated', filtered);
 };
 
 export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
@@ -1529,8 +1748,15 @@ export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
 
     const authoritative = resolveAuthoritativeCloudArray<FacilityItem>(sbItems, fbItems, serverItems);
     if (authoritative && authoritative.length > 0) {
-      saveGalleryItems(authoritative);
-      return authoritative;
+      const cleaned = filterGalleryAgainstTombstones(authoritative).map(normalizeGalleryItem);
+      saveGalleryItems(cleaned);
+      return cleaned;
+    }
+
+    if (isGalleryInitialized()) {
+      const empty: FacilityItem[] = [];
+      saveGalleryItems(empty);
+      return empty;
     }
   } catch (err) {
     console.warn('Could not sync gallery with server:', err);
@@ -1544,6 +1770,16 @@ export const addGalleryItem = (item: Omit<FacilityItem, 'id'>): FacilityItem => 
     ...item,
     id: `fac-${Date.now()}`,
   };
+  updateDeletedTracker((cur) => ({
+    ...cur,
+    galleryInitialized: true,
+    gallery: cur.gallery.filter((gId) => gId !== newItem.id),
+  }));
+  const currentSettings = getWebsiteSettings();
+  if (!currentSettings.galleryInitialized) {
+    saveWebsiteSettings({ ...currentSettings, galleryInitialized: true });
+  }
+
   const updated = [newItem, ...current];
   saveGalleryItems(updated);
 
@@ -1583,9 +1819,24 @@ export const updateGalleryItem = (id: string, updates: Partial<FacilityItem>): F
 };
 
 export const deleteGalleryItem = (id: string): FacilityItem[] => {
+  const tracker = updateDeletedTracker((cur) => ({
+    ...cur,
+    galleryInitialized: true,
+    gallery: [...cur.gallery, id],
+  }));
+
   const current = getGalleryItems();
   const updated = current.filter((i) => i.id !== id);
-  saveGalleryItems(updated);
+  localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(updated));
+  dispatchStoreEvent('mugina-gallery-updated', updated);
+
+  // Persist deletion tombstone & initialized flag to cross-browser website settings so ALL browsers drop removed seed/cloud images permanently
+  const currentSettings = getWebsiteSettings();
+  saveWebsiteSettings({
+    ...currentSettings,
+    galleryInitialized: true,
+    deletedGalleryIds: Array.from(new Set([...(currentSettings.deletedGalleryIds || []), ...tracker.gallery, id])),
+  });
 
   // Delete from Firebase Firestore
   deleteSchoolGalleryItemFromFirebase(id).catch((e) => console.warn('Firebase gallery delete error:', e));
@@ -1593,8 +1844,11 @@ export const deleteGalleryItem = (id: string): FacilityItem[] => {
   // Delete from Supabase PostgreSQL database
   deleteSchoolGalleryItemFromSupabase(id).catch((e) => console.warn('Supabase gallery delete notice:', e));
 
-  // Delete from server
-  fetch(`/api/gallery/${id}`, { method: 'DELETE' }).catch((e) => console.warn('Gallery delete error:', e));
+  // Delete from Express server store & sync updated array
+  fetch(`/api/gallery/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch((e) =>
+    console.warn('Gallery delete error:', e)
+  );
+  persistToServer('/api/gallery', { items: updated });
 
   return updated;
 };
@@ -2601,8 +2855,8 @@ export const syncServerDiscipline = async (): Promise<DisciplineRecord[]> => {
 // Global sync utility to pull latest database records on initial load from Supabase, Firebase & Express fallback
 export const syncAllStoresWithServerDatabase = async () => {
   try {
+    await syncServerWebsiteSettings().catch(() => null);
     await Promise.allSettled([
-      syncServerWebsiteSettings(),
       syncServerGalleryItems(),
       syncServerStaff(),
       syncServerStudents(),

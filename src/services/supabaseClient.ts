@@ -1876,6 +1876,37 @@ export const syncAllDataToSupabase = async (
       }
     };
 
+    // Purge remotely deleted (tombstoned) records before upserting
+    const deletedGalleryIds = Array.isArray(currentSettings?.deletedGalleryIds)
+      ? currentSettings.deletedGalleryIds.filter(Boolean)
+      : [];
+    const deletedStaffIds = Array.isArray(currentSettings?.deletedStaffIds)
+      ? currentSettings.deletedStaffIds.filter(Boolean)
+      : [];
+    const deletedStudentIds = Array.isArray(currentSettings?.deletedStudentIds)
+      ? currentSettings.deletedStudentIds.filter(Boolean)
+      : [];
+
+    if (deletedGalleryIds.length > 0) {
+      await client.from('school_gallery').delete().in('id', deletedGalleryIds).then(() => {}, () => {});
+    }
+    if (galleryItems.length === 0 && currentSettings?.galleryInitialized) {
+      const { data: existingGal } = await client.from('school_gallery').select('id');
+      if (Array.isArray(existingGal) && existingGal.length > 0) {
+        await client
+          .from('school_gallery')
+          .delete()
+          .in('id', existingGal.map((g: any) => g.id))
+          .then(() => {}, () => {});
+      }
+    }
+    if (deletedStaffIds.length > 0) {
+      await client.from('staff_members').delete().in('id', deletedStaffIds).then(() => {}, () => {});
+    }
+    if (deletedStudentIds.length > 0) {
+      await client.from('enrolled_students').delete().in('id', deletedStudentIds).then(() => {}, () => {});
+    }
+
     // Core Settings
     const { error: settingsErr } = await client.from('website_settings').upsert(
       { id: 'general', data: { ...currentSettings, updatedAt: new Date().toISOString() }, updated_at: new Date().toISOString() },

@@ -2,11 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { FacilityItem, PageId } from '../types';
 import { GalleryLightbox } from '../components/GalleryLightbox';
-import { getGalleryItems, syncServerGalleryItems, saveGalleryItems, getWebsiteSettings } from '../services/adminStore';
+import {
+  getGalleryItems,
+  syncServerGalleryItems,
+  saveGalleryItems,
+  getWebsiteSettings,
+  filterGalleryAgainstTombstones,
+  isGalleryInitialized,
+} from '../services/adminStore';
 import { fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
 import { fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
 import {
-  Sparkles,
   Trophy,
   Music,
   Heart,
@@ -14,8 +20,8 @@ import {
   Laptop,
   Flame,
   Maximize2,
-  ShieldCheck,
-  Check
+  Check,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface CampusLifePageProps {
@@ -37,7 +43,7 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
     // 1. Load initial cache
     setFacilities(getGalleryItems());
 
-    // 2. Sync from Firebase Firestore, Supabase & server so photos uploaded on any computer/device show here
+    // 2. Sync from Firebase Firestore, Supabase & server with tombstone filtering
     let isMounted = true;
     Promise.all([
       fetchSchoolGalleryFromFirebase(),
@@ -46,22 +52,25 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
     ]).then(([firestoreItems, supabaseItems, serverItems]) => {
       if (!isMounted) return;
       let authoritative: FacilityItem[] = [];
-      if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
-        authoritative = firestoreItems;
-      } else if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
+      if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
         authoritative = supabaseItems;
+      } else if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
+        authoritative = firestoreItems;
       } else if (Array.isArray(serverItems) && serverItems.length > 0) {
         authoritative = serverItems;
       }
-      if (authoritative.length > 0) {
-        setFacilities(authoritative);
-        saveGalleryItems(authoritative);
+      const cleaned = filterGalleryAgainstTombstones(authoritative);
+      if (cleaned.length > 0 || isGalleryInitialized()) {
+        setFacilities(cleaned);
+        saveGalleryItems(cleaned);
       }
     }).catch((err) => console.warn('Gallery sync notice:', err));
 
     const galleryHandler = (e: any) => {
       if (Array.isArray(e.detail)) {
-        setFacilities(e.detail);
+        setFacilities(filterGalleryAgainstTombstones(e.detail));
+      } else {
+        setFacilities(getGalleryItems());
       }
     };
     window.addEventListener('mugina-gallery-updated', galleryHandler);
@@ -145,13 +154,13 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
 
       {/* 2. Traditional Rwandan Culture & Itorero Spotlight */}
       <div className="bg-slate-900 text-white rounded-xl overflow-hidden border border-slate-800 shadow-sm grid grid-cols-1 lg:grid-cols-2">
-        <div className="p-8 sm:p-10 flex flex-col justify-between space-y-6">
+        <div className="p-5 sm:p-10 flex flex-col justify-between space-y-6">
           <div className="space-y-3">
             <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Flame className="w-4 h-4" />
+              <Flame className="w-4 h-4 shrink-0" />
               Rwandan Cultural Heritage (Umuco w&apos;u Rwanda)
             </span>
-            <h2 className="text-2xl sm:text-3xl font-bold font-display text-white">
+            <h2 className="text-xl sm:text-3xl font-bold font-display text-white">
               Itorero ry&apos;Abato: Traditional Dance & Drumming
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
@@ -172,18 +181,19 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
               </div>
             </div>
           </div>
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-300">
+          <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
             <span>Open to both Nursery & Primary learners</span>
             <button
+              type="button"
               onClick={onOpenTour}
-              className="text-white bg-blue-700 hover:bg-blue-600 font-bold px-4 py-2 rounded-lg transition-colors shadow-xs"
+              className="cursor-pointer text-white bg-blue-700 hover:bg-blue-600 font-bold px-4 py-2 rounded-lg transition-colors shadow-xs whitespace-nowrap"
             >
               Experience a Session
             </button>
           </div>
         </div>
 
-        <div className="relative min-h-[300px] lg:min-h-full">
+        <div className="relative min-h-[260px] sm:min-h-[300px] lg:min-h-full">
           <img
             src={getWebsiteSettings().culturalDancePhotoUrl || SCHOOL_INFO.images.culturalDance}
             alt={getWebsiteSettings().culturalDanceAlt || "Mugina Hope Academy children performing traditional Rwandan cultural dance"}
@@ -193,9 +203,6 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
               if (!target.dataset.triedBackup) {
                 target.dataset.triedBackup = '1';
                 target.src = '/images/campus_life_traditional_dance_1791823290926.jpg';
-              } else if (!target.dataset.triedFallback) {
-                target.dataset.triedFallback = '1';
-                target.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80';
               }
             }}
             className="w-full h-full object-cover"
@@ -268,10 +275,11 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-lg w-full sm:w-auto">
             <button
+              type="button"
               onClick={() => setActiveCategory('all')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 activeCategory === 'all'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -280,8 +288,9 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
               All Spaces
             </button>
             <button
+              type="button"
               onClick={() => setActiveCategory('classrooms')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 activeCategory === 'classrooms'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -290,8 +299,9 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
               Classrooms
             </button>
             <button
+              type="button"
               onClick={() => setActiveCategory('technology')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 activeCategory === 'technology'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -300,8 +310,9 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
               ICT Lab
             </button>
             <button
+              type="button"
               onClick={() => setActiveCategory('culture')}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                 activeCategory === 'culture'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -312,59 +323,73 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
           </div>
         </div>
 
-        {/* Gallery Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredFacilities.map((fac) => (
-            <div
-              key={fac.id}
-              onClick={() => setSelectedFacility(fac)}
-              className="group cursor-pointer bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col"
-            >
-              <div className="relative h-56 bg-slate-100 overflow-hidden">
-                <img
-                  src={fac.imageSrc}
-                  alt={fac.altText || fac.title}
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    if (target.src.includes('/src/assets/images/')) {
-                      const filename = target.src.split('/').pop();
-                      target.src = `/images/${filename}`;
-                    } else {
-                      target.src =
-                        'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
-                    }
-                  }}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-4">
-                  <span className="text-xs text-white font-medium flex items-center gap-1">
-                    <Maximize2 className="w-3.5 h-3.5" /> View Photo
-                  </span>
-                  <span className="text-[11px] text-amber-300 capitalize font-mono">
-                    {fac.category}
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-5 flex-1 flex flex-col justify-between space-y-2">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 font-display group-hover:text-blue-700 transition-colors">
-                    {fac.title}
-                  </h3>
-                  <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
-                    {fac.description}
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Mugina Campus, Kamonyi</span>
-                  <span className="text-blue-700 font-semibold">Inspect →</span>
-                </div>
-              </div>
+        {/* Gallery Grid / Empty State */}
+        {filteredFacilities.length === 0 ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 sm:p-12 text-center space-y-2.5">
+            <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center mx-auto">
+              <ImageIcon className="w-6 h-6" />
             </div>
-          ))}
-        </div>
+            <h3 className="text-sm font-bold text-slate-900">No Gallery Photos Available</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              {activeCategory === 'all'
+                ? 'School gallery photos uploaded by the administrator will appear here immediately.'
+                : 'No photos found in this category right now. Try selecting "All Spaces".'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredFacilities.map((fac) => (
+              <div
+                key={fac.id}
+                onClick={() => setSelectedFacility(fac)}
+                className="group cursor-pointer bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col"
+              >
+                <div className="relative h-56 bg-slate-100 overflow-hidden">
+                  <img
+                    src={fac.imageSrc}
+                    alt={fac.altText || fac.title}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (target.src.includes('/src/assets/images/')) {
+                        const filename = target.src.split('/').pop();
+                        target.src = `/images/${filename}`;
+                      } else if (!target.dataset.triedFallback) {
+                        target.dataset.triedFallback = '1';
+                        target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+                      }
+                    }}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-4">
+                    <span className="text-xs text-white font-medium flex items-center gap-1">
+                      <Maximize2 className="w-3.5 h-3.5" /> View Photo
+                    </span>
+                    <span className="text-[11px] text-amber-300 capitalize font-mono">
+                      {fac.category}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-5 flex-1 flex flex-col justify-between space-y-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 font-display group-hover:text-blue-700 transition-colors">
+                      {fac.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                      {fac.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Mugina Campus, Kamonyi</span>
+                    <span className="text-blue-700 font-semibold">Inspect →</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Lightbox Modal */}

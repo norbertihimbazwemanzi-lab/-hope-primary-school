@@ -23,6 +23,8 @@ import {
   addGalleryItem,
   updateGalleryItem,
   deleteGalleryItem,
+  filterGalleryAgainstTombstones,
+  isGalleryInitialized,
   saveStaffMembers,
   saveEnrolledStudents,
   syncServerGalleryItems,
@@ -97,6 +99,7 @@ import { RegistrarPortal } from '../components/RegistrarPortal';
 import { TeacherAttendanceTracker } from '../components/TeacherAttendanceTracker';
 import { DODDisciplinePortal } from '../components/DODDisciplinePortal';
 import { PrincipalQueueModal } from '../components/PrincipalQueueModal';
+import { BulkStudentImportModal } from '../components/BulkStudentImportModal';
 import {
   Shield,
   Lock,
@@ -148,6 +151,7 @@ import {
   FileDown,
   FolderArchive,
   HardDrive,
+  FileUp,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -352,6 +356,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
   // Student Enrollment Form Modal (DOS objective)
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
+  const [showBulkStudentModal, setShowBulkStudentModal] = useState(false);
   const [studentFormData, setStudentFormData] = useState({
     regNumber: `MHA-2026-${Math.floor(100 + Math.random() * 900)}`,
     fullName: '',
@@ -474,8 +479,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         } else if (Array.isArray(serverItems) && serverItems.length > 0) {
           authoritative = serverItems;
         }
-        if (authoritative.length > 0) {
-          setGalleryItems(authoritative);
+        const cleaned = filterGalleryAgainstTombstones(authoritative);
+        if (cleaned.length > 0 || isGalleryInitialized()) {
+          saveGalleryItems(cleaned);
+          setGalleryItems(cleaned);
           if (onGalleryUpdated) onGalleryUpdated();
         }
       })
@@ -2036,9 +2043,9 @@ END $$;`;
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8">
       {/* Top Banner with Active Staff Persona */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <SchoolLogo size="md" />
           <div>
@@ -2487,38 +2494,48 @@ END $$;`;
       {/* ========================================================================= */}
       {activeTab === 'students' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-bold text-slate-900 font-display">
-                  Student Enrollment & Credentials Portal
+                  Student Enrollment &amp; Credentials Portal
                 </h2>
                 <span className="text-[11px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
                   DOS Objective
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Enroll students, generate their unique Registration ID, and issue their personal login credentials
+                Enroll students individually or import an entire class roster from Word (.docx) or PDF (.pdf)
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+              <div className="relative flex-1 sm:flex-initial">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
                   placeholder="Search student or ID..."
                   value={studentSearchQuery}
                   onChange={(e) => setStudentSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                  className="w-full sm:w-56 min-h-[42px] pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
                 />
               </div>
 
               <button
-                onClick={() => setShowAddStudentModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-colors"
+                type="button"
+                onClick={() => setShowBulkStudentModal(true)}
+                className="min-h-[42px] inline-flex items-center gap-2 px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
+                <FileUp className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Import Word / PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowAddStudentModal(true)}
+                className="min-h-[42px] inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
                 <span>Enroll Student</span>
               </button>
             </div>
@@ -3379,6 +3396,29 @@ END $$;`;
           </div>
 
           {/* Gallery Items Grid */}
+          {galleryItems.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-slate-200 p-10 text-center space-y-3 shadow-2xs">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                <ImageIcon className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900">Gallery Is Empty</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Deleted photos remain permanently removed across page refreshes and visitor browsers until you upload new campus images.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingImageItem(null);
+                  setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', altText: '', imageSrc: '' });
+                  setShowAddImageModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-sm transition-colors"
+              >
+                <UploadCloud className="w-4 h-4 text-amber-400" />
+                <span>Upload First School Image</span>
+              </button>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {galleryItems.map((item) => (
               <div
@@ -3396,9 +3436,9 @@ END $$;`;
                         if (target.src.includes('/src/assets/images/')) {
                           const filename = target.src.split('/').pop();
                           target.src = `/images/${filename}`;
-                        } else {
-                          target.src =
-                            'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+                        } else if (!target.dataset.triedFallback) {
+                          target.dataset.triedFallback = '1';
+                          target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
                         }
                       }}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
@@ -3464,6 +3504,7 @@ END $$;`;
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -4214,7 +4255,24 @@ END $$;`;
                   {websiteSettings.schoolManagerPhotoUrl && (
                     <button
                       type="button"
-                      onClick={() => setWebsiteSettings({ ...websiteSettings, schoolManagerPhotoUrl: '' })}
+                      onClick={() => {
+                        const updatedShowcase = Array.isArray(websiteSettings.staffShowcase)
+                          ? websiteSettings.staffShowcase.map((m) =>
+                              m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
+                                ? { ...m, imageUrl: '' }
+                                : m
+                            )
+                          : websiteSettings.staffShowcase;
+                        const updated = {
+                          ...websiteSettings,
+                          schoolManagerPhotoUrl: '',
+                          ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
+                        };
+                        setWebsiteSettings(updated);
+                        saveWebsiteSettings(updated);
+                        setWebsiteSettingsSuccess(true);
+                        setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
+                      }}
                       className="cursor-pointer text-rose-600 hover:text-rose-800 text-xs font-semibold inline-flex items-center gap-1"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -4231,8 +4289,7 @@ END $$;`;
                         alt="School Manager Portrait"
                         className="w-28 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
                         onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
+                          (e.target as HTMLImageElement).style.display = 'none';
                         }}
                       />
                     ) : (
@@ -4257,10 +4314,24 @@ END $$;`;
                           if (file) {
                             try {
                               const uploadRes = await uploadSchoolAsset(file, 'school_manager_portrait', 'branding');
-                              setWebsiteSettings((prev) => ({
-                                ...prev,
-                                schoolManagerPhotoUrl: uploadRes.url,
-                              }));
+                              setWebsiteSettings((prev) => {
+                                const updatedShowcase = Array.isArray(prev.staffShowcase)
+                                  ? prev.staffShowcase.map((m) =>
+                                      m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
+                                        ? { ...m, imageUrl: uploadRes.url }
+                                        : m
+                                    )
+                                  : prev.staffShowcase;
+                                const updated = {
+                                  ...prev,
+                                  schoolManagerPhotoUrl: uploadRes.url,
+                                  ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
+                                };
+                                saveWebsiteSettings(updated);
+                                return updated;
+                              });
+                              setWebsiteSettingsSuccess(true);
+                              setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                             } catch (err) {
                               console.warn('School manager image upload error:', err);
                             }
@@ -4422,26 +4493,50 @@ END $$;`;
 
               {/* Sub-section A: Principal Portrait & Welcome Message (Screenshot 1) */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h4 className="font-bold text-slate-800 uppercase tracking-wider text-xs">
-                    Head of School Letter & Portrait
+                    Head of School Letter &amp; Portrait
                   </h4>
-                  <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">
-                    Official Message Card
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {websiteSettings.aboutPrincipalPhotoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = { ...websiteSettings, aboutPrincipalPhotoUrl: '' };
+                          setWebsiteSettings(updated);
+                          saveWebsiteSettings(updated);
+                          setWebsiteSettingsSuccess(true);
+                          setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
+                        }}
+                        className="cursor-pointer text-rose-600 hover:text-rose-800 text-xs font-semibold inline-flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove / Clear Image</span>
+                      </button>
+                    )}
+                    <span className="text-[10px] text-blue-700 font-bold bg-blue-100 px-2 py-0.5 rounded-full">
+                      Official Message Card
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
                   <div className="md:col-span-3 flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 text-center">
-                    <img
-                      src={websiteSettings.aboutPrincipalPhotoUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg'}
-                      alt="Head of School Portrait"
-                      className="w-24 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
-                      }}
-                    />
+                    {websiteSettings.aboutPrincipalPhotoUrl ? (
+                      <img
+                        src={websiteSettings.aboutPrincipalPhotoUrl}
+                        alt="Head of School Portrait"
+                        className="w-24 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-24 h-28 rounded-xl bg-slate-100 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 p-2">
+                        <GraduationCap className="w-8 h-8 text-slate-300 mb-1" />
+                        <span className="text-[10px] text-center leading-tight">No Image Set</span>
+                      </div>
+                    )}
                     <span className="text-[10px] text-slate-500 font-bold mt-2">Active Portrait</span>
                   </div>
 
@@ -4458,10 +4553,16 @@ END $$;`;
                           if (file) {
                             try {
                               const uploadRes = await uploadSchoolAsset(file, 'principal_headmaster_portrait', 'branding');
-                              setWebsiteSettings((prev) => ({
-                                ...prev,
-                                aboutPrincipalPhotoUrl: uploadRes.url,
-                              }));
+                              setWebsiteSettings((prev) => {
+                                const updated = {
+                                  ...prev,
+                                  aboutPrincipalPhotoUrl: uploadRes.url,
+                                };
+                                saveWebsiteSettings(updated);
+                                return updated;
+                              });
+                              setWebsiteSettingsSuccess(true);
+                              setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                             } catch (err) {
                               console.warn('Principal portrait upload error:', err);
                             }
@@ -4699,7 +4800,7 @@ END $$;`;
                       role: 'Teacher / Staff',
                       email: 'staff@muginahopeschool.com',
                       phone: '+250 788 000 000',
-                      imageUrl: '/images/hero_mugina_hope_campus_1791823254957.jpg',
+                      imageUrl: '',
                       order: current.length + 1,
                     };
                     setWebsiteSettings({
@@ -4727,8 +4828,12 @@ END $$;`;
                       <button
                         type="button"
                         onClick={() => {
-                          const updated = (websiteSettings.staffShowcase || []).filter((_, i) => i !== sIdx);
-                          setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                          const updatedShowcase = (websiteSettings.staffShowcase || []).filter((_, i) => i !== sIdx);
+                          const updated = { ...websiteSettings, staffShowcase: updatedShowcase };
+                          setWebsiteSettings(updated);
+                          saveWebsiteSettings(updated);
+                          setWebsiteSettingsSuccess(true);
+                          setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                         }}
                         className="cursor-pointer text-rose-600 hover:text-rose-800 text-xs font-semibold inline-flex items-center gap-1"
                       >
@@ -4797,18 +4902,23 @@ END $$;`;
 
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center text-xs">
                       <div className="sm:col-span-2 flex items-center gap-2">
-                        <img
-                          src={staff.imageUrl}
-                          alt={staff.name}
-                          className="w-10 h-10 rounded-full object-cover border-2 border-[#003380]"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = '/public/assets/aistudio/esr_cd160bb9.PNG';
-                          }}
-                        />
+                        {staff.imageUrl ? (
+                          <img
+                            src={staff.imageUrl}
+                            alt={staff.name}
+                            className="w-10 h-10 rounded-full object-cover border-2 border-[#003380]"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-blue-950 text-amber-300 font-bold text-xs flex items-center justify-center border-2 border-slate-300 shrink-0">
+                            {(staff.name || 'ST').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <span className="text-[11px] text-slate-500 font-medium">Avatar</span>
                       </div>
-                      <div className="sm:col-span-5">
+                      <div className="sm:col-span-4">
                         <input
                           type="file"
                           accept="image/*"
@@ -4817,9 +4927,18 @@ END $$;`;
                             if (file) {
                               try {
                                 const uploadRes = await uploadSchoolAsset(file, `staff_${staff.id}`, 'branding');
-                                const updated = [...(websiteSettings.staffShowcase || [])];
-                                updated[sIdx] = { ...updated[sIdx], imageUrl: uploadRes.url };
-                                setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
+                                const updatedShowcase = [...(websiteSettings.staffShowcase || [])];
+                                updatedShowcase[sIdx] = { ...updatedShowcase[sIdx], imageUrl: uploadRes.url };
+                                const isMgr = updatedShowcase[sIdx]?.id === 'staff-lead-1' || updatedShowcase[sIdx]?.role?.toLowerCase().includes('manager');
+                                const updated = {
+                                  ...websiteSettings,
+                                  staffShowcase: updatedShowcase,
+                                  ...(isMgr ? { schoolManagerPhotoUrl: uploadRes.url } : {}),
+                                };
+                                setWebsiteSettings(updated);
+                                saveWebsiteSettings(updated);
+                                setWebsiteSettingsSuccess(true);
+                                setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                               } catch (err) {
                                 console.warn('Upload error:', err);
                               }
@@ -4828,7 +4947,7 @@ END $$;`;
                           className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs cursor-pointer"
                         />
                       </div>
-                      <div className="sm:col-span-5">
+                      <div className="sm:col-span-4">
                         <input
                           type="text"
                           value={staff.imageUrl}
@@ -4837,9 +4956,34 @@ END $$;`;
                             updated[sIdx] = { ...updated[sIdx], imageUrl: e.target.value };
                             setWebsiteSettings({ ...websiteSettings, staffShowcase: updated });
                           }}
-                          placeholder="e.g. /images/staff_jean_headteacher.png"
+                          placeholder="Cleared / Image URL"
                           className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs"
                         />
+                      </div>
+                      <div className="sm:col-span-2 flex justify-end">
+                        {staff.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updatedShowcase = [...(websiteSettings.staffShowcase || [])];
+                              const isMgr = updatedShowcase[sIdx]?.id === 'staff-lead-1' || updatedShowcase[sIdx]?.role?.toLowerCase().includes('manager');
+                              updatedShowcase[sIdx] = { ...updatedShowcase[sIdx], imageUrl: '' };
+                              const updated = {
+                                ...websiteSettings,
+                                staffShowcase: updatedShowcase,
+                                ...(isMgr ? { schoolManagerPhotoUrl: '' } : {}),
+                              };
+                              setWebsiteSettings(updated);
+                              saveWebsiteSettings(updated);
+                              setWebsiteSettingsSuccess(true);
+                              setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
+                            }}
+                            className="cursor-pointer text-rose-600 hover:text-rose-800 text-[11px] font-semibold inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Clear Photo</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -5247,8 +5391,8 @@ END $$;`;
 
       {/* Modal: Add Staff Member */}
       {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900">
                 {editingStaffMember
@@ -5285,7 +5429,7 @@ END $$;`;
                   className="w-full bg-slate-50 border p-2.5 rounded-xl"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Role *</label>
                   <select
@@ -5400,11 +5544,11 @@ END $$;`;
 
       {/* Modal: Enroll Student by DOS */}
       {showAddStudentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
-                <h3 className="font-bold text-slate-900">DOS Student Enrollment & Credentials Creation</h3>
+                <h3 className="font-bold text-slate-900">DOS Student Enrollment &amp; Credentials Creation</h3>
                 <p className="text-[11px] text-slate-500">Assign learner to class and create their chosen portal credentials</p>
               </div>
               <button
@@ -5418,6 +5562,23 @@ END $$;`;
                 ✕
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddStudentModal(false);
+                setStudentFormError(null);
+                setShowBulkStudentModal(true);
+              }}
+              className="w-full min-h-[42px] px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 font-bold text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer"
+            >
+              <span className="flex items-center gap-2 text-left">
+                <FileUp className="w-4 h-4 text-blue-700 shrink-0" />
+                <span>Have a Word (.docx) or PDF (.pdf) student list?</span>
+              </span>
+              <span className="text-blue-700 underline whitespace-nowrap shrink-0">Import Table →</span>
+            </button>
+
             <form onSubmit={handleSaveStudent} className="space-y-3 text-xs">
               {studentFormError && (
                 <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
@@ -5425,7 +5586,7 @@ END $$;`;
                   <span>{studentFormError}</span>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Registration ID *</label>
                   <input
@@ -5462,7 +5623,7 @@ END $$;`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Parent Name</label>
                   <input
@@ -5486,7 +5647,7 @@ END $$;`;
               </div>
 
               <div>
-                <label className="font-bold block mb-1">Parent Email (Receives Attendance & Grade Notices)</label>
+                <label className="font-bold block mb-1">Parent Email (Receives Attendance &amp; Grade Notices)</label>
                 <input
                   type="email"
                   placeholder="parent@gmail.com"
@@ -5498,7 +5659,7 @@ END $$;`;
 
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
                 <span className="font-bold text-amber-900 block">Student Portal Login Credentials:</span>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-amber-800">Student Username:</label>
                     <input
@@ -5574,7 +5735,7 @@ END $$;`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Student Portal Username *</label>
                   <input
@@ -5783,7 +5944,7 @@ END $$;`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Badge Tag</label>
                   <input
@@ -5880,7 +6041,7 @@ END $$;`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Applicable Grades</label>
                   <select
@@ -6107,6 +6268,22 @@ END $$;`;
           </button>
         </div>
       )}
+      {/* Bulk Student List Import Modal (.docx / .pdf) */}
+      <BulkStudentImportModal
+        isOpen={showBulkStudentModal}
+        defaultGradeCode={studentFormData.gradeCode || 'P1'}
+        defaultAttendanceDate={attendanceDate}
+        enrolledBy={currentUser?.name || 'DOS'}
+        onClose={() => setShowBulkStudentModal(false)}
+        onImported={(created, importedGrade) => {
+          setStudentList(getEnrolledStudents());
+          setShowBulkStudentModal(false);
+          setDeleteSuccessMsg(
+            `Enrolled ${created.length} learners into ${importedGrade} and synchronized with the Attendance Tracker.`
+          );
+          setTimeout(() => setDeleteSuccessMsg(null), 5000);
+        }}
+      />
     </div>
   );
 };

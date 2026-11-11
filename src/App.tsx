@@ -25,10 +25,18 @@ import {
   syncServerStaff,
   syncServerStudents,
   getStaffMembers,
+  getEnrolledStudents,
+  getGalleryItems,
   syncAllStoresWithServerDatabase,
+  syncServerWebsiteSettings,
   syncCurrentSessionUserFromFirestore,
   setCurrentSessionUser,
   getCurrentSessionUser,
+  syncTombstonesFromSettings,
+  filterGalleryAgainstTombstones,
+  filterStaffAgainstTombstones,
+  filterStudentsAgainstTombstones,
+  isGalleryInitialized,
 } from './services/adminStore';
 import { initAuth, resolveStaffRoleForFirebaseUser } from './services/authService';
 import {
@@ -148,17 +156,48 @@ export default function App() {
       const current = getWebsiteSettings();
       const currentMs = current.updatedAt ? Date.parse(current.updatedAt) : 0;
       const liveMs = liveSettings.updatedAt ? Date.parse(liveSettings.updatedAt) : 0;
-      if (!Number.isNaN(currentMs) && currentMs > 0 && !Number.isNaN(liveMs) && liveMs > 0 && liveMs < currentMs) {
+      if (!Number.isNaN(currentMs) && currentMs > 0 && (!liveMs || Number.isNaN(liveMs) || liveMs < currentMs)) {
         return;
       }
-      const updated = { ...current, ...liveSettings };
+      const mergedDeletedGallery = Array.from(
+        new Set([...(current.deletedGalleryIds || []), ...(liveSettings.deletedGalleryIds || [])])
+      );
+      const mergedDeletedStaff = Array.from(
+        new Set([...(current.deletedStaffIds || []), ...(liveSettings.deletedStaffIds || [])])
+      );
+      const mergedDeletedStudents = Array.from(
+        new Set([...(current.deletedStudentIds || []), ...(liveSettings.deletedStudentIds || [])])
+      );
+      const updated = {
+        ...current,
+        ...liveSettings,
+        deletedGalleryIds: mergedDeletedGallery,
+        galleryInitialized: Boolean(liveSettings.galleryInitialized || current.galleryInitialized),
+        deletedStaffIds: mergedDeletedStaff,
+        deletedStudentIds: mergedDeletedStudents,
+      };
+      syncTombstonesFromSettings(updated);
       applyLocalMirror('mugina_website_settings_v3', 'mugina-settings-updated', updated);
+
+      // Re-filter local caches whenever updated tombstones arrive from another admin session
+      const filteredGallery = filterGalleryAgainstTombstones(getGalleryItems());
+      localStorage.setItem('mugina_gallery_items_v3', JSON.stringify(filteredGallery));
+      window.dispatchEvent(new CustomEvent('mugina-gallery-updated', { detail: filteredGallery }));
+
+      const filteredStaff = filterStaffAgainstTombstones(getStaffMembers());
+      localStorage.setItem('mugina_staff_members_v3', JSON.stringify(filteredStaff));
+      window.dispatchEvent(new CustomEvent('mugina-staff-updated', { detail: filteredStaff }));
+
+      const filteredStudents = filterStudentsAgainstTombstones(getEnrolledStudents());
+      localStorage.setItem('mugina_enrolled_students_v3', JSON.stringify(filteredStudents));
+      window.dispatchEvent(new CustomEvent('mugina-students-updated', { detail: filteredStudents }));
     };
 
     const applyLiveStaff = (liveStaff: any[]) => {
       if (!Array.isArray(liveStaff) || liveStaff.length === 0) return;
+      const filteredLive = filterStaffAgainstTombstones(liveStaff);
       const map = new Map<string, any>();
-      liveStaff.forEach((s) => {
+      filteredLive.forEach((s) => {
         if (s && s.username) map.set(String(s.username).toLowerCase(), s);
       });
       // Always preserve primary master admin logins even if omitted remotely
@@ -174,10 +213,21 @@ export default function App() {
 
     const applyLiveStudents = (liveStudents: any[]) => {
       if (!Array.isArray(liveStudents)) return;
-      applyLocalMirror('mugina_enrolled_students_v3', 'mugina-students-updated', liveStudents);
+      applyLocalMirror(
+        'mugina_enrolled_students_v3',
+        'mugina-students-updated',
+        filterStudentsAgainstTombstones(liveStudents)
+      );
     };
 
-    // Sync all databases and local stores on mount
+    // Sync settings (and deletion tombstones) first, then sync all stores
+    const settingsReady = syncServerWebsiteSettings()
+      .then((s) => {
+        if (s) syncTombstonesFromSettings(s);
+        return s;
+      })
+      .catch(() => null);
+
     syncAllStoresWithServerDatabase().catch((e) => console.warn('Global store sync notice:', e));
 
     // 1. School Logo Fallback Fetch & Real-time Subscription
@@ -214,12 +264,15 @@ export default function App() {
       return item;
     };
 
-    // 2. Gallery Sync (timestamp-aware between Supabase & Firebase) + Realtime
-    Promise.all([
-      syncServerGalleryItems(),
-      fetchSchoolGalleryFromFirebase(),
-      fetchSchoolGalleryFromSupabase(),
-    ])
+    // 2. Gallery Sync (tombstone- & timestamp-aware between Supabase & Firebase) + Realtime
+    settingsReady
+      .then(() =>
+        Promise.all([
+          syncServerGalleryItems(),
+          fetchSchoolGalleryFromFirebase(),
+          fetchSchoolGalleryFromSupabase(),
+        ])
+      )
       .then(([serverItems, firestoreItems, supabaseItems]) => {
         const hasFb = Array.isArray(firestoreItems) && firestoreItems.length > 0;
         const hasSb = Array.isArray(supabaseItems) && supabaseItems.length > 0;
@@ -235,23 +288,27 @@ export default function App() {
         } else if (Array.isArray(serverItems) && serverItems.length > 0) {
           authoritative = serverItems;
         }
-        if (authoritative.length > 0) {
-          saveGalleryItems(authoritative.map(sanitizeItem));
+        const cleaned = filterGalleryAgainstTombstones(authoritative).map(sanitizeItem);
+        if (cleaned.length > 0 || isGalleryInitialized()) {
+          saveGalleryItems(cleaned);
         }
       })
       .catch((e) => console.warn('Gallery sync notice:', e));
 
     let fbGallerySeen = false;
     const unsubGallery = subscribeToSchoolGallery((liveItems) => {
-      if (Array.isArray(liveItems) && (liveItems.length > 0 || fbGallerySeen)) {
+      if (Array.isArray(liveItems) && (liveItems.length > 0 || fbGallerySeen || isGalleryInitialized())) {
         if (liveItems.length > 0) fbGallerySeen = true;
-        saveGalleryItems(liveItems.map(sanitizeItem));
+        saveGalleryItems(filterGalleryAgainstTombstones(liveItems).map(sanitizeItem));
       }
     });
 
     const unsubSupabaseGallery = subscribeToSupabaseGallery((liveItems) => {
       if (Array.isArray(liveItems)) {
-        saveGalleryItems(liveItems.map(sanitizeItem));
+        const cleaned = filterGalleryAgainstTombstones(liveItems).map(sanitizeItem);
+        if (cleaned.length > 0 || isGalleryInitialized()) {
+          saveGalleryItems(cleaned);
+        }
       }
     });
 

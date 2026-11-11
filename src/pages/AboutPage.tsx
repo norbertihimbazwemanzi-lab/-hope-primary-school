@@ -20,6 +20,7 @@ import {
   Star,
   CheckCircle2,
   Lock,
+  Trash2,
 } from 'lucide-react';
 import {
   getWebsiteSettings,
@@ -48,6 +49,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingCharter, setIsUploadingCharter] = useState(false);
+  const [principalImgError, setPrincipalImgError] = useState(false);
   const [missionPointsText, setMissionPointsText] = useState(
     (settings.aboutMissionPoints || []).join('\n')
   );
@@ -57,6 +59,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
     const handleUpdate = (e: any) => {
       const updated = e.detail || getWebsiteSettings();
       setSettings(updated);
+      setPrincipalImgError(false);
       setEditFormData(updated);
       setMissionPointsText((updated.aboutMissionPoints || []).join('\n'));
     };
@@ -277,19 +280,35 @@ export const AboutPage: React.FC<AboutPageProps> = ({
       {/* 3. Message from the Head of School & Leadership */}
       <section className="bg-white rounded-xl border border-slate-200 p-6 sm:p-10 shadow-xs">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
-          {/* Left Column: Portrait Photo */}
+          {/* Left Column: Portrait Photo or Dignified Placeholder */}
           <div className="md:col-span-5 flex justify-center">
             <div className="max-w-xs w-full">
               <div className="w-full h-80 sm:h-96 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shadow-xs">
-                <img
-                  src={settings.aboutPrincipalPhotoUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg'}
-                  alt={settings.aboutPrincipalName || 'Head of School'}
-                  className="w-full h-full object-cover object-top"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
-                  }}
-                />
+                {settings.aboutPrincipalPhotoUrl && !principalImgError ? (
+                  <img
+                    src={settings.aboutPrincipalPhotoUrl}
+                    alt={settings.aboutPrincipalName || 'Head of School'}
+                    className="w-full h-full object-cover object-top"
+                    onError={() => setPrincipalImgError(true)}
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white p-6 text-center space-y-3">
+                    <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-amber-400">
+                      <GraduationCap className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-amber-300 block">
+                        Office of the Head of School
+                      </span>
+                      <span className="text-base font-bold text-white block mt-1">
+                        {settings.aboutPrincipalName || 'Norbert Ihimbazwe Manzi'}
+                      </span>
+                      <span className="text-xs text-slate-300 block mt-0.5">
+                        Mugina Hope Academy
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="mt-2.5 text-center md:text-left">
                 <span className="text-sm font-bold text-slate-900 block">
@@ -478,8 +497,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({
 
       {/* Admin In-Place Edit Modal */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-xl border border-slate-200 my-8 text-slate-900">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-4 sm:p-8 space-y-5 shadow-xl border border-slate-200 my-4 sm:my-8 max-h-[92vh] overflow-y-auto text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <span className="p-1.5 bg-blue-50 text-blue-900 rounded-md">
@@ -527,10 +546,24 @@ export const AboutPage: React.FC<AboutPageProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Principal Portrait Photo
-                </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Principal Portrait Photo
+                  </label>
+                  {editFormData.aboutPrincipalPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditFormData((prev) => ({ ...prev, aboutPrincipalPhotoUrl: '' }))
+                      }
+                      className="cursor-pointer text-rose-600 hover:text-rose-800 font-semibold text-[11px] inline-flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove Photo</span>
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <input
                     type="text"
                     value={editFormData.aboutPrincipalPhotoUrl || ''}
@@ -538,9 +571,9 @@ export const AboutPage: React.FC<AboutPageProps> = ({
                       setEditFormData((prev) => ({ ...prev, aboutPrincipalPhotoUrl: e.target.value }))
                     }
                     className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
-                    placeholder="Image URL..."
+                    placeholder="Image URL (or leave empty for placeholder)..."
                   />
-                  <label className="cursor-pointer px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-medium rounded-md flex items-center gap-1 shrink-0">
+                  <label className="cursor-pointer px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-xs font-medium rounded-md inline-flex items-center justify-center gap-1 shrink-0">
                     <Upload className="w-3.5 h-3.5" />
                     <span>{isUploadingPhoto ? 'Uploading...' : 'Upload'}</span>
                     <input
