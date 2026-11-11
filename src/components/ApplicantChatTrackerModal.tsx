@@ -16,7 +16,15 @@ import {
   ExternalLink,
   RefreshCw,
 } from 'lucide-react';
-import { getApplications, AdminApplication } from '../services/adminStore';
+import { getApplications, syncServerApplications, AdminApplication } from '../services/adminStore';
+import {
+  fetchApplicantChatByRefFromSupabase,
+  appendApplicantChatMessageToSupabase,
+} from '../services/supabaseClient';
+import {
+  fetchApplicantChatByRefFromFirebase,
+  saveApplicantChatToFirebase,
+} from '../services/firebaseStore';
 
 interface ApplicantChatTrackerModalProps {
   isOpen: boolean;
@@ -53,10 +61,12 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
   const [activeRefCode, setActiveRefCode] = useState(initialRefCode);
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [localApp, setLocalApp] = useState<AdminApplication | null>(null);
+  const [recentApps, setRecentApps] = useState<AdminApplication[]>(() => getApplications());
   const [messageText, setMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Sync initialRefCode if prop changes
   useEffect(() => {
@@ -66,38 +76,74 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
     }
   }, [initialRefCode]);
 
-  // Load thread from backend API and local store
-  const fetchThreadData = async (ref: string) => {
+  // Refresh recent applications from cloud when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      syncServerApplications()
+        .then((apps) => setRecentApps(apps))
+        .catch(() => setRecentApps(getApplications()));
+    }
+  }, [isOpen]);
+
+  // Load thread from Supabase, Firebase, Backend API, and synced applications
+  const fetchThreadData = async (ref: string, silent = false) => {
     if (!ref.trim()) return;
-    setIsLoading(true);
-    setSearchError('');
+    if (!silent) {
+      setIsLoading(true);
+      setSearchError('');
+    }
 
-    const cleanRef = ref.trim().toUpperCase();
+    const cleanInput = ref.trim();
+    const cleanRef = cleanInput.toUpperCase();
 
-    // Check local applications store
-    const apps = getApplications();
-    const foundLocal = apps.find(
-      (a) => a.refCode.toUpperCase() === cleanRef || (a.parentEmail && a.parentEmail.toLowerCase() === ref.trim().toLowerCase())
+    const [apiRes, sbRes, fbRes, syncedAppsRes] = await Promise.allSettled([
+      fetch(`/api/chats/${encodeURIComponent(cleanRef)}`).then(async (res) =>
+        res.ok ? (await res.json()).thread : null
+      ),
+      fetchApplicantChatByRefFromSupabase(cleanInput),
+      fetchApplicantChatByRefFromFirebase(cleanInput),
+      syncServerApplications(),
+    ]);
+
+    const allApps =
+      syncedAppsRes.status === 'fulfilled' && Array.isArray(syncedAppsRes.value)
+        ? syncedAppsRes.value
+        : getApplications();
+    setRecentApps(allApps);
+
+    const foundLocal = allApps.find(
+      (a) =>
+        a.refCode.toUpperCase() === cleanRef ||
+        (a.parentEmail && a.parentEmail.toLowerCase() === cleanInput.toLowerCase())
     );
     if (foundLocal) {
       setLocalApp(foundLocal);
     }
 
-    try {
-      const res = await fetch(`/api/chats/${encodeURIComponent(cleanRef)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.thread) {
-          setThread(data.thread);
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch {
-      // API fallback
+    const candidates: ChatThread[] = [
+      sbRes.status === 'fulfilled' ? sbRes.value : null,
+      fbRes.status === 'fulfilled' ? fbRes.value : null,
+      apiRes.status === 'fulfilled' ? apiRes.value : null,
+    ].filter(Boolean) as ChatThread[];
+
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        const msgDiff = (b.messages?.length || 0) - (a.messages?.length || 0);
+        if (msgDiff !== 0) return msgDiff;
+        const bMs = Date.parse(b.updatedAt || '') || 0;
+        const aMs = Date.parse(a.updatedAt || '') || 0;
+        return bMs - aMs;
+      });
+      const best = candidates[0];
+      setThread({
+        ...best,
+        status: (foundLocal?.status || best.status) as ChatThread['status'],
+      });
+      setIsLoading(false);
+      return;
     }
 
-    // Fallback synthesis if found in local storage
+    // Fallback synthesis if found in synced applications
     if (foundLocal) {
       setThread({
         refCode: foundLocal.refCode,
@@ -120,7 +166,7 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
         ],
         updatedAt: foundLocal.createdAt,
       });
-    } else {
+    } else if (!silent) {
       setSearchError('No application found with that reference code or email. Please check your reference code.');
       setThread(null);
     }
@@ -131,6 +177,15 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
     if (isOpen && activeRefCode) {
       fetchThreadData(activeRefCode);
     }
+  }, [isOpen, activeRefCode]);
+
+  // Silent 12-second cloud polling while thread is open
+  useEffect(() => {
+    if (!isOpen || !activeRefCode) return;
+    const interval = setInterval(() => {
+      fetchThreadData(activeRefCode, true);
+    }, 12000);
+    return () => clearInterval(interval);
   }, [isOpen, activeRefCode]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -145,36 +200,60 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
     if (!messageText.trim() || !thread) return;
 
     setIsSending(true);
+    setSendError(null);
     const textToSend = messageText.trim();
     setMessageText('');
 
-    try {
-      const res = await fetch(`/api/chats/${encodeURIComponent(thread.refCode)}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: 'parent',
-          senderName: thread.parentName || 'Applicant Parent',
-          text: textToSend,
-        }),
-      });
+    const msgToSave: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      sender: 'parent',
+      senderName: thread.parentName || 'Applicant Parent',
+      text: textToSend,
+      createdAt: new Date().toISOString(),
+    };
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.message) {
-          setThread((prev) => (prev ? { ...prev, messages: [...prev.messages, data.message] } : null));
-        }
+    const updatedThread: ChatThread = {
+      ...thread,
+      messages: [...thread.messages, msgToSave],
+      updatedAt: msgToSave.createdAt,
+    };
+
+    // Optimistic append so user sees message instantly
+    setThread(updatedThread);
+
+    try {
+      const results = await Promise.allSettled([
+        appendApplicantChatMessageToSupabase(thread.refCode, msgToSave, {
+          studentName: thread.studentName,
+          parentName: thread.parentName,
+          parentEmail: thread.parentEmail,
+          parentPhone: thread.parentPhone,
+          gradeCode: thread.gradeCode,
+          status: thread.status,
+        }),
+        saveApplicantChatToFirebase(updatedThread),
+        fetch(`/api/chats/${encodeURIComponent(thread.refCode)}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: 'parent',
+            senderName: msgToSave.senderName,
+            text: textToSend,
+          }),
+        }).then((r) => {
+          if (!r.ok) throw new Error('API write failed');
+          return true;
+        }),
+      ]);
+
+      const anySuccess = results.some(
+        (r) => r.status === 'fulfilled' && r.value !== false && r.value !== null
+      );
+      if (!anySuccess) {
+        setSendError('Message shown locally, but cloud delivery failed. Please check your connection and try again.');
       }
     } catch {
-      // Local optimistic append
-      const optMsg: ChatMessage = {
-        id: `opt-${Date.now()}`,
-        sender: 'parent',
-        senderName: thread.parentName || 'Applicant Parent',
-        text: textToSend,
-        createdAt: new Date().toISOString(),
-      };
-      setThread((prev) => (prev ? { ...prev, messages: [...prev.messages, optMsg] } : null));
+      setSendError('Message shown locally, but cloud delivery encountered a network issue.');
     } finally {
       setIsSending(false);
     }
@@ -398,7 +477,7 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
                   Or select your application from recent records:
                 </span>
                 <div className="space-y-1.5">
-                  {getApplications().slice(0, 5).map((app) => (
+                  {recentApps.slice(0, 5).map((app) => (
                     <button
                       key={app.refCode}
                       type="button"
@@ -429,11 +508,20 @@ export const ApplicantChatTrackerModal: React.FC<ApplicantChatTrackerModalProps>
         {/* Message Input Footer (when thread is loaded) */}
         {thread && (
           <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+            {sendError && (
+              <p className="text-xs text-rose-600 mb-2 font-medium flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{sendError}</span>
+              </p>
+            )}
             <form onSubmit={handleSendMessage} className="flex gap-2">
               <input
                 type="text"
                 value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
+                onChange={(e) => {
+                  setMessageText(e.target.value);
+                  if (sendError) setSendError(null);
+                }}
                 placeholder="Type a message or question to Administrator Norbert..."
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600"
               />

@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StaffMember,
   TeacherAttendanceRecord,
   getCurrentSessionUser,
+  getTeacherAttendanceRecords,
+  saveTeacherAttendanceBatch,
 } from '../services/adminStore';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
 import {
@@ -28,37 +30,6 @@ interface TeacherAttendanceTrackerProps {
   staffList: StaffMember[];
 }
 
-const LOCAL_TEACHER_ATT_KEY = 'mugina_teacher_attendance_v3';
-
-const defaultTeacherAttendanceSeed: TeacherAttendanceRecord[] = [
-  {
-    id: 't-att-1',
-    date: new Date().toISOString().split('T')[0],
-    staffId: 'staff-teacher-1',
-    teacherName: 'Marie Claire Mukamana',
-    assignedSubjectOrGrade: 'Primary 1 • Literacy & Numeracy',
-    status: 'Present',
-    arrivalCheckInTime: '06:55 AM',
-    markedBy: 'Jean Damascene (DOS)',
-    topicsCovered: 'Phonics reading syllables & single-digit addition',
-    dutySignature: 'M.Claire (Signed)',
-    notes: 'Arrived early; morning assembly line conductor.',
-  },
-  {
-    id: 't-att-2',
-    date: new Date().toISOString().split('T')[0],
-    staffId: 'staff-teacher-2',
-    teacherName: 'Emmanuel Habimana',
-    assignedSubjectOrGrade: 'Primary 4 • STEM & Science',
-    status: 'Present',
-    arrivalCheckInTime: '07:10 AM',
-    markedBy: 'Jean Damascene (DOS)',
-    topicsCovered: 'Plant reproduction & seed germination experiment',
-    dutySignature: 'E.Habimana (Signed)',
-    notes: 'Science laboratory apparatus cleaned & stored.',
-  },
-];
-
 export const TeacherAttendanceTracker: React.FC<TeacherAttendanceTrackerProps> = ({ staffList }) => {
   const sessionUser = getCurrentSessionUser();
 
@@ -69,30 +40,8 @@ export const TeacherAttendanceTracker: React.FC<TeacherAttendanceTrackerProps> =
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // Load records
-  const [records, setRecords] = useState<TeacherAttendanceRecord[]>(() => {
-    try {
-      const raw = localStorage.getItem(LOCAL_TEACHER_ATT_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {
-      console.warn('Error reading teacher attendance records:', e);
-    }
-    return defaultTeacherAttendanceSeed;
-  });
-
-  const saveRecords = (updated: TeacherAttendanceRecord[]) => {
-    setRecords(updated);
-    try {
-      localStorage.setItem(LOCAL_TEACHER_ATT_KEY, JSON.stringify(updated));
-      fetch('/api/teacher-attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: updated }),
-      }).catch((e) => console.warn('Teacher attendance sync note:', e));
-    } catch (e) {
-      console.error('Error saving teacher attendance:', e);
-    }
-  };
+  // Load records from centralized dual-cloud store
+  const [records, setRecords] = useState<TeacherAttendanceRecord[]>(() => getTeacherAttendanceRecords());
 
   // State for daily roll-call map
   const [dailyMap, setDailyMap] = useState<
@@ -107,10 +56,32 @@ export const TeacherAttendanceTracker: React.FC<TeacherAttendanceTrackerProps> =
     >
   >({});
 
-  // Sync daily map when date changes
-  useMemo(() => {
+  // Subscribe to cloud updates
+  useEffect(() => {
+    const syncHandler = (e: Event) => {
+      const detail = (e as CustomEvent<TeacherAttendanceRecord[]>).detail;
+      if (Array.isArray(detail)) {
+        setRecords(detail);
+      } else {
+        setRecords(getTeacherAttendanceRecords());
+      }
+    };
+    window.addEventListener('mugina-teacher-attendance-updated', syncHandler);
+    return () => window.removeEventListener('mugina-teacher-attendance-updated', syncHandler);
+  }, []);
+
+  // Sync daily map when date, teachers, or records change
+  useEffect(() => {
     const existing = records.filter((r) => r.date === selectedDate);
-    const map: Record<string, any> = {};
+    const map: Record<
+      string,
+      {
+        status: TeacherAttendanceRecord['status'];
+        arrivalTime: string;
+        topicsCovered: string;
+        notes: string;
+      }
+    > = {};
 
     teachers.forEach((t) => {
       const match = existing.find((r) => r.staffId === t.id);
@@ -138,7 +109,6 @@ export const TeacherAttendanceTracker: React.FC<TeacherAttendanceTrackerProps> =
 
   // Save Today's Teacher Roll Call
   const handleSaveBatch = () => {
-    const now = new Date().toISOString();
     const dosName = sessionUser?.name || 'Director of Studies (DOS)';
 
     const newEntries: TeacherAttendanceRecord[] = teachers.map((t) => {
@@ -164,10 +134,9 @@ export const TeacherAttendanceTracker: React.FC<TeacherAttendanceTrackerProps> =
       };
     });
 
-    const otherDates = records.filter((r) => r.date !== selectedDate);
-    const updated = [...newEntries, ...otherDates];
-    saveRecords(updated);
-    setSuccessMsg(`Teacher attendance for ${selectedDate} successfully saved to school database!`);
+    saveTeacherAttendanceBatch(newEntries);
+    setRecords(getTeacherAttendanceRecords());
+    setSuccessMsg(`Teacher attendance for ${selectedDate} successfully saved to school cloud database!`);
     setTimeout(() => setSuccessMsg(null), 4000);
   };
 

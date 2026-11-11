@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   PaymentTransaction,
   EnrolledStudent,
@@ -56,6 +56,26 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
   const [term, setTerm] = useState<'Term 1' | 'Term 2' | 'Term 3'>('Term 1');
   const [academicYear, setAcademicYear] = useState('2026');
   const [successReceipt, setSuccessReceipt] = useState<PaymentTransaction | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncHandler = (e: Event) => {
+      const detail = (e as CustomEvent<PaymentTransaction[]>).detail;
+      if (Array.isArray(detail)) {
+        setTransactions(detail);
+      } else {
+        setTransactions(getPaymentTransactions());
+      }
+    };
+    window.addEventListener('mugina-payments-updated', syncHandler);
+    return () => window.removeEventListener('mugina-payments-updated', syncHandler);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedStudent && students.length > 0) {
+      setSelectedStudent(students[0]);
+    }
+  }, [students, selectedStudent]);
 
   // Ledger Filters
   const [ledgerSearch, setLedgerSearch] = useState('');
@@ -125,9 +145,10 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
   // Handle Submit Payment
   const handleRecordPayment = (e: React.FormEvent) => {
     e.preventDefault();
+    setBillingError(null);
     if (!selectedStudent) return;
-    if (amount <= 0) {
-      alert('Please enter a valid payment amount.');
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      setBillingError('Please enter a valid payment amount greater than 0 RWF.');
       return;
     }
 
@@ -545,6 +566,13 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
                     />
                   </div>
                 </div>
+
+                {billingError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{billingError}</span>
+                  </div>
+                )}
 
                 {/* Submit Payment Button */}
                 <button

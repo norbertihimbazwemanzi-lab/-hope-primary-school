@@ -14,21 +14,17 @@ import { ApplicationModal } from './components/ApplicationModal';
 import { CampusTourModal } from './components/CampusTourModal';
 import { PrintableApplicationModal } from './components/PrintableApplicationModal';
 import { ApplicantChatTrackerModal } from './components/ApplicantChatTrackerModal';
-import { ArrowUp, Megaphone, X } from 'lucide-react';
-import { SCHOOL_INFO } from './data/schoolData';
+import { ArrowUp } from 'lucide-react';
 import {
   getAnnouncements,
-  getGalleryItems,
-  saveGalleryItems,
   getWebsiteSettings,
-  saveWebsiteSettings,
+  saveGalleryItems,
   syncServerGalleryItems,
   syncServerDocuments,
   saveAnnouncements,
   syncServerStaff,
   syncServerStudents,
   getStaffMembers,
-  getEnrolledStudents,
   syncAllStoresWithServerDatabase,
   syncCurrentSessionUserFromFirestore,
   setCurrentSessionUser,
@@ -48,13 +44,27 @@ import {
   subscribeToWebsiteSettings,
   subscribeToStaffMembers,
   subscribeToEnrolledStudents,
+  subscribeToPaymentTransactions,
+  subscribeToApplications,
+  subscribeToDisciplineRecords,
+  subscribeToInquiries,
 } from './services/firebaseStore';
 import {
   fetchWebsiteSettingsFromSupabase,
   fetchSchoolGalleryFromSupabase,
-  fetchStaffMembersFromSupabase,
   subscribeToSupabaseWebsiteSettings,
   subscribeToSupabaseGallery,
+  subscribeToSupabaseStaffMembers,
+  subscribeToSupabaseEnrolledStudents,
+  subscribeToSupabasePayments,
+  subscribeToSupabaseApplications,
+  subscribeToSupabaseAttendance,
+  subscribeToSupabaseTeacherAttendance,
+  subscribeToSupabaseDiscipline,
+  subscribeToSupabaseAnnouncements,
+  subscribeToSupabaseDocuments,
+  subscribeToSupabaseInquiries,
+  subscribeToSupabaseTourBookings,
 } from './services/supabaseClient';
 
 export default function App() {
@@ -98,11 +108,10 @@ export default function App() {
       unsubAuth();
     };
   }, []);
-  const [activeAnnouncement, setActiveAnnouncement] = useState(() => {
+  const [, setActiveAnnouncement] = useState(() => {
     const list = getAnnouncements();
     return list.find((a) => a.isActive) || null;
   });
-  const [announcementDismissed, setAnnouncementDismissed] = useState(false);
 
   // Monitor scroll for back to top button
   useEffect(() => {
@@ -116,33 +125,84 @@ export default function App() {
   // Multi-Device Real-Time Sync & Public Data Ingestion
   // Ensures all public visitors (unauthenticated) and authenticated users see identical data across devices
   useEffect(() => {
-    // Sync all databases and local stores with server database
-    syncAllStoresWithServerDatabase().catch((e) => console.warn('Global store sync notice:', e));
+    const applyLocalMirror = (storageKey: string, eventName: string, data: any) => {
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      window.dispatchEvent(new CustomEvent(eventName, { detail: data }));
+    };
 
-    // 1. Initial Logo Fetch & Real-time Subscription
-    fetchSchoolLogoFromFirebase().then((firebaseLogoUrl) => {
-      if (firebaseLogoUrl) {
-        const settings = getWebsiteSettings();
-        if (settings.schoolLogoUrl !== firebaseLogoUrl) {
-          const updated = { ...settings, schoolLogoUrl: firebaseLogoUrl };
-          localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
-          window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+    const getMaxTimestampMs = (items: any[] | null | undefined): number => {
+      if (!Array.isArray(items) || items.length === 0) return 0;
+      let maxMs = 0;
+      for (const item of items) {
+        const raw = item?.updatedAt || item?.updated_at || item?.recordedAt;
+        if (raw) {
+          const ms = Date.parse(raw);
+          if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
         }
       }
-    }).catch((e) => console.warn('Logo fetch notice:', e));
+      return maxMs;
+    };
+
+    const applyLiveWebsiteSettings = (liveSettings: any) => {
+      if (!liveSettings) return;
+      const current = getWebsiteSettings();
+      const currentMs = current.updatedAt ? Date.parse(current.updatedAt) : 0;
+      const liveMs = liveSettings.updatedAt ? Date.parse(liveSettings.updatedAt) : 0;
+      if (!Number.isNaN(currentMs) && currentMs > 0 && !Number.isNaN(liveMs) && liveMs > 0 && liveMs < currentMs) {
+        return;
+      }
+      const updated = { ...current, ...liveSettings };
+      applyLocalMirror('mugina_website_settings_v3', 'mugina-settings-updated', updated);
+    };
+
+    const applyLiveStaff = (liveStaff: any[]) => {
+      if (!Array.isArray(liveStaff) || liveStaff.length === 0) return;
+      const map = new Map<string, any>();
+      liveStaff.forEach((s) => {
+        if (s && s.username) map.set(String(s.username).toLowerCase(), s);
+      });
+      // Always preserve primary master admin logins even if omitted remotely
+      const currentStaff = getStaffMembers();
+      ['norbertihimbazwemanzi@gmail.com', 'hopeprimaryschool'].forEach((coreUser) => {
+        if (!map.has(coreUser)) {
+          const match = currentStaff.find((s) => s.username.toLowerCase() === coreUser);
+          if (match) map.set(coreUser, match);
+        }
+      });
+      applyLocalMirror('mugina_staff_members_v3', 'mugina-staff-updated', Array.from(map.values()));
+    };
+
+    const applyLiveStudents = (liveStudents: any[]) => {
+      if (!Array.isArray(liveStudents)) return;
+      applyLocalMirror('mugina_enrolled_students_v3', 'mugina-students-updated', liveStudents);
+    };
+
+    // Sync all databases and local stores on mount
+    syncAllStoresWithServerDatabase().catch((e) => console.warn('Global store sync notice:', e));
+
+    // 1. School Logo Fallback Fetch & Real-time Subscription
+    fetchSchoolLogoFromFirebase()
+      .then((firebaseLogoUrl) => {
+        if (firebaseLogoUrl) {
+          const settings = getWebsiteSettings();
+          if (!settings.updatedAt && settings.schoolLogoUrl !== firebaseLogoUrl) {
+            const updated = { ...settings, schoolLogoUrl: firebaseLogoUrl };
+            applyLocalMirror('mugina_website_settings_v3', 'mugina-settings-updated', updated);
+          }
+        }
+      })
+      .catch((e) => console.warn('Logo fetch notice:', e));
 
     const unsubLogo = subscribeToSchoolLogo((newLogoUrl) => {
       if (newLogoUrl) {
         const settings = getWebsiteSettings();
         if (settings.schoolLogoUrl !== newLogoUrl) {
           const updated = { ...settings, schoolLogoUrl: newLogoUrl };
-          localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
-          window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+          applyLocalMirror('mugina_website_settings_v3', 'mugina-settings-updated', updated);
         }
       }
     });
 
-    // Helper to sanitize static image URLs
     const sanitizeItem = (item: any) => {
       if (!item) return item;
       if (item.imageSrc && typeof item.imageSrc === 'string' && item.imageSrc.startsWith('/src/assets/images/')) {
@@ -154,172 +214,244 @@ export default function App() {
       return item;
     };
 
-    // 2. Initial Gallery Sync from Firebase Firestore, Supabase & Server
+    // 2. Gallery Sync (timestamp-aware between Supabase & Firebase) + Realtime
     Promise.all([
       syncServerGalleryItems(),
       fetchSchoolGalleryFromFirebase(),
       fetchSchoolGalleryFromSupabase(),
-    ]).then(([serverItems, firestoreItems, supabaseItems]) => {
-      // Database source of truth: prioritize remote Firestore or Supabase items over stale local cache
-      let authoritative: any[] = [];
-      if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
-        authoritative = firestoreItems;
-      } else if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
-        authoritative = supabaseItems;
-      } else if (Array.isArray(serverItems) && serverItems.length > 0) {
-        authoritative = serverItems;
-      }
-      if (authoritative.length > 0) {
-        const sanitized = authoritative.map(sanitizeItem);
-        saveGalleryItems(sanitized);
-      }
-    }).catch((e) => console.warn('Gallery sync notice:', e));
+    ])
+      .then(([serverItems, firestoreItems, supabaseItems]) => {
+        const hasFb = Array.isArray(firestoreItems) && firestoreItems.length > 0;
+        const hasSb = Array.isArray(supabaseItems) && supabaseItems.length > 0;
+        let authoritative: any[] = [];
+        if (hasSb && hasFb) {
+          const sbMs = getMaxTimestampMs(supabaseItems);
+          const fbMs = getMaxTimestampMs(firestoreItems);
+          authoritative = fbMs > sbMs + 2500 ? firestoreItems : supabaseItems;
+        } else if (hasSb) {
+          authoritative = supabaseItems;
+        } else if (hasFb) {
+          authoritative = firestoreItems;
+        } else if (Array.isArray(serverItems) && serverItems.length > 0) {
+          authoritative = serverItems;
+        }
+        if (authoritative.length > 0) {
+          saveGalleryItems(authoritative.map(sanitizeItem));
+        }
+      })
+      .catch((e) => console.warn('Gallery sync notice:', e));
 
-    // Real-time Gallery Subscription: authoritative live updates across all devices
+    let fbGallerySeen = false;
     const unsubGallery = subscribeToSchoolGallery((liveItems) => {
-      if (Array.isArray(liveItems) && liveItems.length > 0) {
-        const sanitized = liveItems.map(sanitizeItem);
-        saveGalleryItems(sanitized);
+      if (Array.isArray(liveItems) && (liveItems.length > 0 || fbGallerySeen)) {
+        if (liveItems.length > 0) fbGallerySeen = true;
+        saveGalleryItems(liveItems.map(sanitizeItem));
       }
     });
 
     const unsubSupabaseGallery = subscribeToSupabaseGallery((liveItems) => {
-      if (Array.isArray(liveItems) && liveItems.length > 0) {
-        const sanitized = liveItems.map(sanitizeItem);
-        saveGalleryItems(sanitized);
+      if (Array.isArray(liveItems)) {
+        saveGalleryItems(liveItems.map(sanitizeItem));
       }
     });
 
-    // 3. Initial Documents Sync from Firebase Firestore & Server
-    Promise.all([
-      syncServerDocuments(),
-      fetchSchoolDocumentsFromFirebase(),
-    ]).then(([serverDocs, firestoreDocs]) => {
-      const map = new Map();
-      [...serverDocs, ...firestoreDocs].forEach((doc) => {
-        if (doc && doc.id) map.set(doc.id, doc);
-      });
-      const merged = Array.from(map.values());
-      if (merged.length > 0) {
-        localStorage.setItem('mugina_registration_documents_v3', JSON.stringify(merged));
-        window.dispatchEvent(new CustomEvent('mugina-documents-updated', { detail: merged }));
-      }
-    }).catch((e) => console.warn('Document sync notice:', e));
+    // 3. Documents Sync & Realtime
+    Promise.all([syncServerDocuments(), fetchSchoolDocumentsFromFirebase()])
+      .then(([serverDocs, firestoreDocs]) => {
+        const map = new Map();
+        [...serverDocs, ...firestoreDocs].forEach((doc) => {
+          if (doc && doc.id) map.set(doc.id, doc);
+        });
+        const merged = Array.from(map.values());
+        if (merged.length > 0) {
+          applyLocalMirror('mugina_registration_documents_v3', 'mugina-documents-updated', merged);
+        }
+      })
+      .catch((e) => console.warn('Document sync notice:', e));
 
-    // Real-time Documents Subscription
+    let fbDocsSeen = false;
     const unsubDocs = subscribeToSchoolDocuments((liveDocs) => {
-      if (Array.isArray(liveDocs) && liveDocs.length > 0) {
-        localStorage.setItem('mugina_registration_documents_v3', JSON.stringify(liveDocs));
-        window.dispatchEvent(new CustomEvent('mugina-documents-updated', { detail: liveDocs }));
+      if (Array.isArray(liveDocs) && (liveDocs.length > 0 || fbDocsSeen)) {
+        if (liveDocs.length > 0) fbDocsSeen = true;
+        applyLocalMirror('mugina_registration_documents_v3', 'mugina-documents-updated', liveDocs);
       }
     });
 
-    // 4. Initial Announcements Sync & Real-time Subscription
-    fetchSchoolAnnouncementsFromFirebase().then((annList) => {
-      if (Array.isArray(annList) && annList.length > 0) {
-        saveAnnouncements(annList);
-        const active = annList.find((a) => a.isActive);
-        if (active) setActiveAnnouncement(active);
+    const unsubSupabaseDocs = subscribeToSupabaseDocuments((liveDocs) => {
+      if (Array.isArray(liveDocs)) {
+        applyLocalMirror('mugina_registration_documents_v3', 'mugina-documents-updated', liveDocs);
       }
-    }).catch((e) => console.warn('Announcement sync notice:', e));
+    });
 
+    // 4. Announcements Sync & Realtime
+    fetchSchoolAnnouncementsFromFirebase()
+      .then((annList) => {
+        if (Array.isArray(annList) && annList.length > 0) {
+          saveAnnouncements(annList);
+          setActiveAnnouncement(annList.find((a) => a.isActive) || null);
+        }
+      })
+      .catch((e) => console.warn('Announcement sync notice:', e));
+
+    let fbAnnSeen = false;
     const unsubAnn = subscribeToSchoolAnnouncements((liveAnn) => {
-      if (Array.isArray(liveAnn) && liveAnn.length > 0) {
+      if (Array.isArray(liveAnn) && (liveAnn.length > 0 || fbAnnSeen)) {
+        if (liveAnn.length > 0) fbAnnSeen = true;
         saveAnnouncements(liveAnn);
-        const active = liveAnn.find((a) => a.isActive);
-        setActiveAnnouncement(active || null);
+        setActiveAnnouncement(liveAnn.find((a) => a.isActive) || null);
       }
     });
 
-    // 5. Initial Website Settings Fetch & Real-time Subscription from Firestore & Supabase
-    Promise.all([
-      fetchWebsiteSettingsFromFirebase(),
-      fetchWebsiteSettingsFromSupabase(),
-    ]).then(([fbSettings, sbSettings]) => {
-      const remote = fbSettings || sbSettings;
-      if (remote) {
-        const current = getWebsiteSettings();
-        const updated = { ...current, ...remote };
-        localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
-        window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
-      }
-    }).catch((e) => console.warn('Website settings initial fetch notice:', e));
-
-    const unsubSettings = subscribeToWebsiteSettings((liveSettings) => {
-      if (liveSettings) {
-        const current = getWebsiteSettings();
-        const updated = { ...current, ...liveSettings };
-        localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
-        window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
+    const unsubSupabaseAnn = subscribeToSupabaseAnnouncements((liveAnn) => {
+      if (Array.isArray(liveAnn)) {
+        saveAnnouncements(liveAnn);
+        setActiveAnnouncement(liveAnn.find((a) => a.isActive) || null);
       }
     });
 
-    const unsubSupabaseSettings = subscribeToSupabaseWebsiteSettings((liveSettings) => {
-      if (liveSettings) {
-        const current = getWebsiteSettings();
-        const updated = { ...current, ...liveSettings };
-        localStorage.setItem('mugina_website_settings_v3', JSON.stringify(updated));
-        window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: updated }));
-      }
-    });
+    const handleLocalAnnUpdate = () => {
+      const list = getAnnouncements();
+      setActiveAnnouncement(list.find((a) => a.isActive) || null);
+    };
+    window.addEventListener('mugina-announcements-updated', handleLocalAnnUpdate);
 
-    // 6. Cross-Device Staff Accounts Real-time Sync & Subscription
-    // Guarantees accounts enrolled by Admin on one device exist on any other device/phone
+    // 5. Website Settings Sync & Realtime (timestamp-guarded)
+    Promise.all([fetchWebsiteSettingsFromFirebase(), fetchWebsiteSettingsFromSupabase()])
+      .then(([fbSettings, sbSettings]) => {
+        const candidates = [fbSettings, sbSettings].filter(Boolean) as any[];
+        if (candidates.length > 0) {
+          candidates.sort((a, b) => {
+            const aMs = a?.updatedAt ? Date.parse(a.updatedAt) : 0;
+            const bMs = b?.updatedAt ? Date.parse(b.updatedAt) : 0;
+            return (Number.isNaN(bMs) ? 0 : bMs) - (Number.isNaN(aMs) ? 0 : aMs);
+          });
+          applyLiveWebsiteSettings(candidates[0]);
+        }
+      })
+      .catch((e) => console.warn('Website settings initial fetch notice:', e));
+
+    const unsubSettings = subscribeToWebsiteSettings(applyLiveWebsiteSettings);
+    const unsubSupabaseSettings = subscribeToSupabaseWebsiteSettings(applyLiveWebsiteSettings);
+
+    // 6. Staff Directory Sync & Realtime
     syncServerStaff().catch((e) => console.warn('Staff initial sync notice:', e));
-    fetchStaffMembersFromSupabase().then((sbStaff) => {
-      if (Array.isArray(sbStaff) && sbStaff.length > 0) {
-        const local = getStaffMembers();
-        const map = new Map<string, any>();
-        local.forEach((s) => map.set(s.username.toLowerCase(), s));
-        sbStaff.forEach((s) => {
-          if (s && s.username) map.set(s.username.toLowerCase(), s);
-        });
-        const merged = Array.from(map.values());
-        localStorage.setItem('mugina_staff_members_v3', JSON.stringify(merged));
-        window.dispatchEvent(new CustomEvent('mugina-staff-updated', { detail: merged }));
-      }
-    }).catch((e) => console.warn('Supabase staff sync notice:', e));
-
+    let fbStaffSeen = false;
     const unsubStaff = subscribeToStaffMembers((liveStaff) => {
-      if (Array.isArray(liveStaff) && liveStaff.length > 0) {
-        const local = getStaffMembers();
-        const map = new Map<string, any>();
-        local.forEach((s) => map.set(s.username.toLowerCase(), s));
-        liveStaff.forEach((s) => {
-          if (s && s.username) map.set(s.username.toLowerCase(), s);
-        });
-        const merged = Array.from(map.values());
-        localStorage.setItem('mugina_staff_members_v3', JSON.stringify(merged));
-        window.dispatchEvent(new CustomEvent('mugina-staff-updated', { detail: merged }));
+      if (Array.isArray(liveStaff) && (liveStaff.length > 0 || fbStaffSeen)) {
+        if (liveStaff.length > 0) fbStaffSeen = true;
+        applyLiveStaff(liveStaff);
+      }
+    });
+    const unsubSupabaseStaff = subscribeToSupabaseStaffMembers(applyLiveStaff);
+
+    // 7. Enrolled Students Sync & Realtime
+    syncServerStudents().catch((e) => console.warn('Student initial sync notice:', e));
+    let fbStudentsSeen = false;
+    const unsubStudents = subscribeToEnrolledStudents((liveStudents) => {
+      if (Array.isArray(liveStudents) && (liveStudents.length > 0 || fbStudentsSeen)) {
+        if (liveStudents.length > 0) fbStudentsSeen = true;
+        applyLiveStudents(liveStudents);
+      }
+    });
+    const unsubSupabaseStudents = subscribeToSupabaseEnrolledStudents(applyLiveStudents);
+
+    // 8. Operational Modules Realtime (Payments, Applications, Attendance, Discipline, Inquiries, Tours)
+    let fbPaymentsSeen = false;
+    const unsubPayments = subscribeToPaymentTransactions((items) => {
+      if (Array.isArray(items) && (items.length > 0 || fbPaymentsSeen)) {
+        if (items.length > 0) fbPaymentsSeen = true;
+        applyLocalMirror('mugina_payment_transactions_v3', 'mugina-payments-updated', items);
+      }
+    });
+    const unsubSupabasePayments = subscribeToSupabasePayments((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_payment_transactions_v3', 'mugina-payments-updated', items);
       }
     });
 
-    // 7. Cross-Device Enrolled Students Real-time Sync & Subscription
-    syncServerStudents().catch((e) => console.warn('Student initial sync notice:', e));
-    const unsubStudents = subscribeToEnrolledStudents((liveStudents) => {
-      if (Array.isArray(liveStudents) && liveStudents.length > 0) {
-        const local = getEnrolledStudents();
-        const map = new Map<string, any>();
-        local.forEach((s) => map.set(s.regNumber || s.id, s));
-        liveStudents.forEach((s) => {
-          if (s && (s.regNumber || s.id)) map.set(s.regNumber || s.id, s);
-        });
-        const merged = Array.from(map.values());
-        localStorage.setItem('mugina_enrolled_students_v3', JSON.stringify(merged));
-        window.dispatchEvent(new CustomEvent('mugina-students-updated', { detail: merged }));
+    let fbAppsSeen = false;
+    const unsubApps = subscribeToApplications((items) => {
+      if (Array.isArray(items) && (items.length > 0 || fbAppsSeen)) {
+        if (items.length > 0) fbAppsSeen = true;
+        applyLocalMirror('mugina_applications_v3', 'mugina-applications-updated', items);
+      }
+    });
+    const unsubSupabaseApps = subscribeToSupabaseApplications((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_applications_v3', 'mugina-applications-updated', items);
+      }
+    });
+
+    const unsubSupabaseAttendance = subscribeToSupabaseAttendance((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_attendance_records_v3', 'mugina-attendance-updated', items);
+      }
+    });
+
+    const unsubSupabaseTeacherAtt = subscribeToSupabaseTeacherAttendance((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_teacher_attendance_v3', 'mugina-teacher-attendance-updated', items);
+      }
+    });
+
+    let fbDisciplineSeen = false;
+    const unsubDiscipline = subscribeToDisciplineRecords((items) => {
+      if (Array.isArray(items) && (items.length > 0 || fbDisciplineSeen)) {
+        if (items.length > 0) fbDisciplineSeen = true;
+        applyLocalMirror('mugina_discipline_records_v3', 'mugina-discipline-updated', items);
+      }
+    });
+    const unsubSupabaseDiscipline = subscribeToSupabaseDiscipline((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_discipline_records_v3', 'mugina-discipline-updated', items);
+      }
+    });
+
+    let fbInquiriesSeen = false;
+    const unsubInquiries = subscribeToInquiries((items) => {
+      if (Array.isArray(items) && (items.length > 0 || fbInquiriesSeen)) {
+        if (items.length > 0) fbInquiriesSeen = true;
+        applyLocalMirror('mugina_inquiries_v3', 'mugina-inquiries-updated', items);
+      }
+    });
+    const unsubSupabaseInquiries = subscribeToSupabaseInquiries((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_inquiries_v3', 'mugina-inquiries-updated', items);
+      }
+    });
+
+    const unsubSupabaseTours = subscribeToSupabaseTourBookings((items) => {
+      if (Array.isArray(items)) {
+        applyLocalMirror('mugina_tours_v3', 'mugina-tours-updated', items);
       }
     });
 
     return () => {
+      window.removeEventListener('mugina-announcements-updated', handleLocalAnnUpdate);
       unsubLogo();
       unsubGallery();
       unsubSupabaseGallery();
       unsubDocs();
+      unsubSupabaseDocs();
       unsubAnn();
+      unsubSupabaseAnn();
       unsubSettings();
       unsubSupabaseSettings();
       unsubStaff();
+      unsubSupabaseStaff();
       unsubStudents();
+      unsubSupabaseStudents();
+      unsubPayments();
+      unsubSupabasePayments();
+      unsubApps();
+      unsubSupabaseApps();
+      unsubSupabaseAttendance();
+      unsubSupabaseTeacherAtt();
+      unsubDiscipline();
+      unsubSupabaseDiscipline();
+      unsubInquiries();
+      unsubSupabaseInquiries();
+      unsubSupabaseTours();
     };
   }, []);
 

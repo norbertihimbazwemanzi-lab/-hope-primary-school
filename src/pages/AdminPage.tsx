@@ -29,10 +29,12 @@ import {
   getInquiries,
   updateInquiryStatus,
   getApplications,
+  saveApplications,
   deleteApplication,
   confirmApplicationByDOSOrAdmin,
   getTourBookings,
   getAnnouncements,
+  saveAnnouncements,
   addAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
@@ -42,6 +44,7 @@ import {
   setAdminNotificationEmail,
   RegistrationDocument,
   getRequiredDocuments,
+  saveRequiredDocuments,
   addRequiredDocument,
   updateRequiredDocument,
   deleteRequiredDocument,
@@ -51,24 +54,41 @@ import {
   saveWebsiteSettings,
   PaymentTransaction,
   getPaymentTransactions,
+  savePaymentTransactions,
+  getTeacherAttendanceRecords,
+  saveTeacherAttendanceBatch,
+  getDisciplineRecords,
+  saveDisciplineRecords,
   syncAllStoresWithServerDatabase,
   syncServerStaff,
   syncServerStudents,
+  syncServerApplications,
 } from '../services/adminStore';
 import { FacilityItem, PageId } from '../types';
-import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
+import { ACADEMIC_GRADES } from '../data/schoolData';
 import {
   initAuth,
   googleSignIn,
   logoutGoogle,
-  getAccessToken,
   resolveStaffRoleForFirebaseUser,
   ensureAdminFirebaseAuth,
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
-import { saveSchoolLogoToFirebase, fetchStaffMembersFromFirebase, fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
-import { testSupabaseConnection, syncAllDataToSupabase, fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
+import {
+  saveSchoolLogoToFirebase,
+  fetchSchoolGalleryFromFirebase,
+  fetchApplicantChatsFromFirebase,
+  saveApplicantChatToFirebase,
+} from '../services/firebaseStore';
+import {
+  testSupabaseConnection,
+  syncAllDataToSupabase,
+  fetchSchoolGalleryFromSupabase,
+  fetchApplicantChatsFromSupabase,
+  appendApplicantChatMessageToSupabase,
+  subscribeToSupabaseApplicantChats,
+} from '../services/supabaseClient';
 import { dispatchOfficialEmail } from '../services/emailService';
 import { AdminAttendanceTracker } from '../components/AdminAttendanceTracker';
 import { FinancePortal } from '../components/FinancePortal';
@@ -266,7 +286,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
   // Google user
   const [googleUser, setGoogleUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [, setAccessToken] = useState<string | null>(null);
 
   // Data states
   const [staffList, setStaffList] = useState<StaffMember[]>(getStaffMembers());
@@ -378,6 +398,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     isActive: true,
   });
 
+  const [staffFormError, setStaffFormError] = useState<string | null>(null);
+  const [studentFormError, setStudentFormError] = useState<string | null>(null);
+  const [confirmAppError, setConfirmAppError] = useState<string | null>(null);
+  const [imageFormError, setImageFormError] = useState<string | null>(null);
+  const [newsFormError, setNewsFormError] = useState<string | null>(null);
+  const [docFormError, setDocFormError] = useState<string | null>(null);
+  const [pendingBackupRestore, setPendingBackupRestore] = useState<{ fileName: string; data: any } | null>(null);
+
   // Filter student search
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
@@ -396,72 +424,174 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     return () => unsub();
   }, []);
 
-  // Sync all database stores from server and Firebase on mount for multi-device persistence
+  // Sync all database stores from server, Supabase, and Firebase on mount for multi-device persistence
   useEffect(() => {
     syncAllStoresWithServerDatabase().then(() => {
       setStaffList(getStaffMembers());
       setStudentList(getEnrolledStudents());
       setApplications(getApplications());
       setPaymentTransactions(getPaymentTransactions());
+      setInquiries(getInquiries());
+      setAnnouncements(getAnnouncements());
+      setWebsiteSettings(getWebsiteSettings());
+      setDocList(getRequiredDocuments());
+      setGalleryItems(getGalleryItems());
+      if (onGalleryUpdated) onGalleryUpdated();
     });
 
     syncServerDocuments().then((docs) => {
       setDocList(docs);
     });
 
+    const getMaxTs = (items: any[] | null | undefined) => {
+      if (!Array.isArray(items) || items.length === 0) return 0;
+      let maxMs = 0;
+      items.forEach((item) => {
+        const raw = item?.updatedAt || item?.updated_at;
+        if (raw) {
+          const ms = Date.parse(raw);
+          if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
+        }
+      });
+      return maxMs;
+    };
+
     Promise.all([
       fetchSchoolGalleryFromFirebase(),
       fetchSchoolGalleryFromSupabase(),
       syncServerGalleryItems(),
-    ]).then(([firestoreItems, supabaseItems, serverItems]) => {
-      let authoritative: FacilityItem[] = [];
-      if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
-        authoritative = firestoreItems;
-      } else if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
-        authoritative = supabaseItems;
-      } else if (Array.isArray(serverItems) && serverItems.length > 0) {
-        authoritative = serverItems;
-      }
-      if (authoritative.length > 0) {
-        setGalleryItems(authoritative);
-        if (onGalleryUpdated) onGalleryUpdated();
-      }
-    }).catch((e) => console.warn('Gallery sync notice in admin:', e));
+    ])
+      .then(([firestoreItems, supabaseItems, serverItems]) => {
+        const hasFb = Array.isArray(firestoreItems) && firestoreItems.length > 0;
+        const hasSb = Array.isArray(supabaseItems) && supabaseItems.length > 0;
+        let authoritative: FacilityItem[] = [];
+        if (hasSb && hasFb) {
+          authoritative = getMaxTs(firestoreItems) > getMaxTs(supabaseItems) + 2500 ? firestoreItems : supabaseItems;
+        } else if (hasSb) {
+          authoritative = supabaseItems;
+        } else if (hasFb) {
+          authoritative = firestoreItems;
+        } else if (Array.isArray(serverItems) && serverItems.length > 0) {
+          authoritative = serverItems;
+        }
+        if (authoritative.length > 0) {
+          setGalleryItems(authoritative);
+          if (onGalleryUpdated) onGalleryUpdated();
+        }
+      })
+      .catch((e) => console.warn('Gallery sync notice in admin:', e));
 
     const handleStaffUpdate = (e: any) => {
-      if (e.detail && Array.isArray(e.detail)) {
-        setStaffList(e.detail);
-      } else {
-        setStaffList(getStaffMembers());
-      }
+      setStaffList(e.detail && Array.isArray(e.detail) ? e.detail : getStaffMembers());
     };
-
     const handleStudentsUpdate = (e: any) => {
-      if (e.detail && Array.isArray(e.detail)) {
-        setStudentList(e.detail);
-      } else {
-        setStudentList(getEnrolledStudents());
-      }
+      setStudentList(e.detail && Array.isArray(e.detail) ? e.detail : getEnrolledStudents());
     };
+    const handlePaymentsUpdate = () => setPaymentTransactions(getPaymentTransactions());
+    const handleApplicationsUpdate = () => setApplications(getApplications());
+    const handleInquiriesUpdate = () => setInquiries(getInquiries());
+    const handleAnnouncementsUpdate = () => {
+      setAnnouncements(getAnnouncements());
+      if (onGalleryUpdated) onGalleryUpdated();
+    };
+    const handleDocumentsUpdate = () => setDocList(getRequiredDocuments());
+    const handleGalleryUpdate = () => setGalleryItems(getGalleryItems());
+    const handleSettingsUpdate = () => setWebsiteSettings(getWebsiteSettings());
 
     window.addEventListener('mugina-staff-updated', handleStaffUpdate);
     window.addEventListener('mugina-students-updated', handleStudentsUpdate);
+    window.addEventListener('mugina-payments-updated', handlePaymentsUpdate);
+    window.addEventListener('mugina-applications-updated', handleApplicationsUpdate);
+    window.addEventListener('mugina-inquiries-updated', handleInquiriesUpdate);
+    window.addEventListener('mugina-announcements-updated', handleAnnouncementsUpdate);
+    window.addEventListener('mugina-documents-updated', handleDocumentsUpdate);
+    window.addEventListener('mugina-gallery-updated', handleGalleryUpdate);
+    window.addEventListener('mugina-settings-updated', handleSettingsUpdate);
 
     return () => {
       window.removeEventListener('mugina-staff-updated', handleStaffUpdate);
       window.removeEventListener('mugina-students-updated', handleStudentsUpdate);
+      window.removeEventListener('mugina-payments-updated', handlePaymentsUpdate);
+      window.removeEventListener('mugina-applications-updated', handleApplicationsUpdate);
+      window.removeEventListener('mugina-inquiries-updated', handleInquiriesUpdate);
+      window.removeEventListener('mugina-announcements-updated', handleAnnouncementsUpdate);
+      window.removeEventListener('mugina-documents-updated', handleDocumentsUpdate);
+      window.removeEventListener('mugina-gallery-updated', handleGalleryUpdate);
+      window.removeEventListener('mugina-settings-updated', handleSettingsUpdate);
     };
   }, []);
 
   const fetchChatThreads = async () => {
     try {
-      const res = await fetch('/api/chats');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.threads)) {
-          setChatThreads(data.threads);
+      const [sbThreads, fbThreads, serverThreads, latestApps] = await Promise.all([
+        fetchApplicantChatsFromSupabase().catch(() => null),
+        fetchApplicantChatsFromFirebase().catch(() => []),
+        fetch('/api/chats')
+          .then(async (res) => (res.ok ? (await res.json()).threads : []))
+          .catch(() => []),
+        syncServerApplications().catch(() => getApplications()),
+      ]);
+
+      const threadMap = new Map<string, any>();
+      const ingest = (items: any[] | null | undefined) => {
+        if (!Array.isArray(items)) return;
+        items.forEach((t) => {
+          if (!t || !t.refCode) return;
+          const key = String(t.refCode).toUpperCase();
+          const existing = threadMap.get(key);
+          if (!existing) {
+            threadMap.set(key, { ...t, refCode: key, messages: Array.isArray(t.messages) ? t.messages : [] });
+          } else {
+            const existingMsgs = Array.isArray(existing.messages) ? existing.messages : [];
+            const incomingMsgs = Array.isArray(t.messages) ? t.messages : [];
+            if (incomingMsgs.length > existingMsgs.length) {
+              threadMap.set(key, { ...existing, ...t, refCode: key, messages: incomingMsgs });
+            } else if (incomingMsgs.length === existingMsgs.length) {
+              const exTs = Date.parse(existing.updatedAt || '') || 0;
+              const inTs = Date.parse(t.updatedAt || '') || 0;
+              if (inTs >= exTs) {
+                threadMap.set(key, { ...existing, ...t, refCode: key, messages: incomingMsgs });
+              }
+            }
+          }
+        });
+      };
+
+      ingest(serverThreads);
+      ingest(fbThreads);
+      ingest(sbThreads);
+
+      latestApps.forEach((app) => {
+        const key = String(app.refCode || '').toUpperCase();
+        if (key && !threadMap.has(key)) {
+          threadMap.set(key, {
+            refCode: key,
+            studentName: app.studentName,
+            parentName: app.parentName,
+            parentEmail: app.parentEmail,
+            parentPhone: app.parentPhone,
+            gradeCode: app.gradeCode,
+            status: app.status,
+            messages: [
+              {
+                id: `init-${app.id}`,
+                sender: 'system',
+                senderName: 'Mugina Hope Administration Desk',
+                text: `Application ${app.refCode} for ${app.studentName} logged (${app.status}).`,
+                createdAt: app.createdAt || new Date().toISOString(),
+              },
+            ],
+            updatedAt: app.confirmedAt || app.createdAt || new Date().toISOString(),
+          });
         }
-      }
+      });
+
+      const merged = Array.from(threadMap.values()).sort((a, b) => {
+        const aMs = Date.parse(a.updatedAt || '') || 0;
+        const bMs = Date.parse(b.updatedAt || '') || 0;
+        return bMs - aMs;
+      });
+      setChatThreads(merged);
     } catch (e) {
       console.warn('Failed to fetch chat threads:', e);
     }
@@ -469,6 +599,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
   useEffect(() => {
     fetchChatThreads();
+    if (activeTab === 'confirmations') {
+      const unsub = subscribeToSupabaseApplicantChats(() => {
+        fetchChatThreads();
+      });
+      return () => unsub();
+    }
   }, [activeTab]);
 
   // Update default tab based on user role to ensure only permitted views are visible
@@ -478,9 +614,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       else if (currentUser.role === 'Teacher') setActiveTab('teacher_classroom');
       else if (currentUser.role === 'Registrar') setActiveTab('registrar');
       else if (currentUser.role === 'DOS') setActiveTab('students');
-      else if (currentUser.role === 'DOD') setActiveTab('attendance');
+      else if (currentUser.role === 'DOD') setActiveTab('discipline');
       else if (currentUser.role === 'Admin') {
-        // If current tab is not allowed for Admin, default to students
         setActiveTab((prev) => prev || 'students');
       }
     }
@@ -595,45 +730,42 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
         else if (session.role === 'Registrar') setActiveTab('registrar');
         else if (session.role === 'DOS') setActiveTab('students');
-        else if (session.role === 'DOD') setActiveTab('attendance');
+        else if (session.role === 'DOD') setActiveTab('discipline');
         else setActiveTab('students');
         return;
       }
 
-      // 5. Cross-Device Cloud Query: Fetch directly from Firebase Firestore in case staff was enrolled on another device
-      const remoteStaff = await fetchStaffMembersFromFirebase();
-      if (Array.isArray(remoteStaff) && remoteStaff.length > 0) {
-        const mergedList = await syncServerStaff();
-        setStaffList(mergedList);
+      // 5. Cross-Device Cloud Query: Fetch directly from Supabase & Firebase Firestore
+      const mergedList = await syncServerStaff();
+      setStaffList(mergedList);
 
-        const remoteMatch = mergedList.find(
-          (s) =>
-            (s.username.toLowerCase() === cleanUser.toLowerCase() ||
-              s.email.toLowerCase() === cleanUser.toLowerCase()) &&
-            s.password === cleanPass &&
-            s.status === 'Active'
-        );
+      const remoteMatch = mergedList.find(
+        (s) =>
+          (s.username.toLowerCase() === cleanUser.toLowerCase() ||
+            s.email.toLowerCase() === cleanUser.toLowerCase()) &&
+          s.password === cleanPass &&
+          s.status === 'Active'
+      );
 
-        if (remoteMatch) {
-          persistCredentialsIfEnabled(cleanUser, cleanPass);
-          const session = {
-            id: remoteMatch.id,
-            name: remoteMatch.name,
-            role: remoteMatch.role,
-            username: remoteMatch.username,
-            email: remoteMatch.email,
-            assignedSubjectOrGrade: remoteMatch.assignedSubjectOrGrade,
-          };
-          setCurrentSessionUser(session);
-          setCurrentUser(session);
-          if (session.role === 'Finance') setActiveTab('finance');
-          else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
-          else if (session.role === 'Registrar') setActiveTab('registrar');
-          else if (session.role === 'DOS') setActiveTab('students');
-          else if (session.role === 'DOD') setActiveTab('attendance');
-          else setActiveTab('students');
-          return;
-        }
+      if (remoteMatch) {
+        persistCredentialsIfEnabled(cleanUser, cleanPass);
+        const session = {
+          id: remoteMatch.id,
+          name: remoteMatch.name,
+          role: remoteMatch.role,
+          username: remoteMatch.username,
+          email: remoteMatch.email,
+          assignedSubjectOrGrade: remoteMatch.assignedSubjectOrGrade,
+        };
+        setCurrentSessionUser(session);
+        setCurrentUser(session);
+        if (session.role === 'Finance') setActiveTab('finance');
+        else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
+        else if (session.role === 'Registrar') setActiveTab('registrar');
+        else if (session.role === 'DOS') setActiveTab('students');
+        else if (session.role === 'DOD') setActiveTab('discipline');
+        else setActiveTab('students');
+        return;
       }
 
       setLoginError('Invalid username, password, or access code. Please check your credentials or contact the School Administrator.');
@@ -666,7 +798,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
           else if (resolution.session.role === 'Teacher') setActiveTab('teacher_classroom');
           else if (resolution.session.role === 'Registrar') setActiveTab('registrar');
           else if (resolution.session.role === 'DOS') setActiveTab('students');
-          else if (resolution.session.role === 'DOD') setActiveTab('attendance');
+          else if (resolution.session.role === 'DOD') setActiveTab('discipline');
           else setActiveTab('students');
         } else {
           // Explicitly sign out unauthorized identity
@@ -696,8 +828,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   // 1. Staff Enrollment & Edit (Admin only)
   const handleSaveStaff = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!staffFormData.name || !staffFormData.username || !staffFormData.password) {
-      alert('Please fill out all required staff fields.');
+    setStaffFormError(null);
+    if (!staffFormData.name.trim() || !staffFormData.username.trim() || !staffFormData.password.trim()) {
+      setStaffFormError('Please fill out full name, username, and password.');
       return;
     }
 
@@ -740,8 +873,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   // 2. Student Enrollment & Edit (DOS primary objective & Admin)
   const handleSaveStudent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentFormData.fullName || !studentFormData.gradeCode) {
-      alert('Please provide student full name and grade level.');
+    setStudentFormError(null);
+    if (!studentFormData.fullName.trim() || !studentFormData.gradeCode) {
+      setStudentFormError('Please provide student full name and grade level.');
       return;
     }
 
@@ -823,20 +957,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
 
   const handleCopySupabaseSQL = () => {
-    const sql = `-- MUGINA HOPE PRIMARY ACADEMY - SUPABASE SCHEMA
+    const sql = `-- MUGINA HOPE PRIMARY & NURSERY ACADEMY - COMPLETE 15-TABLE SUPABASE SCHEMA
 -- Run in your Supabase SQL Editor: https://supabase.com/dashboard
+
 CREATE TABLE IF NOT EXISTS public.website_settings (
   id TEXT PRIMARY KEY,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE public.website_settings ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "Public Read Website Settings" ON public.website_settings FOR SELECT USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "Public Write Website Settings" ON public.website_settings FOR ALL USING (true) WITH CHECK (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Read Website Settings" ON public.website_settings FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Website Settings" ON public.website_settings FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS public.school_gallery (
   id TEXT PRIMARY KEY,
@@ -849,12 +980,8 @@ CREATE TABLE IF NOT EXISTS public.school_gallery (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE public.school_gallery ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "Public Read Gallery" ON public.school_gallery FOR SELECT USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "Public Write Gallery" ON public.school_gallery FOR ALL USING (true) WITH CHECK (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Read Gallery" ON public.school_gallery FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Gallery" ON public.school_gallery FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS public.staff_members (
   id TEXT PRIMARY KEY,
@@ -863,41 +990,288 @@ CREATE TABLE IF NOT EXISTS public.staff_members (
   email TEXT,
   phone TEXT,
   username TEXT UNIQUE NOT NULL,
+  password TEXT,
   assigned_subject_or_grade TEXT,
+  enrolled_at TEXT,
   status TEXT DEFAULT 'Active',
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS password TEXT;
+ALTER TABLE public.staff_members ADD COLUMN IF NOT EXISTS enrolled_at TEXT;
 ALTER TABLE public.staff_members ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "Public Read Staff" ON public.staff_members FOR SELECT USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "Public Write Staff" ON public.staff_members FOR ALL USING (true) WITH CHECK (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Read Staff" ON public.staff_members FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Staff" ON public.staff_members FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 CREATE TABLE IF NOT EXISTS public.enrolled_students (
   id TEXT PRIMARY KEY,
-  full_name TEXT NOT NULL,
   reg_number TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  gender TEXT DEFAULT 'Female',
+  dob TEXT,
   grade_code TEXT NOT NULL,
-  status TEXT DEFAULT 'Active',
   parent_name TEXT,
   parent_phone TEXT,
   parent_email TEXT,
+  student_username TEXT,
+  student_password TEXT,
+  enrolled_by TEXT,
+  enrolled_at TEXT,
+  status TEXT DEFAULT 'Active',
+  feedback_notes TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS gender TEXT DEFAULT 'Female';
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS dob TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS student_username TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS student_password TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS enrolled_by TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS enrolled_at TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS feedback_notes TEXT;
 ALTER TABLE public.enrolled_students ENABLE ROW LEVEL SECURITY;
-DO $$ BEGIN
-  CREATE POLICY "Public Read Students" ON public.enrolled_students FOR SELECT USING (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-  CREATE POLICY "Public Write Students" ON public.enrolled_students FOR ALL USING (true) WITH CHECK (true);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Read Students" ON public.enrolled_students FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Students" ON public.enrolled_students FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.website_settings;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.school_gallery;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.staff_members;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
+CREATE TABLE IF NOT EXISTS public.payment_transactions (
+  id TEXT PRIMARY KEY,
+  receipt_number TEXT UNIQUE NOT NULL,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  reg_number TEXT NOT NULL,
+  grade_code TEXT NOT NULL,
+  payment_type TEXT NOT NULL,
+  amount NUMERIC NOT NULL CHECK (amount >= 0),
+  payment_method TEXT NOT NULL,
+  bank_slip_ref TEXT,
+  recorded_by TEXT,
+  recorded_at TEXT NOT NULL,
+  term TEXT NOT NULL,
+  academic_year TEXT NOT NULL,
+  status TEXT DEFAULT 'Completed',
+  refund_reason TEXT,
+  refund_requested_at TEXT,
+  refund_requested_by TEXT,
+  refund_reviewed_at TEXT,
+  refund_reviewed_by TEXT,
+  refund_review_note TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.payment_transactions ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Payments" ON public.payment_transactions FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Payments" ON public.payment_transactions FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.admissions_applications (
+  id TEXT PRIMARY KEY,
+  ref_code TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  gender TEXT,
+  dob TEXT,
+  grade_code TEXT NOT NULL,
+  parent_name TEXT NOT NULL,
+  parent_phone TEXT NOT NULL,
+  parent_email TEXT,
+  sector TEXT,
+  wants_lunch BOOLEAN DEFAULT false,
+  wants_transport BOOLEAN DEFAULT false,
+  status TEXT DEFAULT 'Pending Confirmation',
+  feedback_notes TEXT,
+  assigned_student_id TEXT,
+  created_at TEXT,
+  confirmed_at TEXT,
+  confirmed_by TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.admissions_applications ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Applications" ON public.admissions_applications FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Applications" ON public.admissions_applications FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.attendance_records (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  grade_code TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  parent_email TEXT,
+  parent_phone TEXT,
+  status TEXT NOT NULL,
+  marked_by TEXT,
+  notes TEXT,
+  email_notified BOOLEAN DEFAULT false,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.attendance_records ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Attendance" ON public.attendance_records FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Attendance" ON public.attendance_records FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.teacher_attendance_records (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  staff_id TEXT NOT NULL,
+  teacher_name TEXT NOT NULL,
+  assigned_subject_or_grade TEXT,
+  status TEXT NOT NULL,
+  arrival_check_in_time TEXT,
+  marked_by TEXT,
+  topics_covered TEXT,
+  duty_signature TEXT,
+  notes TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.teacher_attendance_records ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Teacher Attendance" ON public.teacher_attendance_records FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Teacher Attendance" ON public.teacher_attendance_records FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.discipline_records (
+  id TEXT PRIMARY KEY,
+  case_number TEXT NOT NULL,
+  date TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  reg_number TEXT,
+  grade_code TEXT NOT NULL,
+  incident_type TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  incident_description TEXT,
+  action_taken TEXT,
+  parent_notified BOOLEAN DEFAULT false,
+  parent_contact TEXT,
+  status TEXT DEFAULT 'Open',
+  recorded_by TEXT,
+  resolution_notes TEXT,
+  follow_up_date TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.discipline_records ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Discipline" ON public.discipline_records FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Discipline" ON public.discipline_records FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.student_progress_logs (
+  id TEXT PRIMARY KEY,
+  student_id TEXT NOT NULL,
+  student_name TEXT NOT NULL,
+  reg_number TEXT,
+  grade_code TEXT NOT NULL,
+  stream TEXT,
+  date TEXT NOT NULL,
+  teacher_id TEXT,
+  teacher_name TEXT,
+  subject TEXT NOT NULL,
+  academic_performance TEXT,
+  academic_score NUMERIC,
+  academic_notes TEXT,
+  behavior_rating TEXT,
+  behavioral_notes TEXT,
+  action_or_recommendation TEXT,
+  parent_notified BOOLEAN DEFAULT false,
+  created_at TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.student_progress_logs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Progress Logs" ON public.student_progress_logs FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Progress Logs" ON public.student_progress_logs FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.school_announcements (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  badge TEXT,
+  is_active BOOLEAN DEFAULT true,
+  published_at TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.school_announcements ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Announcements" ON public.school_announcements FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Announcements" ON public.school_announcements FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.registration_documents (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  is_required BOOLEAN DEFAULT true,
+  applicable_grades TEXT,
+  format_hint TEXT,
+  file_url TEXT,
+  file_name TEXT,
+  file_size TEXT,
+  file_type TEXT,
+  uploaded_at TEXT,
+  sort_order INTEGER DEFAULT 1,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.registration_documents ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Documents" ON public.registration_documents FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Documents" ON public.registration_documents FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.visitor_inquiries (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  email TEXT,
+  subject TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT,
+  status TEXT DEFAULT 'New',
+  email_sent_status TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.visitor_inquiries ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Inquiries" ON public.visitor_inquiries FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Inquiries" ON public.visitor_inquiries FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.campus_tour_bookings (
+  id TEXT PRIMARY KEY,
+  parent_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  date TEXT NOT NULL,
+  time_slot TEXT NOT NULL,
+  grade_interest TEXT,
+  guests_count TEXT,
+  status TEXT DEFAULT 'Confirmed',
+  created_at TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.campus_tour_bookings ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Tours" ON public.campus_tour_bookings FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Tours" ON public.campus_tour_bookings FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.applicant_chats (
+  ref_code TEXT PRIMARY KEY,
+  student_name TEXT,
+  parent_name TEXT,
+  parent_email TEXT,
+  parent_phone TEXT,
+  grade_code TEXT,
+  status TEXT DEFAULT 'Pending Confirmation',
+  messages JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.applicant_chats ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read Chats" ON public.applicant_chats FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write Chats" ON public.applicant_chats FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  INSERT INTO storage.buckets (id, name, public)
+  VALUES ('school-media', 'school-media', true)
+  ON CONFLICT (id) DO UPDATE SET public = true;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Read School Media" ON storage.objects FOR SELECT USING (bucket_id = 'school-media'); EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Upload School Media" ON storage.objects FOR ALL USING (bucket_id = 'school-media') WITH CHECK (bucket_id = 'school-media'); EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+DO $$
+DECLARE
+  tbl TEXT;
+  tables TEXT[] := ARRAY[
+    'website_settings','school_gallery','staff_members','enrolled_students','payment_transactions',
+    'admissions_applications','attendance_records','teacher_attendance_records','discipline_records',
+    'student_progress_logs','school_announcements','registration_documents','visitor_inquiries',
+    'campus_tour_bookings','applicant_chats'
+  ];
+BEGIN
+  FOREACH tbl IN ARRAY tables LOOP
+    BEGIN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', tbl);
+    EXCEPTION WHEN duplicate_object THEN NULL; END;
+  END LOOP;
+END $$;`;
 
     navigator.clipboard.writeText(sql);
     setCopiedSql(true);
@@ -911,18 +1285,21 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
           school: 'Mugina Hope Primary & Nursery Academy',
           district: 'Kamonyi District, Rwanda',
           exportedAt: new Date().toISOString(),
-          version: '3.0',
+          version: '3.1',
         },
         websiteSettings: getWebsiteSettings(),
         staffMembers: getStaffMembers(),
         enrolledStudents: getEnrolledStudents(),
         galleryItems: getGalleryItems(),
         attendanceRecords: getAttendanceRecords(),
+        teacherAttendanceRecords: getTeacherAttendanceRecords(),
+        disciplineRecords: getDisciplineRecords(),
         paymentTransactions: getPaymentTransactions(),
         inquiries: getInquiries(),
         applications: getApplications(),
         requiredDocuments: getRequiredDocuments(),
         announcements: getAnnouncements(),
+        tourBookings: getTourBookings(),
       };
 
       const jsonStr = JSON.stringify(backupData, null, 2);
@@ -939,7 +1316,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
       setBackupMsg('Complete database snapshot exported successfully (JSON)!');
       setTimeout(() => setBackupMsg(null), 4500);
     } catch (err: any) {
-      alert(`Error exporting backup: ${err?.message || 'Failed'}`);
+      setBackupMsg(`Error exporting backup: ${err?.message || 'Failed'}`);
     }
   };
 
@@ -973,44 +1350,75 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
       setBackupMsg('Pupils enrollment roster exported as CSV (Ready for MINEDUC / District)!');
       setTimeout(() => setBackupMsg(null), 4500);
     } catch (err: any) {
-      alert(`Error exporting CSV: ${err?.message || 'Failed'}`);
+      setBackupMsg(`Error exporting CSV: ${err?.message || 'Failed'}`);
     }
   };
 
   const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (!parsed.websiteSettings && !parsed.enrolledStudents && !parsed.staffMembers) {
-          alert('Invalid backup file format. Expected a Mugina Hope Academy database backup JSON file.');
+          setBackupMsg('Invalid backup file format. Expected a Mugina Hope Academy database backup JSON file.');
           return;
         }
-        if (confirm('Are you sure you want to restore this database backup? Existing records will be updated with the backup data.')) {
-          if (parsed.websiteSettings) saveWebsiteSettings(parsed.websiteSettings);
-          if (Array.isArray(parsed.staffMembers)) saveStaffMembers(parsed.staffMembers);
-          if (Array.isArray(parsed.enrolledStudents)) saveEnrolledStudents(parsed.enrolledStudents);
-          if (Array.isArray(parsed.galleryItems)) saveGalleryItems(parsed.galleryItems);
-          alert('Database backup restored successfully! Reloading...');
-          window.location.reload();
-        }
+        setPendingBackupRestore({ fileName: file.name, data: parsed });
       } catch (err: any) {
-        alert(`Error reading backup file: ${err.message}`);
+        setBackupMsg(`Error reading backup file: ${err?.message || 'Invalid JSON'}`);
       }
     };
     reader.readAsText(file);
+  };
+
+  const executeRestoreBackup = async () => {
+    if (!pendingBackupRestore) return;
+    const { fileName, data: parsed } = pendingBackupRestore;
+    try {
+      if (parsed.websiteSettings) saveWebsiteSettings(parsed.websiteSettings);
+      if (Array.isArray(parsed.staffMembers)) saveStaffMembers(parsed.staffMembers);
+      if (Array.isArray(parsed.enrolledStudents)) saveEnrolledStudents(parsed.enrolledStudents);
+      if (Array.isArray(parsed.galleryItems)) saveGalleryItems(parsed.galleryItems, true);
+      if (Array.isArray(parsed.announcements)) saveAnnouncements(parsed.announcements, true);
+      if (Array.isArray(parsed.requiredDocuments)) saveRequiredDocuments(parsed.requiredDocuments);
+      if (Array.isArray(parsed.applications)) saveApplications(parsed.applications);
+      if (Array.isArray(parsed.paymentTransactions)) savePaymentTransactions(parsed.paymentTransactions);
+      if (Array.isArray(parsed.attendanceRecords)) saveAttendanceBatch(parsed.attendanceRecords);
+      if (Array.isArray(parsed.teacherAttendanceRecords)) saveTeacherAttendanceBatch(parsed.teacherAttendanceRecords);
+      if (Array.isArray(parsed.disciplineRecords)) saveDisciplineRecords(parsed.disciplineRecords);
+
+      setWebsiteSettings(getWebsiteSettings());
+      setStaffList(getStaffMembers());
+      setStudentList(getEnrolledStudents());
+      setGalleryItems(getGalleryItems());
+      setAnnouncements(getAnnouncements());
+      setDocList(getRequiredDocuments());
+      setApplications(getApplications());
+      setPaymentTransactions(getPaymentTransactions());
+      if (onGalleryUpdated) onGalleryUpdated();
+
+      await syncAllDataToSupabase(parsed.websiteSettings?.supabaseUrl || websiteSettings.supabaseUrl, parsed.websiteSettings?.supabaseAnonKey || websiteSettings.supabaseAnonKey).catch(() => {});
+
+      setPendingBackupRestore(null);
+      setBackupMsg(`Database restored successfully from ${fileName} and synchronized across cloud stores.`);
+      setTimeout(() => setBackupMsg(null), 5000);
+    } catch (err: any) {
+      setPendingBackupRestore(null);
+      setBackupMsg(`Error restoring backup: ${err?.message || 'Failed'}`);
+    }
   };
 
   // 3. Confirm Admissions Application (Admin & DOS)
   const handleConfirmApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirmAppTarget) return;
-
+    setConfirmAppError(null);
     setIsConfirmingApp(true);
     try {
-      const { updatedApp, student } = confirmApplicationByDOSOrAdmin(
+      const { student } = confirmApplicationByDOSOrAdmin(
         confirmAppTarget.id,
         confirmFeedbackNotes,
         currentUser?.name || 'Director of Studies',
@@ -1055,32 +1463,85 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
       // Update local states
       setApplications(getApplications());
       setStudentList(getEnrolledStudents());
-      alert(`Admission approved! ${student.fullName} has been officially enrolled with Registration ID: ${student.regNumber}. Feedback email dispatched to ${student.parentEmail || 'parent'}.`);
       setConfirmAppTarget(null);
+      setDeleteSuccessMsg(
+        `Admission approved! ${student.fullName} enrolled (ID: ${student.regNumber}). Feedback dispatched to ${student.parentEmail || 'parent'}.`
+      );
+      setTimeout(() => setDeleteSuccessMsg(null), 5000);
     } catch (err: any) {
-      alert(`Error approving application: ${err.message}`);
+      setConfirmAppError(`Error approving application: ${err?.message || 'Failed'}`);
     } finally {
       setIsConfirmingApp(false);
     }
   };
 
   const handleSendAdminReply = async (refCode: string) => {
-    if (!adminReplyText.trim()) return;
+    const cleanText = adminReplyText.trim();
+    if (!cleanText) return;
     setIsSendingReply(true);
+    const senderName = `${currentUser?.name || 'Norbert Ihimbazwe Manzi'} (Admin)`;
+    const createdAt = new Date().toISOString();
+    const adminMsg = {
+      id: `adm-${Date.now()}`,
+      sender: 'admin' as const,
+      senderName,
+      text: cleanText,
+      createdAt,
+    };
+
+    const currentThread = chatThreads.find((t) => t.refCode === refCode);
+    const updatedMessages = [...(currentThread?.messages || []), adminMsg];
+    const updatedThread = {
+      refCode,
+      studentName: currentThread?.studentName || 'Applicant',
+      parentName: currentThread?.parentName || 'Parent / Guardian',
+      parentEmail: currentThread?.parentEmail || '',
+      parentPhone: currentThread?.parentPhone || '',
+      gradeCode: currentThread?.gradeCode || '',
+      status: currentThread?.status || 'Pending Confirmation',
+      messages: updatedMessages,
+      updatedAt: createdAt,
+    };
+
+    // Optimistic UI update
+    setChatThreads((prev) =>
+      prev.map((t) => (t.refCode === refCode ? { ...t, messages: updatedMessages, updatedAt: createdAt } : t))
+    );
+    setAdminReplyText('');
+
     try {
-      const res = await fetch(`/api/chats/${encodeURIComponent(refCode)}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sender: 'admin',
-          senderName: `${currentUser?.name || 'Norbert Ihimbazwe Manzi'} (Admin)`,
-          text: adminReplyText.trim(),
+      await Promise.allSettled([
+        appendApplicantChatMessageToSupabase(refCode, adminMsg, updatedThread),
+        saveApplicantChatToFirebase(updatedThread),
+        fetch(`/api/chats/${encodeURIComponent(refCode)}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: 'admin',
+            senderName,
+            text: cleanText,
+          }),
         }),
-      });
-      if (res.ok) {
-        setAdminReplyText('');
-        await fetchChatThreads();
+      ]);
+
+      if (updatedThread.parentEmail) {
+        dispatchOfficialEmail({
+          to: updatedThread.parentEmail,
+          subject: `[Mugina Hope Academy] Message regarding Application ${refCode}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+              <h3 style="color: #1e3a8a;">Mugina Hope Primary & Nursery Academy</h3>
+              <p>Dear ${updatedThread.parentName},</p>
+              <p>Administration reply regarding applicant <strong>${updatedThread.studentName}</strong> (${refCode}):</p>
+              <blockquote style="background: #f8fafc; padding: 12px 16px; border-left: 4px solid #1e3a8a; margin: 12px 0;">${cleanText}</blockquote>
+              <p style="font-size: 12px; color: #64748b;">Sent by ${senderName}</p>
+            </div>
+          `,
+          type: 'contact_inquiry',
+          details: { refCode, studentName: updatedThread.studentName, reply: cleanText },
+        }).catch(() => {});
       }
+      await fetchChatThreads();
     } catch (e) {
       console.error(e);
     } finally {
@@ -1171,8 +1632,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
 
   const handleSaveGalleryImage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!imageFormData.title || (!imageFormData.imageSrc && !selectedImageFile)) {
-      alert('Please provide an image title and select an image file or URL.');
+    setImageFormError(null);
+    if (!imageFormData.title.trim() || (!imageFormData.imageSrc && !selectedImageFile)) {
+      setImageFormError('Please provide an image title and select an image file or URL.');
       return;
     }
 
@@ -1181,12 +1643,12 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
 
     try {
       if (selectedImageFile) {
-        setImageUploadStatus('Uploading securely to Firebase Storage...');
+        setImageUploadStatus('Uploading securely to Cloud Storage...');
         const uploadRes = await uploadSchoolAsset(selectedImageFile, imageFormData.title, imageFormData.category);
         finalImageUrl = uploadRes.url;
-        setImageUploadStatus(`Uploaded successfully via ${uploadRes.source === 'firebase-storage' ? 'Firebase Storage' : 'Secure Cloud Asset'}`);
+        setImageUploadStatus(`Uploaded successfully via ${uploadRes.source === 'firebase-storage' ? 'Firebase Storage' : uploadRes.source === 'supabase-storage' ? 'Supabase Storage' : 'Cloud Asset'}`);
       } else if (imageFormData.imageSrc && imageFormData.imageSrc.startsWith('data:')) {
-        setImageUploadStatus('Uploading image to Firebase Storage...');
+        setImageUploadStatus('Uploading image to Cloud Storage...');
         const uploadRes = await uploadSchoolAsset(imageFormData.imageSrc, imageFormData.title, imageFormData.category);
         finalImageUrl = uploadRes.url;
       }
@@ -1226,8 +1688,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
   // 6. News / Announcement CRUD
   const handleSaveNews = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newsFormData.title || !newsFormData.content) {
-      alert('Title and content are required.');
+    setNewsFormError(null);
+    if (!newsFormData.title.trim() || !newsFormData.content.trim()) {
+      setNewsFormError('Both announcement title and content are required.');
       return;
     }
 
@@ -1244,7 +1707,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
     if (onGalleryUpdated) onGalleryUpdated();
   };
 
-  // 7. Required Registration Documents CRUD (Admin & DOS) with Firebase Storage file upload
+  // 7. Required Registration Documents CRUD (Admin & DOS) with Cloud Storage file upload
   const handleDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -1253,7 +1716,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
         file.size < 1024 * 1024
           ? `${(file.size / 1024).toFixed(0)} KB`
           : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
-      setDocUploadStatus(`Selected: ${file.name} (${sizeStr}). Ready for Firebase Storage upload.`);
+      setDocUploadStatus(`Selected: ${file.name} (${sizeStr}). Ready for upload.`);
       setDocFormData((prev) => ({
         ...prev,
         fileName: file.name,
@@ -1265,8 +1728,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
 
   const handleSaveDoc = async (e: React.FormEvent) => {
     e.preventDefault();
+    setDocFormError(null);
     if (!docFormData.title.trim()) {
-      alert('Please provide a document title.');
+      setDocFormError('Please provide a document title.');
       return;
     }
 
@@ -1595,6 +2059,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                   currentUser.role === 'Registrar' ? 'Registrar' :
                   currentUser.role === 'Admin' ? 'Headmaster / Admin' :
                   currentUser.role === 'Teacher' ? 'Class Teacher' :
+                  currentUser.role === 'DOS' ? 'Director of Studies (DOS)' :
+                  currentUser.role === 'DOD' ? 'Director of Discipline (DOD)' :
                   currentUser.role
                 }
               </span>
@@ -1735,12 +2201,38 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
         {(currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'DOD' || currentUser.role === 'Teacher') && (
           <button
             onClick={() => setActiveTab('attendance')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
               activeTab === 'attendance' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
             }`}
           >
             <ClipboardList className="w-4 h-4 text-emerald-400" />
             <span>{currentUser.role === 'Teacher' ? 'Daily Class Attendance' : 'School Attendance Tracker'}</span>
+          </button>
+        )}
+
+        {/* 6B. TEACHER & STAFF ATTENDANCE TRACKER (Admin & DOS) */}
+        {(currentUser.role === 'Admin' || currentUser.role === 'DOS') && (
+          <button
+            onClick={() => setActiveTab('teacher_attendance')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'teacher_attendance' ? 'bg-indigo-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Clock className="w-4 h-4 text-sky-400" />
+            <span>Teacher Duty Roll-Call</span>
+          </button>
+        )}
+
+        {/* 6C. DISCIPLINE & CONDUCT CONTROL (Admin, DOS, DOD) */}
+        {(currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'DOD') && (
+          <button
+            onClick={() => setActiveTab('discipline')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'discipline' ? 'bg-rose-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-amber-300" />
+            <span>Discipline & Conduct (DOD)</span>
           </button>
         )}
 
@@ -2697,6 +3189,20 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 4B: TEACHER & STAFF DAILY ATTENDANCE */}
+      {/* ========================================================================= */}
+      {activeTab === 'teacher_attendance' && (currentUser.role === 'Admin' || currentUser.role === 'DOS') && (
+        <TeacherAttendanceTracker staffList={staffList} />
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4C: DOD STUDENT DISCIPLINE & CONDUCT CONTROL */}
+      {/* ========================================================================= */}
+      {activeTab === 'discipline' && (currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'DOD') && (
+        <DODDisciplinePortal students={studentList} />
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB: REQUIRED REGISTRATION DOCUMENTATION (ADMIN & DOS SETTINGS) */}
       {/* ========================================================================= */}
       {activeTab === 'documents' && (
@@ -3069,14 +3575,50 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
           <div className="space-y-4">
             {inquiries.map((inq) => (
               <div key={inq.id} className="bg-white rounded-3xl border border-slate-200 p-5 space-y-3">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                <div className="flex flex-wrap justify-between items-center gap-2 border-b border-slate-100 pb-2">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-900 text-sm">{inq.name}</span>
-                    <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">{inq.status}</span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        inq.status === 'Replied'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : inq.status === 'Closed'
+                          ? 'bg-slate-200 text-slate-700'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {inq.status}
+                    </span>
                   </div>
-                  <span className="text-xs font-mono text-slate-400">{inq.createdAt}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-slate-400">{inq.createdAt}</span>
+                    {inq.status !== 'Replied' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateInquiryStatus(inq.id, 'Replied');
+                          setInquiries(getInquiries());
+                        }}
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        Mark Contacted
+                      </button>
+                    )}
+                    {inq.status !== 'Closed' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateInquiryStatus(inq.id, 'Closed');
+                          setInquiries(getInquiries());
+                        }}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        Close Inquiry
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-xs text-slate-600">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-600">
                   <div><strong>Phone:</strong> {inq.phone}</div>
                   <div><strong>Email:</strong> {inq.email || 'N/A'}</div>
                   <div><strong>Subject:</strong> {inq.subject}</div>
@@ -4434,7 +4976,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                     <span>9. Supabase Database Integration & Real-Time Cloud Sync</span>
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Connect your Supabase project to mirror gallery media, staff records, and enrolled pupils to a PostgreSQL cloud database alongside Firebase Firestore.
+                    Connect your Supabase project to mirror all 15 school modules (settings, gallery, staff, students, fees, attendance, discipline, progress logs, applications, chats, docs, news, inquiries &amp; tours) to a PostgreSQL cloud database alongside Firebase Firestore.
                   </p>
                 </div>
                 <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 text-[11px] font-bold rounded-lg border border-emerald-200 inline-flex items-center gap-1.5 self-start sm:self-auto">
@@ -4447,10 +4989,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs text-slate-600 leading-relaxed">
                 <div className="flex items-center gap-2 font-bold text-slate-900">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Permanent Persistence Verified Across Devices & Browser Refreshes</span>
+                  <span>Permanent Multi-Browser Sync Across All 15 School Modules</span>
                 </div>
                 <p>
-                  Every administrator action (adding photos, modifying descriptions, updating alt-texts, removing gallery items, or enrolling staff) writes directly to our persistent server endpoints and Firebase Firestore. Stale cache re-merging has been resolved so that deleted items never reappear on page refresh.
+                  Every administrator, bursar, registrar, DOS, DOD, or teacher update saves across both Supabase PostgreSQL and Firebase Firestore with timestamp-aware resolution and real-time listeners, so public visitors and staff in other browsers see identical live updates.
                 </p>
               </div>
 
@@ -4718,6 +5260,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                 onClick={() => {
                   setShowAddStaffModal(false);
                   setEditingStaffMember(null);
+                  setStaffFormError(null);
                 }}
                 className="text-slate-400 hover:text-slate-700 cursor-pointer"
               >
@@ -4725,6 +5268,12 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
               </button>
             </div>
             <form onSubmit={handleSaveStaff} className="space-y-3 text-xs">
+              {staffFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{staffFormError}</span>
+                </div>
+              )}
               <div>
                 <label className="font-bold block mb-1">Full Legal Name *</label>
                 <input
@@ -4858,9 +5407,24 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                 <h3 className="font-bold text-slate-900">DOS Student Enrollment & Credentials Creation</h3>
                 <p className="text-[11px] text-slate-500">Assign learner to class and create their chosen portal credentials</p>
               </div>
-              <button onClick={() => setShowAddStudentModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddStudentModal(false);
+                  setStudentFormError(null);
+                }}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
             </div>
             <form onSubmit={handleSaveStudent} className="space-y-3 text-xs">
+              {studentFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{studentFormError}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Registration ID *</label>
@@ -4975,9 +5539,24 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
                 <h3 className="font-bold text-slate-900">Confirm Registration: {confirmAppTarget.studentName}</h3>
                 <p className="text-[11px] text-slate-500">Provide official feedback and assign student credentials</p>
               </div>
-              <button onClick={() => setConfirmAppTarget(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmAppTarget(null);
+                  setConfirmAppError(null);
+                }}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
             </div>
             <form onSubmit={handleConfirmApplication} className="space-y-3 text-xs">
+              {confirmAppError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{confirmAppError}</span>
+                </div>
+              )}
               <div className="p-3 bg-slate-50 rounded-xl text-slate-700 space-y-1">
                 <p><strong>Applying Grade:</strong> {confirmAppTarget.gradeCode}</p>
                 <p><strong>Parent:</strong> {confirmAppTarget.parentName} ({confirmAppTarget.parentPhone})</p>
@@ -5039,9 +5618,24 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
           <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900">{editingImageItem ? 'Edit School Photo Details' : 'Upload School Photo (Gallery Asset)'}</h3>
-              <button onClick={() => setShowAddImageModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddImageModal(false);
+                  setImageFormError(null);
+                }}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
             </div>
             <form onSubmit={handleSaveGalleryImage} className="space-y-3 text-xs">
+              {imageFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{imageFormError}</span>
+                </div>
+              )}
               <div>
                 <label className="font-bold block mb-1">Image Title *</label>
                 <input
@@ -5159,9 +5753,24 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h3 className="font-bold text-slate-900">{editingNewsItem ? 'Edit Announcement' : 'New Website Announcement'}</h3>
-              <button onClick={() => setShowNewsModal(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewsModal(false);
+                  setNewsFormError(null);
+                }}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
             </div>
             <form onSubmit={handleSaveNews} className="space-y-3 text-xs">
+              {newsFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{newsFormError}</span>
+                </div>
+              )}
               <div>
                 <label className="font-bold block mb-1">Announcement Title *</label>
                 <input
@@ -5230,7 +5839,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
               </h3>
               <button
                 type="button"
-                onClick={() => setShowDocModal(false)}
+                onClick={() => {
+                  setShowDocModal(false);
+                  setDocFormError(null);
+                }}
                 className="text-slate-400 hover:text-slate-700"
               >
                 ✕
@@ -5238,6 +5850,12 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
             </div>
 
             <form onSubmit={handleSaveDoc} className="space-y-3.5 text-xs">
+              {docFormError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{docFormError}</span>
+                </div>
+              )}
               <div>
                 <label className="font-bold block mb-1">Document Title *</label>
                 <input
@@ -5421,6 +6039,54 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.enrolled_students;`;
               >
                 <Trash2 className="w-4 h-4" />
                 <span>Yes, Delete Record</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* IN-APP DATABASE BACKUP RESTORE CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {pendingBackupRestore && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 font-display">
+                  Confirm Database Backup Restore
+                </h3>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md inline-block mt-0.5">
+                  Snapshot Recovery
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5 text-xs text-slate-700">
+              <p className="font-bold text-slate-900 break-all">File: {pendingBackupRestore.fileName}</p>
+              <p className="text-[11px] text-slate-600">
+                Existing settings, staff accounts, student records, gallery media, applications, and ledgers will be updated and re-synced to cloud stores.
+              </p>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setPendingBackupRestore(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeRestoreBackup}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Restore &amp; Sync Database</span>
               </button>
             </div>
           </div>

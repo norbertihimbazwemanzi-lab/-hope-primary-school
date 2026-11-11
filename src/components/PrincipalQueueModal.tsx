@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PaymentTransaction,
   getPaymentTransactions,
@@ -34,6 +34,22 @@ export const PrincipalQueueModal: React.FC<PrincipalQueueModalProps> = ({
   const [selectedTx, setSelectedTx] = useState<PaymentTransaction | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTransactions(getPaymentTransactions());
+    }
+    const syncHandler = (e: Event) => {
+      const detail = (e as CustomEvent<PaymentTransaction[]>).detail;
+      if (Array.isArray(detail)) {
+        setTransactions(detail);
+      } else {
+        setTransactions(getPaymentTransactions());
+      }
+    };
+    window.addEventListener('mugina-payments-updated', syncHandler);
+    return () => window.removeEventListener('mugina-payments-updated', syncHandler);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

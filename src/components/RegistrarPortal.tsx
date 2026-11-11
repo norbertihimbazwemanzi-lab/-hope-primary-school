@@ -73,6 +73,7 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
 
   // Feedback banner
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [onboardError, setOnboardError] = useState<string | null>(null);
 
   // Filtered Students
   const filteredStudents = useMemo(() => {
@@ -92,8 +93,9 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
   // Handle Onboard New Student
   const handleOnboardSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onboardForm.fullName || !onboardForm.parentName) {
-      alert('Please enter student name and parent name.');
+    setOnboardError(null);
+    if (!onboardForm.fullName.trim() || !onboardForm.parentName.trim()) {
+      setOnboardError('Please enter both student full name and parent/guardian name.');
       return;
     }
 
@@ -519,10 +521,20 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
                 </div>
               </div>
 
+              {onboardError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{onboardError}</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowOnboardModal(false)}
+                  onClick={() => {
+                    setOnboardError(null);
+                    setShowOnboardModal(false);
+                  }}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
                 >
                   Cancel

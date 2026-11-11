@@ -5,13 +5,16 @@ import heroCampusImg from '../assets/images/hero_mugina_hope_campus_179182325495
 import {
   saveSchoolGalleryItemToFirebase,
   deleteSchoolGalleryItemFromFirebase,
+  fetchSchoolGalleryFromFirebase,
   saveSchoolLogoToFirebase,
   saveSchoolDocumentToFirebase,
   fetchSchoolDocumentsFromFirebase,
   deleteSchoolDocumentFromFirebase,
   saveSchoolAnnouncementToFirebase,
+  fetchSchoolAnnouncementsFromFirebase,
   deleteSchoolAnnouncementFromFirebase,
   saveWebsiteSettingsToFirebase,
+  fetchWebsiteSettingsFromFirebase,
   saveEnrolledStudentToFirebase,
   deleteEnrolledStudentFromFirebase,
   saveStaffMemberToFirebase,
@@ -20,14 +23,77 @@ import {
   saveStaffMembersBatchToFirebase,
   fetchEnrolledStudentsFromFirebase,
   savePaymentTransactionToFirebase,
+  fetchPaymentTransactionsFromFirebase,
   saveApplicationToFirebase,
+  fetchApplicationsFromFirebase,
+  deleteApplicationFromFirebase,
   saveAttendanceBatchToFirebase,
+  fetchAttendanceRecordsFromFirebase,
+  deleteAttendanceRecordInFirebase,
+  saveTeacherAttendanceBatchToFirebase,
+  fetchTeacherAttendanceFromFirebase,
+  deleteTeacherAttendanceRecordInFirebase,
   saveDisciplineRecordToFirebase,
+  fetchDisciplineRecordsFromFirebase,
+  deleteDisciplineRecordInFirebase,
   saveInquiryToFirebase,
+  fetchInquiriesFromFirebase,
+  saveTourBookingToFirebase,
+  fetchTourBookingsFromFirebase,
+  saveApplicantChatToFirebase,
+  fetchApplicantChatByRefFromFirebase,
   saveUserAttributesToFirebase,
   fetchUserAttributesFromFirebase,
   fetchUserByEmailFromFirebase,
 } from './firebaseStore';
+import {
+  saveWebsiteSettingsToSupabase,
+  fetchWebsiteSettingsFromSupabase,
+  saveSchoolGalleryItemToSupabase,
+  saveGalleryBatchToSupabase,
+  deleteSchoolGalleryItemFromSupabase,
+  fetchSchoolGalleryFromSupabase,
+  fetchStaffMembersFromSupabase,
+  saveStaffMemberToSupabase,
+  saveStaffMembersBatchToSupabase,
+  deleteStaffMemberFromSupabase,
+  fetchEnrolledStudentsFromSupabase,
+  saveEnrolledStudentToSupabase,
+  saveEnrolledStudentsBatchToSupabase,
+  deleteEnrolledStudentFromSupabase,
+  fetchPaymentTransactionsFromSupabase,
+  savePaymentTransactionToSupabase,
+  savePaymentTransactionsBatchToSupabase,
+  fetchApplicationsFromSupabase,
+  saveApplicationToSupabase,
+  saveApplicationsBatchToSupabase,
+  deleteApplicationFromSupabase,
+  fetchAttendanceRecordsFromSupabase,
+  saveAttendanceBatchToSupabase,
+  deleteAttendanceRecordFromSupabase,
+  clearAttendanceDateFromSupabase,
+  fetchTeacherAttendanceFromSupabase,
+  saveTeacherAttendanceBatchToSupabase,
+  deleteTeacherAttendanceRecordFromSupabase,
+  fetchDisciplineRecordsFromSupabase,
+  saveDisciplineRecordToSupabase,
+  saveDisciplineBatchToSupabase,
+  deleteDisciplineRecordFromSupabase,
+  fetchAnnouncementsFromSupabase,
+  saveAnnouncementToSupabase,
+  saveAnnouncementsBatchToSupabase,
+  deleteAnnouncementFromSupabase,
+  fetchDocumentsFromSupabase,
+  saveDocumentToSupabase,
+  saveDocumentsBatchToSupabase,
+  deleteDocumentFromSupabase,
+  fetchInquiriesFromSupabase,
+  saveInquiryToSupabase,
+  fetchTourBookingsFromSupabase,
+  saveTourBookingToSupabase,
+  saveApplicantChatToSupabase,
+  fetchApplicantChatByRefFromSupabase,
+} from './supabaseClient';
 
 export type UserRole = 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD' | 'Student';
 
@@ -331,6 +397,7 @@ export interface WebsiteSettings {
     imageUrl: string;
     order?: number;
   }>;
+  updatedAt?: string;
 }
 
 export const defaultWebsiteSettings: WebsiteSettings = {
@@ -939,6 +1006,51 @@ export const getStaffMembers = (): StaffMember[] => {
   return defaultStaff;
 };
 
+const dispatchStoreEvent = (eventName: string, detail?: any) => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(eventName, { detail }));
+  }
+};
+
+const getMaxTimestampMs = (items: any[] | null | undefined): number => {
+  if (!Array.isArray(items) || items.length === 0) return 0;
+  let maxMs = 0;
+  for (const item of items) {
+    const raw = item?.updatedAt || item?.updated_at || item?.recordedAt;
+    if (raw) {
+      const ms = Date.parse(raw);
+      if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
+    }
+  }
+  return maxMs;
+};
+
+/**
+ * Resolves the freshest non-empty authoritative dataset from Supabase, Firebase, and Express fallback.
+ * Returns null only when NO remote source has any rows (so fresh unseeded databases keep local defaults).
+ */
+const resolveAuthoritativeCloudArray = <T,>(
+  sbItems: T[] | null | undefined,
+  fbItems: T[] | null | undefined,
+  serverItems?: T[] | null
+): T[] | null => {
+  const hasSb = Array.isArray(sbItems) && sbItems.length > 0;
+  const hasFb = Array.isArray(fbItems) && fbItems.length > 0;
+
+  if (hasSb && hasFb) {
+    const sbMs = getMaxTimestampMs(sbItems);
+    const fbMs = getMaxTimestampMs(fbItems);
+    if (fbMs > sbMs + 2500) {
+      return fbItems as T[];
+    }
+    return sbItems as T[];
+  }
+  if (hasSb) return sbItems as T[];
+  if (hasFb) return fbItems as T[];
+  if (Array.isArray(serverItems) && serverItems.length > 0) return serverItems;
+  return null;
+};
+
 // Persistent Server Database Synchronization
 export const persistToServer = (endpoint: string, data: any) => {
   try {
@@ -960,6 +1072,10 @@ export const saveStaffMembers = (list: StaffMember[]) => {
   saveStaffMembersBatchToFirebase(list).catch((e) =>
     console.warn('[Staff Batch] Firebase save notice:', e)
   );
+  saveStaffMembersBatchToSupabase(list).catch((e) =>
+    console.warn('[Staff Batch] Supabase save notice:', e)
+  );
+  dispatchStoreEvent('mugina-staff-updated', list);
 };
 
 export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' | 'status'>): StaffMember => {
@@ -971,75 +1087,89 @@ export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' |
     status: 'Active',
   };
   const updated = [newStaff, ...list];
-  saveStaffMembers(updated);
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
+  persistToServer('/api/staff', { items: updated });
   saveStaffMemberToFirebase(newStaff).catch((e) =>
     console.warn('[Staff Enroll] Firebase Firestore error:', e)
   );
+  saveStaffMemberToSupabase(newStaff).catch((e) =>
+    console.warn('[Staff Enroll] Supabase error:', e)
+  );
+  dispatchStoreEvent('mugina-staff-updated', updated);
   return newStaff;
 };
 
 export const updateStaffMember = (id: string, updates: Partial<StaffMember>): StaffMember[] => {
   const list = getStaffMembers();
   const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
-  saveStaffMembers(updated);
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
+  persistToServer('/api/staff', { items: updated });
   const target = updated.find((s) => s.id === id);
   if (target) {
     saveStaffMemberToFirebase(target).catch((e) =>
       console.warn('[Staff Update] Firebase Firestore error:', e)
     );
+    saveStaffMemberToSupabase(target).catch((e) =>
+      console.warn('[Staff Update] Supabase error:', e)
+    );
   }
+  dispatchStoreEvent('mugina-staff-updated', updated);
   return updated;
 };
 
 export const deleteStaffMember = (id: string): StaffMember[] => {
   const list = getStaffMembers();
   const updated = list.filter((s) => s.id !== id);
-  saveStaffMembers(updated);
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
+  persistToServer('/api/staff', { items: updated });
   deleteStaffMemberFromFirebase(id).catch((e) =>
     console.warn('[Staff Delete] Firebase Firestore error:', e)
   );
+  deleteStaffMemberFromSupabase(id).catch((e) =>
+    console.warn('[Staff Delete] Supabase error:', e)
+  );
+  dispatchStoreEvent('mugina-staff-updated', updated);
   return updated;
 };
 
 /**
- * Cross-Device Synchronization for Staff Accounts from Firebase Firestore and Server
- * Guarantees accounts enrolled by Admin are immediately visible and recognized on any device
+ * Cross-Device Synchronization for Staff Accounts from Supabase, Firebase Firestore & Server
  */
 export const syncServerStaff = async (): Promise<StaffMember[]> => {
   try {
-    const firestoreStaff = await fetchStaffMembersFromFirebase();
-    let serverStaff: StaffMember[] = [];
-    try {
-      const res = await fetch('/api/staff');
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.items)) serverStaff = json.items;
-      }
-    } catch {}
+    const [sbStaff, fbStaff, serverStaff] = await Promise.all([
+      fetchStaffMembersFromSupabase(),
+      fetchStaffMembersFromFirebase(),
+      fetch('/api/staff')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
 
-    const local = getStaffMembers();
-    const map = new Map<string, StaffMember>();
+    const authoritative = resolveAuthoritativeCloudArray<StaffMember>(sbStaff, fbStaff as StaffMember[], serverStaff);
 
-    // 1. Seed defaults first
-    defaultStaff.forEach((s) => map.set(s.username.toLowerCase(), s));
-    // 2. Local
-    local.forEach((s) => map.set(s.username.toLowerCase(), s));
-    // 3. Server
-    serverStaff.forEach((s) => map.set(s.username.toLowerCase(), s));
-    // 4. Firestore (authoritative cross-device)
-    firestoreStaff.forEach((s) => {
-      if (s.username) map.set(s.username.toLowerCase(), s as StaffMember);
-    });
-
-    const merged = Array.from(map.values());
-    localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(merged));
-
-    // Ensure all default/initial accounts are in Firestore if database is newly initialized
-    if (firestoreStaff.length < merged.length) {
-      saveStaffMembersBatchToFirebase(merged).catch(() => {});
+    if (authoritative && authoritative.length > 0) {
+      // Always guarantee primary master admin logins stay accessible even if pruned remotely
+      const map = new Map<string, StaffMember>();
+      authoritative.forEach((s) => {
+        if (s && s.username) map.set(s.username.toLowerCase(), s);
+      });
+      defaultStaff.slice(0, 2).forEach((coreAdmin) => {
+        const key = coreAdmin.username.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, coreAdmin);
+        }
+      });
+      const synced = Array.from(map.values());
+      localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(synced));
+      dispatchStoreEvent('mugina-staff-updated', synced);
+      return synced;
     }
 
-    return merged;
+    // Seed remote stores only if both remote databases are uninitialized
+    const fallback = getStaffMembers();
+    saveStaffMembersBatchToFirebase(fallback).catch(() => {});
+    saveStaffMembersBatchToSupabase(fallback).catch(() => {});
+    return fallback;
   } catch (err) {
     console.warn('[Staff Sync] Notice:', err);
     return getStaffMembers();
@@ -1047,34 +1177,31 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
 };
 
 /**
- * Cross-Device Synchronization for Enrolled Students from Firebase Firestore and Server
+ * Cross-Device Synchronization for Enrolled Students from Supabase, Firebase Firestore & Server
  */
 export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
   try {
-    const firestoreStudents = await fetchEnrolledStudentsFromFirebase();
-    let serverStudents: EnrolledStudent[] = [];
-    try {
-      const res = await fetch('/api/students');
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.items)) serverStudents = json.items;
-      }
-    } catch {}
+    const [sbStudents, fbStudents, serverStudents] = await Promise.all([
+      fetchEnrolledStudentsFromSupabase(),
+      fetchEnrolledStudentsFromFirebase(),
+      fetch('/api/students')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
 
-    const local = getEnrolledStudents();
-    const map = new Map<string, EnrolledStudent>();
+    const authoritative = resolveAuthoritativeCloudArray<EnrolledStudent>(
+      sbStudents,
+      fbStudents as EnrolledStudent[],
+      serverStudents
+    );
 
-    defaultStudents.forEach((s) => map.set(s.id, s));
-    local.forEach((s) => map.set(s.id, s));
-    serverStudents.forEach((s) => map.set(s.id, s));
-    firestoreStudents.forEach((s) => {
-      if (s.id) map.set(s.id, s as EnrolledStudent);
-    });
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-students-updated', authoritative);
+      return authoritative;
+    }
 
-    const merged = Array.from(map.values());
-    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(merged));
-
-    return merged;
+    return getEnrolledStudents();
   } catch (err) {
     console.warn('[Student Sync] Notice:', err);
     return getEnrolledStudents();
@@ -1085,17 +1212,9 @@ export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
 export const getEnrolledStudents = (): EnrolledStudent[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
-    if (raw) {
+    if (raw !== null) {
       const parsed: EnrolledStudent[] = JSON.parse(raw);
-      // Ensure screenshot seed students are included if missing
-      const existingIds = new Set(parsed.map((s) => s.id));
-      const missing = defaultStudents.filter((d) => !existingIds.has(d.id));
-      if (missing.length > 0) {
-        const merged = [...parsed, ...missing];
-        localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(merged));
-        return merged;
-      }
-      return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.error(e);
@@ -1106,6 +1225,11 @@ export const getEnrolledStudents = (): EnrolledStudent[] => {
 export const saveEnrolledStudents = (list: EnrolledStudent[]) => {
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(list));
   persistToServer('/api/students', { items: list });
+  Promise.all(list.map((st) => saveEnrolledStudentToFirebase(st))).catch(() => {});
+  saveEnrolledStudentsBatchToSupabase(list).catch((e) =>
+    console.warn('Supabase student batch sync notice:', e)
+  );
+  dispatchStoreEvent('mugina-students-updated', list);
 };
 
 export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enrolledAt'>): EnrolledStudent => {
@@ -1116,33 +1240,48 @@ export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enroll
     enrolledAt: new Date().toISOString().split('T')[0],
   };
   const updated = [newStudent, ...list];
-  saveEnrolledStudents(updated);
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+  persistToServer('/api/students', { items: updated });
   saveEnrolledStudentToFirebase(newStudent).catch((e) =>
     console.warn('Firebase student sync notice:', e)
   );
+  saveEnrolledStudentToSupabase(newStudent).catch((e) =>
+    console.warn('Supabase student sync notice:', e)
+  );
+  dispatchStoreEvent('mugina-students-updated', updated);
   return newStudent;
 };
 
 export const updateEnrolledStudent = (id: string, updates: Partial<EnrolledStudent>): EnrolledStudent[] => {
   const list = getEnrolledStudents();
   const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
-  saveEnrolledStudents(updated);
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+  persistToServer('/api/students', { items: updated });
   const target = updated.find((s) => s.id === id);
   if (target) {
     saveEnrolledStudentToFirebase(target).catch((e) =>
       console.warn('Firebase student sync notice:', e)
     );
+    saveEnrolledStudentToSupabase(target).catch((e) =>
+      console.warn('Supabase student sync notice:', e)
+    );
   }
+  dispatchStoreEvent('mugina-students-updated', updated);
   return updated;
 };
 
 export const deleteEnrolledStudent = (id: string): EnrolledStudent[] => {
   const list = getEnrolledStudents();
   const updated = list.filter((s) => s.id !== id);
-  saveEnrolledStudents(updated);
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+  persistToServer('/api/students', { items: updated });
   deleteEnrolledStudentFromFirebase(id).catch((e) =>
     console.warn('Firebase student delete notice:', e)
   );
+  deleteEnrolledStudentFromSupabase(id).catch((e) =>
+    console.warn('Supabase student delete notice:', e)
+  );
+  dispatchStoreEvent('mugina-students-updated', updated);
   return updated;
 };
 
@@ -1181,6 +1320,8 @@ export const saveAttendanceBatch = (newRecords: AttendanceRecord[]) => {
     localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updated));
     persistToServer('/api/attendance', { items: updated });
     saveAttendanceBatchToFirebase(newRecords).catch((e) => console.warn('Attendance firestore notice:', e));
+    saveAttendanceBatchToSupabase(newRecords).catch((e) => console.warn('Attendance supabase notice:', e));
+    dispatchStoreEvent('mugina-attendance-updated', updated);
   } catch (e) {
     console.error(e);
   }
@@ -1190,9 +1331,15 @@ export const clearAttendanceForDate = (date: string): AttendanceRecord[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
     const existing: AttendanceRecord[] = raw ? JSON.parse(raw) : [];
+    const removed = existing.filter((r) => r.date === date);
     const updated = existing.filter((r) => r.date !== date);
     localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updated));
     persistToServer('/api/attendance', { items: updated });
+    removed.forEach((r) => {
+      deleteAttendanceRecordInFirebase(r.id).catch(() => {});
+    });
+    clearAttendanceDateFromSupabase(date).catch(() => {});
+    dispatchStoreEvent('mugina-attendance-updated', updated);
     return updated;
   } catch (e) {
     console.error(e);
@@ -1207,6 +1354,9 @@ export const deleteAttendanceRecord = (recordId: string): AttendanceRecord[] => 
     const updated = existing.filter((r) => r.id !== recordId);
     localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updated));
     persistToServer('/api/attendance', { items: updated });
+    deleteAttendanceRecordInFirebase(recordId).catch(() => {});
+    deleteAttendanceRecordFromSupabase(recordId).catch(() => {});
+    dispatchStoreEvent('mugina-attendance-updated', updated);
     return updated;
   } catch (e) {
     console.error(e);
@@ -1269,50 +1419,63 @@ export const getWebsiteSettings = (): WebsiteSettings => {
 };
 
 export const saveWebsiteSettings = (settings: WebsiteSettings) => {
-  localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(settings));
+  const stampedSettings: WebsiteSettings = {
+    ...settings,
+    updatedAt: new Date().toISOString(),
+  };
+
+  localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(stampedSettings));
 
   // Sync official school logo to Firebase Firestore for cross-device visibility
-  if (settings.schoolLogoUrl !== undefined) {
-    saveSchoolLogoToFirebase(settings.schoolLogoUrl || '').catch((e) =>
+  if (stampedSettings.schoolLogoUrl !== undefined) {
+    saveSchoolLogoToFirebase(stampedSettings.schoolLogoUrl || '').catch((e) =>
       console.warn('Firebase school logo sync error:', e)
     );
   }
 
   // Sync complete settings to Firebase Firestore
-  saveWebsiteSettingsToFirebase(settings).catch((e) =>
+  saveWebsiteSettingsToFirebase(stampedSettings).catch((e) =>
     console.warn('Firebase website settings sync notice:', e)
   );
 
   // Sync complete settings to Supabase
-  import('./supabaseClient').then(({ saveWebsiteSettingsToSupabase }) => {
-    saveWebsiteSettingsToSupabase(settings).catch((e) =>
-      console.warn('Supabase website settings sync notice:', e)
-    );
-  }).catch(() => {});
+  saveWebsiteSettingsToSupabase(stampedSettings).catch((e) =>
+    console.warn('Supabase website settings sync notice:', e)
+  );
 
   try {
     fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(stampedSettings),
     }).catch((err) => console.warn('Server settings sync notice:', err));
   } catch (err) {
     console.warn('Settings sync error:', err);
   }
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('mugina-settings-updated', { detail: settings }));
-  }
+  dispatchStoreEvent('mugina-settings-updated', stampedSettings);
 };
 
 export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | null> => {
   try {
-    const res = await fetch('/api/settings');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.settings) {
-        localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(data.settings));
-        return data.settings;
-      }
+    const [sbSettings, fbSettings, serverSettings] = await Promise.all([
+      fetchWebsiteSettingsFromSupabase(),
+      fetchWebsiteSettingsFromFirebase(),
+      fetch('/api/settings')
+        .then(async (res) => (res.ok ? (await res.json()).settings : null))
+        .catch(() => null),
+    ]);
+
+    const candidates = [sbSettings, fbSettings, serverSettings].filter(Boolean);
+    if (candidates.length > 0) {
+      candidates.sort((a: any, b: any) => {
+        const aMs = a?.updatedAt ? Date.parse(a.updatedAt) : 0;
+        const bMs = b?.updatedAt ? Date.parse(b.updatedAt) : 0;
+        return (Number.isNaN(bMs) ? 0 : bMs) - (Number.isNaN(aMs) ? 0 : aMs);
+      });
+      const freshest = { ...defaultWebsiteSettings, ...candidates[0] };
+      localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(freshest));
+      dispatchStoreEvent('mugina-settings-updated', freshest);
+      return freshest;
     }
   } catch (err) {
     console.warn('Sync server settings notice:', err);
@@ -1342,22 +1505,32 @@ export const getGalleryItems = (): FacilityItem[] => {
   return initialGalleryWithCrest;
 };
 
-export const saveGalleryItems = (items: FacilityItem[]) => {
+export const saveGalleryItems = (items: FacilityItem[], syncRemote = false) => {
   localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(items));
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('mugina-gallery-updated', { detail: items }));
+  if (syncRemote) {
+    items.forEach((item) => {
+      saveSchoolGalleryItemToFirebase(item).catch(() => {});
+    });
+    saveGalleryBatchToSupabase(items).catch(() => {});
+    persistToServer('/api/gallery', { items });
   }
+  dispatchStoreEvent('mugina-gallery-updated', items);
 };
 
 export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
   try {
-    const res = await fetch('/api/gallery');
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.items) && data.items.length > 0) {
-        saveGalleryItems(data.items);
-        return data.items;
-      }
+    const [sbItems, fbItems, serverItems] = await Promise.all([
+      fetchSchoolGalleryFromSupabase(),
+      fetchSchoolGalleryFromFirebase(),
+      fetch('/api/gallery')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
+
+    const authoritative = resolveAuthoritativeCloudArray<FacilityItem>(sbItems, fbItems, serverItems);
+    if (authoritative && authoritative.length > 0) {
+      saveGalleryItems(authoritative);
+      return authoritative;
     }
   } catch (err) {
     console.warn('Could not sync gallery with server:', err);
@@ -1378,9 +1551,7 @@ export const addGalleryItem = (item: Omit<FacilityItem, 'id'>): FacilityItem => 
   saveSchoolGalleryItemToFirebase(newItem).catch((e) => console.warn('Firebase gallery save error:', e));
 
   // Sync to Supabase PostgreSQL database
-  import('./supabaseClient').then(({ saveSchoolGalleryItemToSupabase }) => {
-    saveSchoolGalleryItemToSupabase(newItem).catch((e) => console.warn('Supabase gallery save notice:', e));
-  }).catch(() => {});
+  saveSchoolGalleryItemToSupabase(newItem).catch((e) => console.warn('Supabase gallery save notice:', e));
 
   // Sync to server so visible on all devices
   fetch('/api/gallery', {
@@ -1400,9 +1571,7 @@ export const updateGalleryItem = (id: string, updates: Partial<FacilityItem>): F
   const target = updated.find((i) => i.id === id);
   if (target) {
     saveSchoolGalleryItemToFirebase(target).catch((e) => console.warn('Firebase gallery update error:', e));
-    import('./supabaseClient').then(({ saveSchoolGalleryItemToSupabase }) => {
-      saveSchoolGalleryItemToSupabase(target).catch((e) => console.warn('Supabase gallery update notice:', e));
-    }).catch(() => {});
+    saveSchoolGalleryItemToSupabase(target).catch((e) => console.warn('Supabase gallery update notice:', e));
     fetch('/api/gallery', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1422,9 +1591,7 @@ export const deleteGalleryItem = (id: string): FacilityItem[] => {
   deleteSchoolGalleryItemFromFirebase(id).catch((e) => console.warn('Firebase gallery delete error:', e));
 
   // Delete from Supabase PostgreSQL database
-  import('./supabaseClient').then(({ deleteSchoolGalleryItemFromSupabase }) => {
-    deleteSchoolGalleryItemFromSupabase(id).catch((e) => console.warn('Supabase gallery delete notice:', e));
-  }).catch(() => {});
+  deleteSchoolGalleryItemFromSupabase(id).catch((e) => console.warn('Supabase gallery delete notice:', e));
 
   // Delete from server
   fetch(`/api/gallery/${id}`, { method: 'DELETE' }).catch((e) => console.warn('Gallery delete error:', e));
@@ -1464,6 +1631,9 @@ export const addInquiry = (inquiry: Omit<AdminInquiry, 'id' | 'createdAt' | 'sta
   };
   const updated = [newInq, ...current];
   localStorage.setItem(STORAGE_KEYS.INQUIRIES, JSON.stringify(updated));
+  saveInquiryToFirebase(newInq).catch((e) => console.warn('Firebase inquiry sync notice:', e));
+  saveInquiryToSupabase(newInq).catch((e) => console.warn('Supabase inquiry sync notice:', e));
+  dispatchStoreEvent('mugina-inquiries-updated', updated);
   return newInq;
 };
 
@@ -1471,7 +1641,31 @@ export const updateInquiryStatus = (id: string, status: AdminInquiry['status'], 
   const current = getInquiries();
   const updated = current.map((i) => (i.id === id ? { ...i, status, emailSentStatus: note || i.emailSentStatus } : i));
   localStorage.setItem(STORAGE_KEYS.INQUIRIES, JSON.stringify(updated));
+  const target = updated.find((i) => i.id === id);
+  if (target) {
+    saveInquiryToFirebase(target).catch((e) => console.warn('Firebase inquiry update notice:', e));
+    saveInquiryToSupabase(target).catch((e) => console.warn('Supabase inquiry update notice:', e));
+  }
+  dispatchStoreEvent('mugina-inquiries-updated', updated);
   return updated;
+};
+
+export const syncServerInquiries = async (): Promise<AdminInquiry[]> => {
+  try {
+    const [sbInq, fbInq] = await Promise.all([
+      fetchInquiriesFromSupabase(),
+      fetchInquiriesFromFirebase(),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<AdminInquiry>(sbInq, fbInq as AdminInquiry[]);
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.INQUIRIES, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-inquiries-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Inquiries sync notice:', err);
+  }
+  return getInquiries();
 };
 
 // --- Admissions Applications ---
@@ -1577,7 +1771,33 @@ export const addApplication = (app: Omit<AdminApplication, 'id' | 'createdAt' | 
     status: 'Pending Confirmation',
   };
   const updated = [newApp, ...current];
-  saveApplications(updated);
+  localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(updated));
+  persistToServer('/api/applications', { items: updated });
+  saveApplicationToFirebase(newApp).catch((e) => console.warn('Application firestore notice:', e));
+  saveApplicationToSupabase(newApp).catch((e) => console.warn('Application supabase notice:', e));
+
+  const initialThread = {
+    refCode: newApp.refCode.trim().toUpperCase(),
+    studentName: newApp.studentName,
+    parentName: newApp.parentName,
+    parentEmail: newApp.parentEmail || '',
+    parentPhone: newApp.parentPhone || '',
+    gradeCode: newApp.gradeCode,
+    status: newApp.status,
+    messages: [
+      {
+        id: `sys-${newApp.id}`,
+        sender: 'system' as const,
+        senderName: 'Mugina Hope Administration Desk',
+        text: `Application ${newApp.refCode} for ${newApp.studentName} (${newApp.gradeCode}) submitted and awaiting DOS confirmation.`,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+  saveApplicantChatToFirebase(initialThread).catch(() => {});
+  saveApplicantChatToSupabase(initialThread).catch(() => {});
+  dispatchStoreEvent('mugina-applications-updated', updated);
   return newApp;
 };
 
@@ -1624,9 +1844,47 @@ export const confirmApplicationByDOSOrAdmin = (
         }
       : a
   );
-  saveApplications(updatedApps);
+  const updatedApp = updatedApps.find((a) => a.id === appId)!;
+  localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(updatedApps));
+  persistToServer('/api/applications', { items: updatedApps });
+  saveApplicationToFirebase(updatedApp).catch((e) => console.warn('Application confirm firestore notice:', e));
+  saveApplicationToSupabase(updatedApp).catch((e) => console.warn('Application confirm supabase notice:', e));
 
-  return { updatedApp: updatedApps.find((a) => a.id === appId)!, student: newStudent };
+  // Update application chat status in both Supabase and Firebase
+  const confirmMsg = {
+    id: `confirm-${Date.now()}`,
+    sender: 'system' as const,
+    senderName: 'Mugina Hope Administration Desk',
+    text: `OFFICIAL CONFIRMATION: Admission approved by ${confirmedBy}. Registration ID: ${regNumber}. ${feedbackNotes || ''}`.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  Promise.all([
+    fetchApplicantChatByRefFromSupabase(updatedApp.refCode),
+    fetchApplicantChatByRefFromFirebase(updatedApp.refCode),
+  ])
+    .then(([sbThread, fbThread]) => {
+      const base = sbThread || fbThread || {
+        refCode: updatedApp.refCode.toUpperCase(),
+        studentName: updatedApp.studentName,
+        parentName: updatedApp.parentName,
+        parentEmail: updatedApp.parentEmail,
+        parentPhone: updatedApp.parentPhone,
+        gradeCode: updatedApp.gradeCode,
+        messages: [],
+      };
+      const syncedThread = {
+        ...base,
+        status: 'Confirmed & Enrolled',
+        messages: [...(base.messages || []), confirmMsg],
+        updatedAt: new Date().toISOString(),
+      };
+      saveApplicantChatToSupabase(syncedThread).catch(() => {});
+      saveApplicantChatToFirebase(syncedThread).catch(() => {});
+    })
+    .catch(() => {});
+
+  dispatchStoreEvent('mugina-applications-updated', updatedApps);
+  return { updatedApp, student: newStudent };
 };
 
 export const saveApplications = (list: AdminApplication[]) => {
@@ -1635,14 +1893,46 @@ export const saveApplications = (list: AdminApplication[]) => {
   list.forEach((app) => {
     saveApplicationToFirebase(app).catch((e) => console.warn('Application firestore notice:', e));
   });
+  saveApplicationsBatchToSupabase(list).catch((e) => console.warn('Application supabase notice:', e));
+  dispatchStoreEvent('mugina-applications-updated', list);
 };
 
 export const deleteApplication = (id: string): AdminApplication[] => {
   const current = getApplications();
   const updated = current.filter((a) => a.id !== id);
-  saveApplications(updated);
+  localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(updated));
+  persistToServer('/api/applications', { items: updated });
+  deleteApplicationFromFirebase(id).catch((e) => console.warn('Application firestore delete notice:', e));
+  deleteApplicationFromSupabase(id).catch((e) => console.warn('Application supabase delete notice:', e));
+  dispatchStoreEvent('mugina-applications-updated', updated);
   return updated;
 };
+
+export const syncServerApplications = async (): Promise<AdminApplication[]> => {
+  try {
+    const [sbApps, fbApps, serverApps] = await Promise.all([
+      fetchApplicationsFromSupabase(),
+      fetchApplicationsFromFirebase(),
+      fetch('/api/applications')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<AdminApplication>(
+      sbApps,
+      fbApps as AdminApplication[],
+      serverApps
+    );
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-applications-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Applications sync notice:', err);
+  }
+  return getApplications();
+};
+
 export const getTourBookings = (): AdminTourBooking[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.TOURS);
@@ -1663,7 +1953,31 @@ export const addTourBooking = (tour: Omit<AdminTourBooking, 'id' | 'createdAt' |
   };
   const updated = [newTour, ...current];
   localStorage.setItem(STORAGE_KEYS.TOURS, JSON.stringify(updated));
+  saveTourBookingToFirebase(newTour).catch((e) => console.warn('Firebase tour booking notice:', e));
+  saveTourBookingToSupabase(newTour).catch((e) => console.warn('Supabase tour booking notice:', e));
+  dispatchStoreEvent('mugina-tours-updated', updated);
   return newTour;
+};
+
+export const syncServerTourBookings = async (): Promise<AdminTourBooking[]> => {
+  try {
+    const [sbTours, fbTours] = await Promise.all([
+      fetchTourBookingsFromSupabase(),
+      fetchTourBookingsFromFirebase(),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<AdminTourBooking>(
+      sbTours,
+      fbTours as AdminTourBooking[]
+    );
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.TOURS, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-tours-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Tours sync notice:', err);
+  }
+  return getTourBookings();
 };
 
 // --- Announcements ---
@@ -1686,8 +2000,15 @@ export const getAnnouncements = (): SchoolAnnouncement[] => {
   ];
 };
 
-export const saveAnnouncements = (items: SchoolAnnouncement[]) => {
+export const saveAnnouncements = (items: SchoolAnnouncement[], syncRemote = false) => {
   localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(items));
+  if (syncRemote) {
+    items.forEach((a) => {
+      saveSchoolAnnouncementToFirebase(a).catch(() => {});
+    });
+    saveAnnouncementsBatchToSupabase(items).catch(() => {});
+  }
+  dispatchStoreEvent('mugina-announcements-updated', items);
 };
 
 export const addAnnouncement = (item: Omit<SchoolAnnouncement, 'id' | 'publishedAt'>): SchoolAnnouncement => {
@@ -1702,6 +2023,9 @@ export const addAnnouncement = (item: Omit<SchoolAnnouncement, 'id' | 'published
   saveSchoolAnnouncementToFirebase(newAnn).catch((e) =>
     console.warn('Firebase announcement sync notice:', e)
   );
+  saveAnnouncementToSupabase(newAnn).catch((e) =>
+    console.warn('Supabase announcement sync notice:', e)
+  );
   return newAnn;
 };
 
@@ -1714,6 +2038,9 @@ export const updateAnnouncement = (id: string, updates: Partial<SchoolAnnounceme
     saveSchoolAnnouncementToFirebase(target).catch((e) =>
       console.warn('Firebase announcement sync notice:', e)
     );
+    saveAnnouncementToSupabase(target).catch((e) =>
+      console.warn('Supabase announcement sync notice:', e)
+    );
   }
   return updated;
 };
@@ -1725,7 +2052,30 @@ export const deleteAnnouncement = (id: string): SchoolAnnouncement[] => {
   deleteSchoolAnnouncementFromFirebase(id).catch((e) =>
     console.warn('Firebase announcement delete notice:', e)
   );
+  deleteAnnouncementFromSupabase(id).catch((e) =>
+    console.warn('Supabase announcement delete notice:', e)
+  );
   return updated;
+};
+
+export const syncServerAnnouncements = async (): Promise<SchoolAnnouncement[]> => {
+  try {
+    const [sbAnn, fbAnn] = await Promise.all([
+      fetchAnnouncementsFromSupabase(),
+      fetchSchoolAnnouncementsFromFirebase(),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<SchoolAnnouncement>(
+      sbAnn,
+      fbAnn as SchoolAnnouncement[]
+    );
+    if (authoritative && authoritative.length > 0) {
+      saveAnnouncements(authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Announcements sync notice:', err);
+  }
+  return getAnnouncements();
 };
 
 // --- Current Auth Session & Role ---
@@ -1876,30 +2226,34 @@ export const getRequiredDocuments = (): RegistrationDocument[] => {
 
 export const saveRequiredDocuments = (docs: RegistrationDocument[]) => {
   localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(docs));
-  // Sync each document to Firebase Firestore
   docs.forEach((d) => {
     saveSchoolDocumentToFirebase(d).catch((e) => console.warn('Firebase document save notice:', e));
   });
+  saveDocumentsBatchToSupabase(docs).catch((e) => console.warn('Supabase document save notice:', e));
   persistToServer('/api/documents', { items: docs });
+  dispatchStoreEvent('mugina-documents-updated', docs);
 };
 
 export const syncServerDocuments = async (): Promise<RegistrationDocument[]> => {
   try {
-    // 1. Fetch from Firebase Firestore for cross-device consistency
-    const firestoreDocs = await fetchSchoolDocumentsFromFirebase();
-    if (firestoreDocs && firestoreDocs.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(firestoreDocs));
-      return firestoreDocs;
-    }
+    const [sbDocs, fbDocs, serverDocs] = await Promise.all([
+      fetchDocumentsFromSupabase(),
+      fetchSchoolDocumentsFromFirebase(),
+      fetch('/api/documents')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
 
-    // 2. Fallback to server endpoint
-    const res = await fetch('/api/documents');
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.items) && data.items.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(data.items));
-        return data.items;
-      }
+    const authoritative = resolveAuthoritativeCloudArray<RegistrationDocument>(
+      sbDocs,
+      fbDocs as RegistrationDocument[],
+      serverDocs
+    );
+    if (authoritative && authoritative.length > 0) {
+      const sorted = [...authoritative].sort((a, b) => (a.order || 0) - (b.order || 0));
+      localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(sorted));
+      dispatchStoreEvent('mugina-documents-updated', sorted);
+      return sorted;
     }
   } catch (err) {
     console.warn('Sync documents notice:', err);
@@ -1916,38 +2270,38 @@ export const addRequiredDocument = (doc: Omit<RegistrationDocument, 'id' | 'orde
     uploadedAt: doc.uploadedAt || new Date().toISOString(),
   };
   const updated = [...current, newDoc];
-  saveRequiredDocuments(updated);
-
-  // Sync to Firebase Firestore so all users see this document
+  localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(updated));
   saveSchoolDocumentToFirebase(newDoc).catch((e) => console.warn('Firebase document save notice:', e));
-
+  saveDocumentToSupabase(newDoc).catch((e) => console.warn('Supabase document save notice:', e));
+  persistToServer('/api/documents', { items: updated });
+  dispatchStoreEvent('mugina-documents-updated', updated);
   return newDoc;
 };
 
 export const updateRequiredDocument = (id: string, updates: Partial<RegistrationDocument>): RegistrationDocument[] => {
   const current = getRequiredDocuments();
   const updated = current.map((d) => (d.id === id ? { ...d, ...updates } : d));
-  saveRequiredDocuments(updated);
+  localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(updated));
 
   const target = updated.find((d) => d.id === id);
   if (target) {
     saveSchoolDocumentToFirebase(target).catch((e) => console.warn('Firebase document update notice:', e));
+    saveDocumentToSupabase(target).catch((e) => console.warn('Supabase document update notice:', e));
   }
-
+  persistToServer('/api/documents', { items: updated });
+  dispatchStoreEvent('mugina-documents-updated', updated);
   return updated;
 };
 
 export const deleteRequiredDocument = (id: string): RegistrationDocument[] => {
   const current = getRequiredDocuments();
   const updated = current.filter((d) => d.id !== id);
-  saveRequiredDocuments(updated);
+  localStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(updated));
 
-  // Delete from Firebase Firestore
   deleteSchoolDocumentFromFirebase(id).catch((e) => console.warn('Firebase document delete notice:', e));
-
-  // Delete from server
+  deleteDocumentFromSupabase(id).catch((e) => console.warn('Supabase document delete notice:', e));
   fetch(`/api/documents/${id}`, { method: 'DELETE' }).catch((e) => console.warn('Document delete error:', e));
-
+  dispatchStoreEvent('mugina-documents-updated', updated);
   return updated;
 };
 
@@ -2059,6 +2413,8 @@ export const savePaymentTransactions = (txs: PaymentTransaction[]) => {
   txs.forEach((tx) => {
     savePaymentTransactionToFirebase(tx).catch((e) => console.warn('Payment firestore notice:', e));
   });
+  savePaymentTransactionsBatchToSupabase(txs).catch((e) => console.warn('Payment supabase notice:', e));
+  dispatchStoreEvent('mugina-payments-updated', txs);
 };
 
 export const recordPaymentTransaction = (
@@ -2075,7 +2431,11 @@ export const recordPaymentTransaction = (
     status: 'Completed',
   };
   const updated = [newTx, ...current];
-  savePaymentTransactions(updated);
+  localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
+  persistToServer('/api/payments', { items: updated });
+  savePaymentTransactionToFirebase(newTx).catch((e) => console.warn('Payment firestore notice:', e));
+  savePaymentTransactionToSupabase(newTx).catch((e) => console.warn('Payment supabase notice:', e));
+  dispatchStoreEvent('mugina-payments-updated', updated);
   return newTx;
 };
 
@@ -2097,7 +2457,14 @@ export const requestTransactionRefund = (
     }
     return tx;
   });
-  savePaymentTransactions(updated);
+  const target = updated.find((tx) => tx.id === txId);
+  localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
+  persistToServer('/api/payments', { items: updated });
+  if (target) {
+    savePaymentTransactionToFirebase(target).catch((e) => console.warn('Refund request firestore notice:', e));
+    savePaymentTransactionToSupabase(target).catch((e) => console.warn('Refund request supabase notice:', e));
+  }
+  dispatchStoreEvent('mugina-payments-updated', updated);
   return updated;
 };
 
@@ -2120,41 +2487,135 @@ export const reviewRefundRequest = (
     }
     return tx;
   });
-  savePaymentTransactions(updated);
+  const target = updated.find((tx) => tx.id === txId);
+  localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(updated));
+  persistToServer('/api/payments', { items: updated });
+  if (target) {
+    savePaymentTransactionToFirebase(target).catch((e) => console.warn('Refund review firestore notice:', e));
+    savePaymentTransactionToSupabase(target).catch((e) => console.warn('Refund review supabase notice:', e));
+  }
+  dispatchStoreEvent('mugina-payments-updated', updated);
   return updated;
 };
 
-// Global sync utility to pull latest database records on initial load
+export const syncServerPayments = async (): Promise<PaymentTransaction[]> => {
+  try {
+    const [sbTx, fbTx, serverTx] = await Promise.all([
+      fetchPaymentTransactionsFromSupabase(),
+      fetchPaymentTransactionsFromFirebase(),
+      fetch('/api/payments')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<PaymentTransaction>(
+      sbTx,
+      fbTx as PaymentTransaction[],
+      serverTx
+    );
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-payments-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Payments sync notice:', err);
+  }
+  return getPaymentTransactions();
+};
+
+export const syncServerAttendance = async (): Promise<AttendanceRecord[]> => {
+  try {
+    const [sbAtt, fbAtt, serverAtt] = await Promise.all([
+      fetchAttendanceRecordsFromSupabase(),
+      fetchAttendanceRecordsFromFirebase(),
+      fetch('/api/attendance')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<AttendanceRecord>(
+      sbAtt,
+      fbAtt as AttendanceRecord[],
+      serverAtt
+    );
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-attendance-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Attendance sync notice:', err);
+  }
+  return getAttendanceRecords();
+};
+
+export const syncServerTeacherAttendance = async (): Promise<TeacherAttendanceRecord[]> => {
+  try {
+    const [sbAtt, fbAtt, serverAtt] = await Promise.all([
+      fetchTeacherAttendanceFromSupabase(),
+      fetchTeacherAttendanceFromFirebase(),
+      fetch('/api/teacher-attendance')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<TeacherAttendanceRecord>(
+      sbAtt,
+      fbAtt as TeacherAttendanceRecord[],
+      serverAtt
+    );
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.TEACHER_ATTENDANCE, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-teacher-attendance-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Teacher attendance sync notice:', err);
+  }
+  return getTeacherAttendanceRecords();
+};
+
+export const syncServerDiscipline = async (): Promise<DisciplineRecord[]> => {
+  try {
+    const [sbDisc, fbDisc, serverDisc] = await Promise.all([
+      fetchDisciplineRecordsFromSupabase(),
+      fetchDisciplineRecordsFromFirebase(),
+      fetch('/api/discipline')
+        .then(async (res) => (res.ok ? (await res.json()).items : []))
+        .catch(() => []),
+    ]);
+    const authoritative = resolveAuthoritativeCloudArray<DisciplineRecord>(
+      sbDisc,
+      fbDisc as DisciplineRecord[],
+      serverDisc
+    );
+    if (authoritative && authoritative.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.DISCIPLINE, JSON.stringify(authoritative));
+      dispatchStoreEvent('mugina-discipline-updated', authoritative);
+      return authoritative;
+    }
+  } catch (err) {
+    console.warn('Discipline sync notice:', err);
+  }
+  return getDisciplineRecords();
+};
+
+// Global sync utility to pull latest database records on initial load from Supabase, Firebase & Express fallback
 export const syncAllStoresWithServerDatabase = async () => {
   try {
-    // 1. Cross-device authoritative sync for staff and students from Firebase Firestore
-    await syncServerStaff();
-    await syncServerStudents();
-
-    const endpoints = [
-      { key: STORAGE_KEYS.ATTENDANCE, url: '/api/attendance' },
-      { key: STORAGE_KEYS.TEACHER_ATTENDANCE, url: '/api/teacher-attendance' },
-      { key: STORAGE_KEYS.DISCIPLINE, url: '/api/discipline' },
-      { key: STORAGE_KEYS.PAYMENTS, url: '/api/payments' },
-      { key: STORAGE_KEYS.DOCUMENTS, url: '/api/documents' },
-      { key: STORAGE_KEYS.APPLICATIONS, url: '/api/applications' },
-      { key: STORAGE_KEYS.WEBSITE_SETTINGS, url: '/api/settings' },
-    ];
-
-    for (const ep of endpoints) {
-      try {
-        const res = await fetch(ep.url);
-        if (res.ok) {
-          const json = await res.json();
-          const items = json.items || json.settings;
-          if (items && (Array.isArray(items) ? items.length > 0 : Object.keys(items).length > 0)) {
-            localStorage.setItem(ep.key, JSON.stringify(items));
-          }
-        }
-      } catch (e) {
-        // quiet fallback
-      }
-    }
+    await Promise.allSettled([
+      syncServerWebsiteSettings(),
+      syncServerGalleryItems(),
+      syncServerStaff(),
+      syncServerStudents(),
+      syncServerDocuments(),
+      syncServerAnnouncements(),
+      syncServerPayments(),
+      syncServerApplications(),
+      syncServerAttendance(),
+      syncServerTeacherAttendance(),
+      syncServerDiscipline(),
+      syncServerInquiries(),
+      syncServerTourBookings(),
+    ]);
   } catch (err) {
     console.warn('[Database Sync] Global sync notice:', err);
   }
@@ -2232,6 +2693,13 @@ export const saveTeacherAttendanceBatch = (records: TeacherAttendanceRecord[]) =
     const updated = Array.from(existingMap.values());
     localStorage.setItem(STORAGE_KEYS.TEACHER_ATTENDANCE, JSON.stringify(updated));
     persistToServer('/api/teacher-attendance', { items: updated });
+    saveTeacherAttendanceBatchToFirebase(records).catch((e) =>
+      console.warn('Teacher attendance firestore notice:', e)
+    );
+    saveTeacherAttendanceBatchToSupabase(records).catch((e) =>
+      console.warn('Teacher attendance supabase notice:', e)
+    );
+    dispatchStoreEvent('mugina-teacher-attendance-updated', updated);
   } catch (e) {
     console.error(e);
   }
@@ -2244,6 +2712,9 @@ export const deleteTeacherAttendanceRecord = (id: string): TeacherAttendanceReco
     const updated = existing.filter((r) => r.id !== id);
     localStorage.setItem(STORAGE_KEYS.TEACHER_ATTENDANCE, JSON.stringify(updated));
     persistToServer('/api/teacher-attendance', { items: updated });
+    deleteTeacherAttendanceRecordInFirebase(id).catch(() => {});
+    deleteTeacherAttendanceRecordFromSupabase(id).catch(() => {});
+    dispatchStoreEvent('mugina-teacher-attendance-updated', updated);
     return updated;
   } catch (e) {
     console.error(e);
@@ -2347,6 +2818,8 @@ export const saveDisciplineRecords = (records: DisciplineRecord[]) => {
   records.forEach((rec) => {
     saveDisciplineRecordToFirebase(rec).catch((e) => console.warn('Discipline firestore notice:', e));
   });
+  saveDisciplineBatchToSupabase(records).catch((e) => console.warn('Discipline supabase notice:', e));
+  dispatchStoreEvent('mugina-discipline-updated', records);
 };
 
 export const addDisciplineRecord = (
@@ -2360,7 +2833,11 @@ export const addDisciplineRecord = (
     caseNumber,
   };
   const updated = [newRec, ...current];
-  saveDisciplineRecords(updated);
+  localStorage.setItem(STORAGE_KEYS.DISCIPLINE, JSON.stringify(updated));
+  persistToServer('/api/discipline', { items: updated });
+  saveDisciplineRecordToFirebase(newRec).catch((e) => console.warn('Discipline firestore notice:', e));
+  saveDisciplineRecordToSupabase(newRec).catch((e) => console.warn('Discipline supabase notice:', e));
+  dispatchStoreEvent('mugina-discipline-updated', updated);
   return newRec;
 };
 
@@ -2370,16 +2847,28 @@ export const updateDisciplineRecord = (
 ): DisciplineRecord[] => {
   const current = getDisciplineRecords();
   const updated = current.map((r) => (r.id === id ? { ...r, ...updates } : r));
-  saveDisciplineRecords(updated);
+  const target = updated.find((r) => r.id === id);
+  localStorage.setItem(STORAGE_KEYS.DISCIPLINE, JSON.stringify(updated));
+  persistToServer('/api/discipline', { items: updated });
+  if (target) {
+    saveDisciplineRecordToFirebase(target).catch((e) => console.warn('Discipline firestore update notice:', e));
+    saveDisciplineRecordToSupabase(target).catch((e) => console.warn('Discipline supabase update notice:', e));
+  }
+  dispatchStoreEvent('mugina-discipline-updated', updated);
   return updated;
 };
 
 export const deleteDisciplineRecord = (id: string): DisciplineRecord[] => {
   const current = getDisciplineRecords();
   const updated = current.filter((r) => r.id !== id);
-  saveDisciplineRecords(updated);
+  localStorage.setItem(STORAGE_KEYS.DISCIPLINE, JSON.stringify(updated));
+  persistToServer('/api/discipline', { items: updated });
+  deleteDisciplineRecordInFirebase(id).catch((e) => console.warn('Discipline firestore delete notice:', e));
+  deleteDisciplineRecordFromSupabase(id).catch((e) => console.warn('Discipline supabase delete notice:', e));
+  dispatchStoreEvent('mugina-discipline-updated', updated);
   return updated;
 };
+
 
 
 

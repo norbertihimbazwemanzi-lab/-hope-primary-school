@@ -150,6 +150,8 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
   const [isSavingAndSending, setIsSavingAndSending] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [excelError, setExcelError] = useState<string | null>(null);
+  const [attendanceSyncTick, setAttendanceSyncTick] = useState(0);
   const [previewStudent, setPreviewStudent] = useState<EnrolledStudent | null>(null);
 
   // Excel Attendance Upload State
@@ -184,6 +186,25 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     parentEmail: '',
   });
 
+  // Subscribe to cloud updates for students and attendance
+  useEffect(() => {
+    const onAttUpdate = () => setAttendanceSyncTick((t) => t + 1);
+    const onStuUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<EnrolledStudent[]>).detail;
+      if (Array.isArray(detail)) {
+        setStudents(detail);
+      } else {
+        setStudents(getEnrolledStudents());
+      }
+    };
+    window.addEventListener('mugina-attendance-updated', onAttUpdate);
+    window.addEventListener('mugina-students-updated', onStuUpdate);
+    return () => {
+      window.removeEventListener('mugina-attendance-updated', onAttUpdate);
+      window.removeEventListener('mugina-students-updated', onStuUpdate);
+    };
+  }, []);
+
   // Load existing records for the selected date
   useEffect(() => {
     const existingRecords = getAttendanceRecords(selectedDate);
@@ -209,7 +230,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
     setAttendanceState(stateMap);
     setSuccessMessage(null);
-  }, [selectedDate, students]);
+  }, [selectedDate, students, attendanceSyncTick]);
 
   // Filter students
   const filteredStudents = useMemo(() => {
@@ -668,6 +689,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     if (!file) return;
 
     setExcelFileName(file.name);
+    setExcelError(null);
     setIsProcessingExcel(true);
 
     try {
@@ -678,7 +700,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
       const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
       if (rawRows.length === 0) {
-        alert('The uploaded Excel document has no data rows.');
+        setExcelError('The uploaded Excel document has no data rows.');
         setIsProcessingExcel(false);
         return;
       }
@@ -734,7 +756,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
       setShowExcelModal(true);
     } catch (err) {
       console.error('Error reading Excel file:', err);
-      alert('Could not parse Excel document. Please check the file format (.xlsx, .xls, or .csv).');
+      setExcelError('Could not parse Excel document. Please check the file format (.xlsx, .xls, or .csv).');
     } finally {
       setIsProcessingExcel(false);
       e.target.value = '';
@@ -1441,6 +1463,22 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
               </div>
             </div>
           </div>
+
+          {excelError && (
+            <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl flex items-center justify-between gap-3 text-xs font-semibold">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{excelError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExcelError(null)}
+                className="text-rose-700 hover:text-rose-900 font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* 2. Daily Student Roster Table for Chosen Class */}
           <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs">

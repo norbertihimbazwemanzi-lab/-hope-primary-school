@@ -1127,4 +1127,221 @@ export const subscribeToUserAttributes = (
   );
 };
 
+/**
+ * Delete Admissions Application from Firestore
+ */
+export const deleteApplicationFromFirebase = async (id: string): Promise<boolean> => {
+  try {
+    await deleteDoc(doc(db, 'admissions_applications', id));
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Application delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Delete Student Attendance Record from Firestore
+ */
+export const deleteAttendanceRecordInFirebase = async (id: string): Promise<boolean> => {
+  try {
+    await deleteDoc(doc(db, 'attendance_records', id));
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Attendance delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Delete Discipline Record from Firestore
+ */
+export const deleteDisciplineRecordInFirebase = async (id: string): Promise<boolean> => {
+  try {
+    await deleteDoc(doc(db, 'discipline_records', id));
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Discipline delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Save Teacher Attendance Batch to Firestore
+ */
+export const saveTeacherAttendanceBatchToFirebase = async (records: any[]): Promise<boolean> => {
+  try {
+    await Promise.all(
+      records.map((r) => {
+        const id = r.id || `tatt-${r.staffId}-${r.date}`;
+        return setDoc(
+          doc(db, 'teacher_attendance_records', id),
+          { ...r, id, updatedAt: new Date().toISOString(), serverTimestamp: Timestamp.now() },
+          { merge: true }
+        );
+      })
+    );
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Teacher attendance write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Teacher Attendance Records from Firestore
+ */
+export const fetchTeacherAttendanceFromFirebase = async (): Promise<any[]> => {
+  try {
+    const snapshot = await getDocs(collection(db, 'teacher_attendance_records'));
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Teacher attendance fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Delete Teacher Attendance Record from Firestore
+ */
+export const deleteTeacherAttendanceRecordInFirebase = async (id: string): Promise<boolean> => {
+  try {
+    await deleteDoc(doc(db, 'teacher_attendance_records', id));
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Teacher attendance delete notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Save Campus Tour Booking to Firestore
+ */
+export const saveTourBookingToFirebase = async (tour: any): Promise<boolean> => {
+  try {
+    const id = tour.id || `tour-${Date.now()}`;
+    await setDoc(
+      doc(db, 'campus_tour_bookings', id),
+      { ...tour, id, updatedAt: new Date().toISOString(), serverTimestamp: Timestamp.now() },
+      { merge: true }
+    );
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Tour booking write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch Campus Tour Bookings from Firestore
+ */
+export const fetchTourBookingsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const snapshot = await getDocs(collection(db, 'campus_tour_bookings'));
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Tour booking fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Save Applicant Chat Thread to Firestore
+ */
+export const saveApplicantChatToFirebase = async (thread: any): Promise<boolean> => {
+  if (!thread || !thread.refCode) return false;
+  try {
+    const cleanRef = String(thread.refCode).trim().toUpperCase();
+    await setDoc(
+      doc(db, 'applicant_chats', cleanRef),
+      { ...thread, refCode: cleanRef, updatedAt: thread.updatedAt || new Date().toISOString(), serverTimestamp: Timestamp.now() },
+      { merge: true }
+    );
+    return true;
+  } catch (err) {
+    console.warn('[Firebase Store] Applicant chat write notice:', err);
+    return false;
+  }
+};
+
+/**
+ * Fetch All Applicant Chat Threads from Firestore
+ */
+export const fetchApplicantChatsFromFirebase = async (): Promise<any[]> => {
+  try {
+    const snapshot = await getDocs(collection(db, 'applicant_chats'));
+    const items: any[] = [];
+    snapshot.forEach((docSnap) => items.push({ ...docSnap.data(), refCode: docSnap.id }));
+    return items;
+  } catch (err) {
+    console.warn('[Firebase Store] Applicant chats fetch notice:', err);
+    return [];
+  }
+};
+
+/**
+ * Fetch Single Applicant Chat Thread by Ref Code from Firestore
+ */
+export const fetchApplicantChatByRefFromFirebase = async (refCode: string): Promise<any | null> => {
+  if (!refCode) return null;
+  try {
+    const cleanRef = refCode.trim().toUpperCase();
+    const snap = await getDoc(doc(db, 'applicant_chats', cleanRef));
+    if (snap.exists()) {
+      return { ...snap.data(), refCode: snap.id };
+    }
+    if (refCode.includes('@')) {
+      const q = query(collection(db, 'applicant_chats'), where('parentEmail', '==', refCode.trim().toLowerCase()));
+      const qs = await getDocs(q);
+      if (!qs.empty) {
+        const d = qs.docs[0];
+        return { ...d.data(), refCode: d.id };
+      }
+    }
+  } catch (err) {
+    console.warn('[Firebase Store] Fetch applicant chat notice:', err);
+  }
+  return null;
+};
+
+/**
+ * Real-time subscriptions for Inquiries & Discipline & Attendance
+ */
+export const subscribeToDisciplineRecords = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    return onSnapshot(
+      collection(db, 'discipline_records'),
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        callback(items);
+      },
+      (err) => console.warn('[Firebase Store] Discipline listener notice:', err)
+    );
+  } catch {
+    return () => {};
+  }
+};
+
+export const subscribeToInquiries = (callback: (items: any[]) => void): Unsubscribe => {
+  try {
+    return onSnapshot(
+      collection(db, 'visitor_inquiries'),
+      (snapshot) => {
+        const items: any[] = [];
+        snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        callback(items);
+      },
+      (err) => console.warn('[Firebase Store] Inquiries listener notice:', err)
+    );
+  } catch {
+    return () => {};
+  }
+};
+
+
 

@@ -5,7 +5,15 @@ import {
   saveStudentProgressLogToFirebase,
   fetchStudentProgressLogs,
   deleteStudentProgressLogInFirebase,
+  getCachedProgressLogs,
+  saveCachedProgressLogs,
 } from '../services/firebaseStore';
+import {
+  fetchStudentProgressLogsFromSupabase,
+  saveStudentProgressLogToSupabase,
+  deleteStudentProgressLogFromSupabase,
+  subscribeToSupabaseProgressLogs,
+} from '../services/supabaseClient';
 import {
   BookOpen,
   Sparkles,
@@ -87,21 +95,69 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
   // Status & Feedback
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; name: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Existing Logs State from Firebase
+  // Existing Logs State from Firebase + Supabase
   const [logs, setLogs] = useState<StudentProgressLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [filterStudentQuery, setFilterStudentQuery] = useState('');
   const [filterSubject, setFilterSubject] = useState('ALL');
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
 
-  // Load logs on mount
+  // Keep selected student valid if grade or classStudents change
+  useEffect(() => {
+    if (initialSelectedStudent && classStudents.some((s) => s.id === initialSelectedStudent.id)) {
+      setSelectedStudentId(initialSelectedStudent.id);
+      return;
+    }
+    if ((!selectedStudentId || !classStudents.some((s) => s.id === selectedStudentId)) && classStudents.length > 0) {
+      setSelectedStudentId(classStudents[0].id);
+    }
+  }, [initialSelectedStudent, classStudents, selectedStudentId]);
+
+  const mergeAndSetLogs = (fbLogs: StudentProgressLog[] | null | undefined, sbLogs: any[] | null | undefined) => {
+    const mergedMap = new Map<string, StudentProgressLog>();
+    if (Array.isArray(fbLogs)) {
+      fbLogs.forEach((l) => {
+        if (l && l.id) mergedMap.set(l.id, l);
+      });
+    }
+    if (Array.isArray(sbLogs)) {
+      sbLogs.forEach((l: any) => {
+        if (l && l.id && (!activeGrade || l.gradeCode === activeGrade)) {
+          const existing = mergedMap.get(l.id);
+          const lTime = Date.parse(l.updatedAt || l.createdAt || '') || 0;
+          const eTime = existing ? Date.parse(existing.createdAt || '') || 0 : 0;
+          if (!existing || lTime >= eTime) {
+            mergedMap.set(l.id, l as StudentProgressLog);
+          }
+        }
+      });
+    }
+    const merged = Array.from(mergedMap.values()).sort((a, b) =>
+      (b.date + (b.createdAt || '')).localeCompare(a.date + (a.createdAt || ''))
+    );
+    setLogs(merged);
+
+    // Update cache without wiping logs from other grades
+    const cachedAll = getCachedProgressLogs();
+    const otherGrades = cachedAll.filter((c) => c.gradeCode !== activeGrade && !mergedMap.has(c.id));
+    saveCachedProgressLogs([...merged, ...otherGrades]);
+  };
+
+  // Load logs from Firebase + Supabase and subscribe to realtime updates
   const loadLogs = async () => {
     setIsLoadingLogs(true);
     try {
-      const records = await fetchStudentProgressLogs(activeGrade);
-      setLogs(records);
+      const [fbRes, sbRes] = await Promise.allSettled([
+        fetchStudentProgressLogs(activeGrade),
+        fetchStudentProgressLogsFromSupabase(activeGrade),
+      ]);
+      const fbLogs = fbRes.status === 'fulfilled' ? fbRes.value : [];
+      const sbLogs = sbRes.status === 'fulfilled' ? sbRes.value : [];
+      mergeAndSetLogs(fbLogs, sbLogs);
     } catch (e) {
       console.warn('Failed to load logs:', e);
     } finally {
@@ -111,18 +167,27 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
 
   useEffect(() => {
     loadLogs();
+    const unsubSb = subscribeToSupabaseProgressLogs((sbAll) => {
+      const gradeLogs = Array.isArray(sbAll)
+        ? sbAll.filter((l: any) => !activeGrade || l.gradeCode === activeGrade)
+        : [];
+      const cachedGrade = getCachedProgressLogs().filter((c) => c.gradeCode === activeGrade);
+      mergeAndSetLogs(cachedGrade, gradeLogs);
+    });
+    return () => unsubSb();
   }, [activeGrade]);
 
   // Handle Form Submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     if (!selectedStudent) {
-      alert('Please select a student.');
+      setFormError('Please select a learner before saving a progress log.');
       return;
     }
 
     if (!academicNotes.trim()) {
-      alert('Please enter daily academic performance notes for this student.');
+      setFormError('Please enter daily academic performance notes for this learner.');
       return;
     }
 
@@ -149,9 +214,13 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
         parentNotified,
       });
 
+      await saveStudentProgressLogToSupabase(saved).catch((sbErr) =>
+        console.warn('Supabase progress log sync notice:', sbErr)
+      );
+
       // Update state
       setLogs((prev) => [saved, ...prev.filter((l) => l.id !== saved.id)]);
-      setSaveSuccessMsg(`Daily progress log for ${selectedStudent.fullName} successfully saved to Firebase store!`);
+      setSaveSuccessMsg(`Daily progress log for ${selectedStudent.fullName} successfully saved to school cloud database!`);
 
       // Reset textareas
       setAcademicNotes('');
@@ -160,18 +229,28 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
       setParentNotified(false);
     } catch (err: any) {
       console.error('Error saving progress log:', err);
-      alert('Failed to save progress log. Please try again.');
+      setFormError('Failed to save progress log. Please check your connection and try again.');
     } finally {
       setIsSaving(false);
     }
   };
 
   // Handle Log Deletion
-  const handleDeleteLog = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete this progress log for ${name}?`)) {
-      await deleteStudentProgressLogInFirebase(id);
-      setLogs((prev) => prev.filter((l) => l.id !== id));
-    }
+  const handleDeleteLog = (id: string, name: string) => {
+    setDeleteConfirmTarget({ id, name });
+  };
+
+  const confirmDeleteLog = async () => {
+    if (!deleteConfirmTarget) return;
+    const { id } = deleteConfirmTarget;
+    setDeleteConfirmTarget(null);
+    await Promise.allSettled([
+      deleteStudentProgressLogInFirebase(id),
+      deleteStudentProgressLogFromSupabase(id),
+    ]);
+    setLogs((prev) => prev.filter((l) => l.id !== id));
+    const remaining = getCachedProgressLogs().filter((l) => l.id !== id);
+    saveCachedProgressLogs(remaining);
   };
 
   // Filtered Logs for History tab
@@ -327,6 +406,22 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
         {/* ========================================================================= */}
         {activeTab === 'create' && (
           <form onSubmit={handleSubmit} className="space-y-6">
+            {formError && (
+              <div className="p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                  <span className="font-semibold">{formError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormError(null)}
+                  className="text-rose-700 hover:text-rose-900 font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* 1. Student Selection Grid */}
             <div className="space-y-2">
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -721,7 +816,8 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
                       { key: 'Exemplary', color: 'bg-purple-500', text: 'text-purple-800' },
                       { key: 'Good', color: 'bg-emerald-500', text: 'text-emerald-800' },
                       { key: 'Fair', color: 'bg-slate-500', text: 'text-slate-800' },
-                      { key: 'Needs Attention', color: 'bg-rose-500', text: 'text-rose-800' },
+                      { key: 'Needs Improvement', color: 'bg-amber-500', text: 'text-amber-800' },
+                      { key: 'Concern', color: 'bg-rose-500', text: 'text-rose-800' },
                     ].map(({ key, color, text }) => {
                       const count = filteredLogs.filter((l) => l.behaviorRating === key).length;
                       const pct = Math.round((count / filteredLogs.length) * 100);
@@ -899,6 +995,42 @@ export const StudentProgressLogModule: React.FC<StudentProgressLogModuleProps> =
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Delete Progress Log</h3>
+                <p className="text-xs text-slate-500">Permanent cloud removal for {deleteConfirmTarget.name}</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              Are you sure you want to delete this progress log for <strong>{deleteConfirmTarget.name}</strong>?
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteLog}
+                className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl cursor-pointer"
+              >
+                Delete Log
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

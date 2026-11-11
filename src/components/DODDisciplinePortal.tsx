@@ -1,8 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   EnrolledStudent,
   DisciplineRecord,
   getCurrentSessionUser,
+  getDisciplineRecords,
+  addDisciplineRecord,
+  updateDisciplineRecord,
+  deleteDisciplineRecord,
 } from '../services/adminStore';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
 import {
@@ -33,92 +37,11 @@ interface DODDisciplinePortalProps {
   students: EnrolledStudent[];
 }
 
-const LOCAL_DISCIPLINE_KEY = 'mugina_discipline_records_v3';
-
-const defaultDisciplineRecords: DisciplineRecord[] = [
-  {
-    id: 'disc-1',
-    caseNumber: 'DISC-2026-001',
-    date: '2026-02-10',
-    studentId: 'stu-p4-3',
-    studentName: 'Eric Mugisha',
-    regNumber: 'MHA-2026-104',
-    gradeCode: 'P4',
-    incidentType: 'Tardiness / Truancy',
-    severity: 'Minor',
-    incidentDescription: 'Arrived 45 minutes late without parent written excuse for the 3rd consecutive morning.',
-    actionTaken: 'Verbal Warning',
-    parentNotified: true,
-    parentContact: '+250 788 123 456',
-    status: 'Resolved & Closed',
-    recordedBy: 'Patrick Niyitegeka (DOD)',
-    resolutionNotes: 'Parent came in, agreed to morning transport adjustment. Student pledged punctuality.',
-  },
-  {
-    id: 'disc-2',
-    caseNumber: 'DISC-2026-002',
-    date: '2026-02-14',
-    studentId: 'stu-p4-5',
-    studentName: 'Christian Kwizera',
-    regNumber: 'MHA-2026-106',
-    gradeCode: 'P4',
-    incidentType: 'Uniform & Grooming Violation',
-    severity: 'Minor',
-    incidentDescription: 'Repeated non-regulation footwear and missing school tie during morning assembly.',
-    actionTaken: 'Written Reprimand',
-    parentNotified: true,
-    parentContact: '+250 788 456 789',
-    status: 'Action In Progress',
-    recordedBy: 'Patrick Niyitegeka (DOD)',
-    resolutionNotes: 'Parent contacted via phone, uniform pack collection arranged with bursar.',
-  },
-  {
-    id: 'disc-3',
-    caseNumber: 'DISC-2026-003',
-    date: '2026-02-18',
-    studentId: 'stu-p4-1',
-    studentName: 'Keza Aline Manzi',
-    regNumber: 'MHA-2026-102',
-    gradeCode: 'P4',
-    incidentType: 'Merit / Exemplary Conduct',
-    severity: 'Commendation',
-    incidentDescription: 'Helped injured nursery child safely return to dispensary and assisted during campus tree planting.',
-    actionTaken: 'Merit Certificate Awarded',
-    parentNotified: true,
-    parentContact: '+250 788 258 786',
-    status: 'Resolved & Closed',
-    recordedBy: 'Patrick Niyitegeka (DOD)',
-    resolutionNotes: 'Commended during Friday assembly before entire school body.',
-  },
-];
-
 export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ students }) => {
   const sessionUser = getCurrentSessionUser();
 
-  // Load Discipline Records
-  const [records, setRecords] = useState<DisciplineRecord[]>(() => {
-    try {
-      const raw = localStorage.getItem(LOCAL_DISCIPLINE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) {
-      console.warn('Error reading discipline records:', e);
-    }
-    return defaultDisciplineRecords;
-  });
-
-  const saveRecords = (updated: DisciplineRecord[]) => {
-    setRecords(updated);
-    try {
-      localStorage.setItem(LOCAL_DISCIPLINE_KEY, JSON.stringify(updated));
-      fetch('/api/discipline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: updated }),
-      }).catch((e) => console.warn('Discipline sync notice:', e));
-    } catch (e) {
-      console.error('Error saving discipline records:', e);
-    }
-  };
+  // Load Discipline Records from centralized dual-cloud store
+  const [records, setRecords] = useState<DisciplineRecord[]>(() => getDisciplineRecords());
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -130,6 +53,8 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DisciplineRecord | null>(null);
   const [showSummonsModal, setShowSummonsModal] = useState<DisciplineRecord | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; name: string } | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Form State
   const [selectedStudentId, setSelectedStudentId] = useState<string>(students.length > 0 ? students[0].id : '');
@@ -141,6 +66,26 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
   const [parentNotified, setParentNotified] = useState(true);
   const [status, setStatus] = useState<DisciplineRecord['status']>('Open');
   const [resolutionNotes, setResolutionNotes] = useState('');
+
+  // Keep records synced with live cloud updates & keep default selected student valid
+  useEffect(() => {
+    const syncHandler = (e: Event) => {
+      const detail = (e as CustomEvent<DisciplineRecord[]>).detail;
+      if (Array.isArray(detail)) {
+        setRecords(detail);
+      } else {
+        setRecords(getDisciplineRecords());
+      }
+    };
+    window.addEventListener('mugina-discipline-updated', syncHandler);
+    return () => window.removeEventListener('mugina-discipline-updated', syncHandler);
+  }, []);
+
+  useEffect(() => {
+    if ((!selectedStudentId || !students.some((s) => s.id === selectedStudentId)) && students.length > 0) {
+      setSelectedStudentId(students[0].id);
+    }
+  }, [students, selectedStudentId]);
 
   // Metrics
   const stats = useMemo(() => {
@@ -172,34 +117,28 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
   // Handle Save
   const handleSaveIncident = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     const st = students.find((s) => s.id === selectedStudentId);
     if (!st) {
-      alert('Please select a student.');
+      setFormError('Please select a student before saving this disciplinary record.');
       return;
     }
 
     if (editingRecord) {
-      const updated = records.map((r) =>
-        r.id === editingRecord.id
-          ? {
-              ...r,
-              incidentDate,
-              incidentType,
-              severity,
-              incidentDescription: description,
-              actionTaken,
-              parentNotified,
-              status,
-              resolutionNotes,
-            }
-          : r
-      );
-      saveRecords(updated);
+      updateDisciplineRecord(editingRecord.id, {
+        date: incidentDate,
+        incidentType,
+        severity,
+        incidentDescription: description,
+        actionTaken,
+        parentNotified,
+        status,
+        resolutionNotes,
+      });
+      setRecords(getDisciplineRecords());
       setEditingRecord(null);
     } else {
-      const newRecord: DisciplineRecord = {
-        id: `disc-${Date.now()}`,
-        caseNumber: `DISC-2026-${Math.floor(100 + Math.random() * 900)}`,
+      addDisciplineRecord({
         date: incidentDate,
         studentId: st.id,
         studentName: st.fullName,
@@ -214,8 +153,8 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
         status,
         recordedBy: sessionUser?.name || 'Director of Discipline (DOD)',
         resolutionNotes,
-      };
-      saveRecords([newRecord, ...records]);
+      });
+      setRecords(getDisciplineRecords());
     }
 
     setShowAddModal(false);
@@ -225,10 +164,14 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
 
   // Handle Delete
   const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete this discipline record for ${name}?`)) {
-      const updated = records.filter((r) => r.id !== id);
-      saveRecords(updated);
-    }
+    setDeleteConfirmTarget({ id, name });
+  };
+
+  const confirmDeleteRecord = () => {
+    if (!deleteConfirmTarget) return;
+    const updated = deleteDisciplineRecord(deleteConfirmTarget.id);
+    setRecords(updated);
+    setDeleteConfirmTarget(null);
   };
 
   // Export to CSV
@@ -300,6 +243,8 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
               type="button"
               onClick={() => {
                 setEditingRecord(null);
+                setFormError(null);
+                setParentNotified(true);
                 setDescription('');
                 setResolutionNotes('');
                 setShowAddModal(true);
@@ -503,12 +448,14 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
                         type="button"
                         onClick={() => {
                           setEditingRecord(r);
+                          setFormError(null);
                           setSelectedStudentId(r.studentId);
                           setIncidentDate(r.date);
                           setIncidentType(r.incidentType);
                           setSeverity(r.severity);
                           setDescription(r.incidentDescription);
                           setActionTaken(r.actionTaken);
+                          setParentNotified(r.parentNotified);
                           setStatus(r.status);
                           setResolutionNotes(r.resolutionNotes || '');
                           setShowAddModal(true);
@@ -563,12 +510,22 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
             </div>
 
             <form onSubmit={handleSaveIncident} className="space-y-3.5 text-xs">
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
               <div>
                 <label className="font-bold block mb-1">Select Student *</label>
                 <select
                   disabled={!!editingRecord}
                   value={selectedStudentId}
-                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedStudentId(e.target.value);
+                    if (formError) setFormError(null);
+                  }}
                   className="w-full bg-slate-50 border p-2.5 rounded-xl font-semibold"
                 >
                   {students.map((st) => (
@@ -759,6 +716,44 @@ export const DODDisciplinePortal: React.FC<DODDisciplinePortalProps> = ({ studen
                 className="px-4 py-2 bg-slate-100 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIRM PERMANENT DELETE */}
+      {/* ========================================================================= */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-rose-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Delete Discipline Record</h3>
+                <p className="text-xs text-slate-500">Permanent cloud removal for {deleteConfirmTarget.name}</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3">
+              Are you sure you want to permanently remove this disciplinary record for <strong>{deleteConfirmTarget.name}</strong>? This action updates the school database immediately.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteRecord}
+                className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl cursor-pointer"
+              >
+                Delete Record
               </button>
             </div>
           </div>
