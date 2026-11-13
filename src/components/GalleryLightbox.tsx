@@ -38,8 +38,9 @@ export const GalleryLightbox: React.FC<GalleryLightboxProps> = ({ item, onClose 
               if (target.src.includes('/src/assets/images/')) {
                 const filename = target.src.split('/').pop();
                 target.src = `/images/${filename}`;
-              } else {
-                target.src = 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=1200&q=80';
+              } else if (!target.dataset.triedFallback) {
+                target.dataset.triedFallback = '1';
+                target.src = '/images/hero_mugina_hope_campus_1791823254957.jpg';
               }
             }}
             className="max-h-[65vh] w-auto object-contain"

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { PageId } from '../types';
 import {
-  ShieldCheck,
   Target,
   Eye,
   Heart,
@@ -30,6 +29,7 @@ import {
 } from '../services/adminStore';
 import { uploadSchoolAsset } from '../services/storageService';
 import { SchoolStaffSection } from '../components/SchoolStaffSection';
+import { ReadMoreText, ReadMorePanel } from '../components/ReadMoreBlock';
 
 interface AboutPageProps {
   onNavigate: (page: PageId) => void;
@@ -211,26 +211,45 @@ export const AboutPage: React.FC<AboutPageProps> = ({
             </div>
 
             {/* School Mission */}
-            <div className="space-y-2.5 pt-2 border-t border-slate-100">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                {settings.aboutMissionTitle || 'OUR MISSION'}
-              </h3>
-              <ul className="space-y-2 text-xs sm:text-sm text-slate-700 leading-relaxed">
-                {(settings.aboutMissionPoints && settings.aboutMissionPoints.length > 0
+            {(() => {
+              const allPoints =
+                settings.aboutMissionPoints && settings.aboutMissionPoints.length > 0
                   ? settings.aboutMissionPoints
                   : [
                       'Deliver high-quality, competency-based early childhood and primary education adhering strictly to Rwanda Basic Education Board (REB) standards.',
                       'Nurture Christian integrity, mutual respect, and cultural pride through Itorero ry’abato and traditional arts.',
                       'Equip learners with digital literacy, scientific inquiry, and English-Kinyarwanda bilingual fluency in a safe learning environment.',
-                    ]
-                ).map((point, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                    <span>{point}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                    ];
+              const firstPoint = allPoints[0];
+              const restPoints = allPoints.slice(1);
+              return (
+                <div className="space-y-2.5 pt-2 border-t border-slate-100">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                    {settings.aboutMissionTitle || 'OUR MISSION'}
+                  </h3>
+                  <ul className="space-y-2 text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    {firstPoint && (
+                      <li className="flex items-start gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                        <span>{firstPoint}</span>
+                      </li>
+                    )}
+                  </ul>
+                  {restPoints.length > 0 && (
+                    <ReadMorePanel readMoreLabel="Read More Mission Pillars" showLessLabel="Show Less">
+                      <ul className="space-y-2 text-xs sm:text-sm text-slate-700 leading-relaxed">
+                        {restPoints.map((point, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </ReadMorePanel>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Action buttons */}
             <div className="pt-2 flex flex-wrap gap-3">
@@ -332,25 +351,21 @@ export const AboutPage: React.FC<AboutPageProps> = ({
                 {settings.aboutPrincipalWelcome || 'Welcome to Mugina Hope Primary & Nursery Academy!'}
               </h2>
 
-              <div className="space-y-3 text-xs sm:text-sm text-slate-700 leading-relaxed">
-                {messageParagraphs.length > 0 ? (
-                  messageParagraphs.map((paragraph, idx) => (
-                    <p key={idx}>{paragraph}</p>
-                  ))
-                ) : (
-                  <>
-                    <p>
-                      Welcome to Mugina Hope Primary &amp; Nursery Academy in Mugina Sector, Kamonyi District. Established in 2014, our school was founded on the fundamental belief that every child deserves a secure, joyful, and academically enriching foundation.
-                    </p>
-                    <p>
-                      Our campus is securely situated adjacent to the Mugina Police Station, offering families unshakeable peace of mind. Here, dedicated teachers deliver the Rwanda Basic Education Board (REB) curriculum, enriched with early ICT literacy, English conversational fluency, and Rwandan cultural values through Itorero ry&apos;abato.
-                    </p>
-                    <p>
-                      With an intimate 18:1 student-to-mentor ratio, we ensure that every single child is known, celebrated, and guided toward excellence, leadership, and moral integrity. Thank you for partnering with us in shaping the leaders of tomorrow!
-                    </p>
-                  </>
-                )}
-              </div>
+              <ReadMoreText
+                paragraphs={
+                  messageParagraphs.length > 0
+                    ? messageParagraphs
+                    : [
+                        'Welcome to Mugina Hope Primary & Nursery Academy in Mugina Sector, Kamonyi District. Established in 2014, our school was founded on the fundamental belief that every child deserves a secure, joyful, and academically enriching foundation.',
+                        "Our campus is securely situated adjacent to the Mugina Police Station, offering families unshakeable peace of mind. Here, dedicated teachers deliver the Rwanda Basic Education Board (REB) curriculum, enriched with early ICT literacy, English conversational fluency, and Rwandan cultural values through Itorero ry'abato.",
+                        'With an intimate 18:1 student-to-mentor ratio, we ensure that every single child is known, celebrated, and guided toward excellence, leadership, and moral integrity. Thank you for partnering with us in shaping the leaders of tomorrow!',
+                      ]
+                }
+                maxChars={190}
+                paragraphClassName="text-xs sm:text-sm text-slate-700 leading-relaxed"
+                readMoreLabel="Read Full Letter"
+                showLessLabel="Show Less"
+              />
 
               <div className="pt-3 border-t border-slate-200 space-y-0.5">
                 <p className="text-xs text-slate-500">
@@ -368,103 +383,14 @@ export const AboutPage: React.FC<AboutPageProps> = ({
         </div>
       </section>
 
-      {/* 4. Campus Safety & Guarded Perimeter */}
-      <div className="bg-slate-900 text-white rounded-xl p-6 sm:p-8 border border-slate-800 space-y-5">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-3">
-            <ShieldCheck className="w-6 h-6 text-emerald-400 shrink-0" />
-            <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 block">
-                Security & Peace of Mind
-              </span>
-              <h2 className="text-lg sm:text-xl font-bold text-white">
-                Guarded Learning Environment Beside Mugina Police Station
-              </h2>
-            </div>
-          </div>
-          <span className="text-[11px] bg-slate-800 text-slate-300 px-3 py-1 rounded-md border border-slate-700">
-            24/7 Monitored Campus Zone
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs text-slate-300">
-          <div className="space-y-1">
-            <h3 className="font-bold text-white text-sm">Direct Police Boundary</h3>
-            <p className="text-slate-400 leading-relaxed">
-              Our campus shares its immediate boundary with the local Mugina Police Post in Kamonyi District, ensuring continuous protection, peace, and order.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-white text-sm">Guarded Perimeter Walls</h3>
-            <p className="text-slate-400 leading-relaxed">
-              The academy grounds are enclosed with high masonry perimeter walls and secure checkpoints managed by trained security guards.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-white text-sm">Verified Dismissal Protocol</h3>
-            <p className="text-slate-400 leading-relaxed">
-              No learner is released from campus without an authorized parent or guardian presenting their verified student ID credential.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. Core Values (Indangagaciro Z'umuco Nyarwanda) */}
-      <div className="bg-white rounded-xl p-6 sm:p-8 border border-slate-200 space-y-6">
-        <div className="text-center max-w-2xl mx-auto space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Moral Formation
-          </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-            Indangagaciro na Kirazira: The Pillars That Guide Our Learners
-          </h2>
-          <p className="text-xs text-slate-600">
-            Rooted in the official Rwandan national education framework of character development, patriotism, and diligence.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-1.5">
-            <div className="font-bold text-xs uppercase tracking-wider text-blue-900">
-              Gukunda Igihugu
-            </div>
-            <h4 className="text-xs font-bold text-slate-900">Patriotism & Duty</h4>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Instilling love for Rwanda, active citizenship, and dedication to national progress.
-            </p>
-          </div>
-
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-1.5">
-            <div className="font-bold text-xs uppercase tracking-wider text-blue-900">
-              Umurava no Gutsinda
-            </div>
-            <h4 className="text-xs font-bold text-slate-900">Diligence & Triumph</h4>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Perseverance through difficult assignments, athletic discipline, and academic resilience.
-            </p>
-          </div>
-
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-1.5">
-            <div className="font-bold text-xs uppercase tracking-wider text-blue-900">
-              Kwihesha Agaciro
-            </div>
-            <h4 className="text-xs font-bold text-slate-900">Self-Worth & Dignity</h4>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Honoring oneself through honesty, respect, clean presentation, and moral integrity.
-            </p>
-          </div>
-
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-1.5">
-            <div className="font-bold text-xs uppercase tracking-wider text-blue-900">
-              Kugira Ikinyabupfura
-            </div>
-            <h4 className="text-xs font-bold text-slate-900">Politeness & Respect</h4>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Respectful behavior toward elders, supportive peer collaboration, and polite speech.
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* 4. School Vision, Mission, Core Values & Goals Information Banner */}
+      <section className="bg-white rounded-xl p-2 sm:p-4 border border-slate-200 shadow-xs overflow-hidden">
+        <img
+          src="/assets/aistudio/Mugina_Hope_School_Information_Banner_a1d5b0d8.png"
+          alt="Mugina Hope Primary School - Vision, Mission, Core Values, and Goals"
+          className="w-full h-auto object-contain rounded-lg block"
+        />
+      </section>
 
       {/* 6. School Staff Leadership Team */}
       <SchoolStaffSection />

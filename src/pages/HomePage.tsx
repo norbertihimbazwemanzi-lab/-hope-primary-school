@@ -11,6 +11,7 @@ import {
   WebsiteSettings,
 } from '../services/adminStore';
 import { uploadSchoolAsset } from '../services/storageService';
+import { ReadMoreText, ReadMorePanel } from '../components/ReadMoreBlock';
 import {
   Calendar,
   GraduationCap,
@@ -301,16 +302,18 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </h2>
               </div>
 
-              <div className="space-y-3 text-xs sm:text-sm text-slate-600 leading-relaxed">
-                <p>
-                  {settings.adminMessageParagraph1 ||
-                    `Established in ${SCHOOL_INFO.establishedYear}, Mugina Hope Academy was founded on a simple, enduring conviction: that every child in Rwanda deserves access to high-quality education rooted in discipline, moral integrity, and modern competence.`}
-                </p>
-                <p>
-                  {settings.adminMessageParagraph2 ||
-                    'Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC), our dual nursery and primary curriculum prepares learners not only for national examination excellence (PLE) but also for responsible citizenship, creative problem-solving, and fluent trilingual communication.'}
-                </p>
-              </div>
+              <ReadMoreText
+                paragraphs={[
+                  settings.adminMessageParagraph1 ||
+                    `Established in ${SCHOOL_INFO.establishedYear}, Mugina Hope Academy was founded on a simple, enduring conviction: that every child in Rwanda deserves access to high-quality education rooted in discipline, moral integrity, and modern competence.`,
+                  settings.adminMessageParagraph2 ||
+                    'Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC), our dual nursery and primary curriculum prepares learners not only for national examination excellence (PLE) but also for responsible citizenship, creative problem-solving, and fluent trilingual communication.',
+                ]}
+                maxChars={190}
+                paragraphClassName="text-xs sm:text-sm text-slate-600 leading-relaxed"
+                readMoreLabel="Read More"
+                showLessLabel="Show Less"
+              />
 
               {/* Core Institutional Commitments */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
@@ -605,67 +608,95 @@ export const HomePage: React.FC<HomePageProps> = ({
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Pillar 1 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between text-slate-700">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Curriculum
-              </span>
-              <BookOpen className="w-4 h-4 text-blue-900" />
+          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Curriculum
+                </span>
+                <BookOpen className="w-4 h-4 text-blue-900" />
+              </div>
+              <div className="text-xl font-bold text-slate-900">
+                MINEDUC CBC
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Standard Rwanda national educational syllabus focusing on critical thinking, literacy, and numeracy.
+              </p>
             </div>
-            <div className="text-xl font-bold text-slate-900">
-              MINEDUC CBC
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Standard Rwanda national educational syllabus focusing on critical thinking, literacy, and numeracy.
-            </p>
+            <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
+              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                Instruction is delivered in English alongside structured French and Kinyarwanda mastery, equipping learners for Primary Leaving Examinations (PLE) and practical problem solving.
+              </p>
+            </ReadMorePanel>
           </div>
 
           {/* Pillar 2 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between text-slate-700">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Campus Safety
-              </span>
-              <ShieldCheck className="w-4 h-4 text-emerald-700" />
+          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Campus Safety
+                </span>
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+              </div>
+              <div className="text-xl font-bold text-slate-900">
+                Guarded Perimeter
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Adjacent to Mugina Police Station with perimeter walls and strictly verified family dismissal protocols.
+              </p>
             </div>
-            <div className="text-xl font-bold text-slate-900">
-              Guarded Perimeter
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Adjacent to Mugina Police Station with perimeter walls and strictly verified family dismissal protocols.
-            </p>
+            <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
+              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                Trained security personnel monitor every entry gate 24/7, logging all visitors and verifying authorized guardian credentials before any pupil departs campus.
+              </p>
+            </ReadMorePanel>
           </div>
 
           {/* Pillar 3 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between text-slate-700">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Grade Scope
-              </span>
-              <GraduationCap className="w-4 h-4 text-blue-900" />
+          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Grade Scope
+                </span>
+                <GraduationCap className="w-4 h-4 text-blue-900" />
+              </div>
+              <div className="text-xl font-bold text-slate-900">
+                Nursery to P6
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Comprehensive educational continuity from Baby Class (3y) through Primary 6 graduation examinations.
+              </p>
             </div>
-            <div className="text-xl font-bold text-slate-900">
-              Nursery to P6
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Comprehensive educational continuity from Baby Class (3y) through Primary 6 graduation examinations.
-            </p>
+            <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
+              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                Learners progress seamlessly across Baby, Middle, and Top Nursery classes into Lower Primary (P1–P3) and Upper Primary (P4–P6) under one supportive roof.
+              </p>
+            </ReadMorePanel>
           </div>
 
           {/* Pillar 4 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2">
-            <div className="flex items-center justify-between text-slate-700">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Mentorship
-              </span>
-              <Users className="w-4 h-4 text-slate-700" />
+          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-slate-700">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Mentorship
+                </span>
+                <Users className="w-4 h-4 text-slate-700" />
+              </div>
+              <div className="text-xl font-bold text-slate-900">
+                18 : 1 Pupil Ratio
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Carefully managed class cohorts ensuring individualized attention and regular teacher-parent feedback.
+              </p>
             </div>
-            <div className="text-xl font-bold text-slate-900">
-              18 : 1 Pupil Ratio
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Carefully managed class cohorts ensuring individualized attention and regular teacher-parent feedback.
-            </p>
+            <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
+              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                Small class sizes allow educators to spot learning strengths early, offer daily remedial guidance, and share timely academic and attendance updates with families.
+              </p>
+            </ReadMorePanel>
           </div>
         </div>
       </section>

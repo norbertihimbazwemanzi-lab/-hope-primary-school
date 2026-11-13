@@ -93,6 +93,7 @@ import {
 } from '../services/supabaseClient';
 import { dispatchOfficialEmail } from '../services/emailService';
 import { AdminAttendanceTracker } from '../components/AdminAttendanceTracker';
+import { ReadMoreText } from '../components/ReadMoreBlock';
 import { FinancePortal } from '../components/FinancePortal';
 import { TeacherPortal } from '../components/TeacherPortal';
 import { RegistrarPortal } from '../components/RegistrarPortal';
@@ -3459,7 +3460,13 @@ END $$;`;
                         Alt: {item.altText}
                       </p>
                     )}
-                    <p className="text-xs text-slate-500 line-clamp-2">{item.description}</p>
+                    <ReadMoreText
+                      text={item.description}
+                      maxChars={88}
+                      paragraphClassName="text-xs text-slate-500 leading-relaxed"
+                      readMoreLabel="Read More"
+                      showLessLabel="Show Less"
+                    />
                     <p className="text-[11px] text-slate-400 italic mt-1">{item.caption}</p>
                   </div>
                 </div>
@@ -3552,9 +3559,15 @@ END $$;`;
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  {ann.content}
-                </p>
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <ReadMoreText
+                    text={ann.content}
+                    maxChars={150}
+                    paragraphClassName="text-xs text-slate-600 leading-relaxed"
+                    readMoreLabel="Read More"
+                    showLessLabel="Show Less"
+                  />
+                </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                   <span className="text-slate-400 font-mono text-[11px]">Published: {ann.publishedAt}</span>

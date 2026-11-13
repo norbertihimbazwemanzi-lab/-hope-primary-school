@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { TESTIMONIALS } from '../data/schoolData';
 import { Testimonial } from '../types';
+import { ReadMoreText } from './ReadMoreBlock';
 import {
   Quote,
   ChevronLeft,
@@ -219,7 +220,14 @@ export const TestimonialsSlider: React.FC<TestimonialsSliderProps> = ({ onOpenAp
               </span>
 
               <blockquote className="text-base sm:text-lg lg:text-xl font-medium text-slate-800 leading-relaxed italic">
-                &ldquo;{currentItem.quote}&rdquo;
+                <ReadMoreText
+                  text={`“${currentItem.quote}”`}
+                  maxChars={165}
+                  paragraphClassName="text-base sm:text-lg lg:text-xl font-medium text-slate-800 leading-relaxed italic"
+                  buttonClassName="not-italic"
+                  readMoreLabel="Read Full Quote"
+                  showLessLabel="Show Less"
+                />
               </blockquote>
             </div>
 

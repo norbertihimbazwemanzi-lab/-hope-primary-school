@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { FacilityItem, PageId } from '../types';
 import { GalleryLightbox } from '../components/GalleryLightbox';
+import { ReadMoreText, ReadMorePanel } from '../components/ReadMoreBlock';
 import {
   getGalleryItems,
   syncServerGalleryItems,
@@ -166,20 +167,22 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               Every pupil at Mugina Hope Academy is immersed in Rwanda’s rich cultural tradition. Through traditional Intore warrior dance, graceful Umushayayo, and rhythmic drumming, children develop poise, national pride, and teamwork.
             </p>
-            <div className="space-y-2 pt-2 text-xs text-slate-300">
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Authentic traditional costumes and traditional drums (Ingoma)</span>
+            <ReadMorePanel variant="dark" readMoreLabel="Read More About Cultural Program" showLessLabel="Show Less">
+              <div className="space-y-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Authentic traditional costumes and traditional drums (Ingoma)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Regular performances during national days and Kamonyi festivals</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Instilling core values: Ubutwari, Ubupfura, and Gukunda Igihugu</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Regular performances during national days and Kamonyi festivals</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Instilling core values: Ubutwari, Ubupfura, and Gukunda Igihugu</span>
-              </div>
-            </div>
+            </ReadMorePanel>
           </div>
           <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
             <span>Open to both Nursery & Primary learners</span>
@@ -244,9 +247,13 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
                   {club.title}
                 </h3>
 
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {club.desc}
-                </p>
+                <ReadMoreText
+                  text={club.desc}
+                  maxChars={95}
+                  paragraphClassName="text-xs text-slate-600 leading-relaxed"
+                  readMoreLabel="Read More"
+                  showLessLabel="Show Less"
+                />
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
@@ -376,9 +383,15 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
                     <h3 className="text-sm font-bold text-slate-900 font-display group-hover:text-blue-700 transition-colors">
                       {fac.title}
                     </h3>
-                    <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
-                      {fac.description}
-                    </p>
+                    <ReadMoreText
+                      text={fac.description}
+                      maxChars={88}
+                      stopPropagation={true}
+                      className="mt-1"
+                      paragraphClassName="text-xs text-slate-600 leading-relaxed"
+                      readMoreLabel="Read More"
+                      showLessLabel="Show Less"
+                    />
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">

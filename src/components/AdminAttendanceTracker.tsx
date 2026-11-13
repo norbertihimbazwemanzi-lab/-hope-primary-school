@@ -16,6 +16,7 @@ import {
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
 import { sendGmailMessage } from '../services/gmailService';
 import { BulkStudentImportModal } from './BulkStudentImportModal';
+import { ReadMoreText } from './ReadMoreBlock';
 import {
   Calendar,
   CheckCircle2,
@@ -1192,7 +1193,14 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                         <h4 className="text-base font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
                           {grade.name}
                         </h4>
-                        <p className="text-xs text-slate-500 line-clamp-1">{grade.description}</p>
+                        <ReadMoreText
+                          text={grade.description}
+                          maxChars={70}
+                          stopPropagation={true}
+                          paragraphClassName="text-xs text-slate-500 leading-relaxed"
+                          readMoreLabel="Read More"
+                          showLessLabel="Show Less"
+                        />
                       </div>
                     </div>
 

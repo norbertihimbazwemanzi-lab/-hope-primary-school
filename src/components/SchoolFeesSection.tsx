@@ -6,6 +6,7 @@ import {
   WebsiteSettings,
 } from '../services/adminStore';
 import { Check, X, Edit3, Plus, Trash2, ArrowRight, ShieldCheck, CreditCard } from 'lucide-react';
+import { ReadMorePanel } from './ReadMoreBlock';
 
 interface SchoolFeesSectionProps {
   className?: string;
@@ -243,13 +244,13 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
                   </div>
                 </div>
 
-                {/* What's Included */}
-                <div className="mb-5">
+                {/* What's Included (Top 3 preview) */}
+                <div className="mb-4">
                   <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2.5">
                     Included in Term Tuition
                   </h4>
                   <ul className="space-y-1.5 text-xs text-slate-600">
-                    {activeIncluded.map((item, i) => (
+                    {activeIncluded.slice(0, 3).map((item, i) => (
                       <li key={i} className="flex items-start gap-2">
                         <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
                         <span>{item}</span>
@@ -258,20 +259,39 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
                   </ul>
                 </div>
 
-                {/* What's Not Included */}
-                <div className="pt-4 border-t border-slate-200">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                    Additional Requirements
-                  </h4>
-                  <ul className="space-y-1.5 text-xs text-slate-500">
-                    {activeNotIncluded.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {/* Full Inclusions & Additional Requirements via Read More */}
+                {(activeIncluded.length > 3 || activeNotIncluded.length > 0) && (
+                  <ReadMorePanel readMoreLabel="Read More Fee Details" showLessLabel="Show Less">
+                    <div className="space-y-4">
+                      {activeIncluded.length > 3 && (
+                        <ul className="space-y-1.5 text-xs text-slate-600">
+                          {activeIncluded.slice(3).map((item, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <Check className="w-3.5 h-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {activeNotIncluded.length > 0 && (
+                        <div className="pt-3 border-t border-slate-200">
+                          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
+                            Additional Requirements
+                          </h4>
+                          <ul className="space-y-1.5 text-xs text-slate-500">
+                            {activeNotIncluded.map((item, i) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </ReadMorePanel>
+                )}
               </div>
 
               {/* Action Button */}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DAILY_TIMELINE } from '../data/schoolData';
 import { Clock, Sun, BookOpen, Apple, Palette } from 'lucide-react';
+import { ReadMorePanel } from './ReadMoreBlock';
 
 export const DailyTimeline: React.FC = () => {
   const [activeTrack, setActiveTrack] = useState<'both' | 'nursery' | 'primary'>('both');
@@ -93,23 +94,30 @@ export const DailyTimeline: React.FC = () => {
                 {item.description}
               </p>
 
-              {/* Conditional track breakdown */}
-              {(activeTrack === 'both' || activeTrack === 'nursery') && item.nurseryDetail && (
-                <div className="pt-2 border-t border-slate-100 flex items-start gap-2">
-                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-sm border border-amber-200 shrink-0">
-                    Nursery Track:
-                  </span>
-                  <span className="text-xs text-slate-600">{item.nurseryDetail}</span>
-                </div>
-              )}
+              {/* Conditional track breakdown behind Read More */}
+              {(((activeTrack === 'both' || activeTrack === 'nursery') && item.nurseryDetail) ||
+                ((activeTrack === 'both' || activeTrack === 'primary') && item.primaryDetail)) && (
+                <ReadMorePanel readMoreLabel="Read More Track Details" showLessLabel="Show Less">
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    {(activeTrack === 'both' || activeTrack === 'nursery') && item.nurseryDetail && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-sm border border-amber-200 shrink-0">
+                          Nursery Track:
+                        </span>
+                        <span className="text-xs text-slate-600">{item.nurseryDetail}</span>
+                      </div>
+                    )}
 
-              {(activeTrack === 'both' || activeTrack === 'primary') && item.primaryDetail && (
-                <div className="pt-1.5 flex items-start gap-2">
-                  <span className="text-[10px] font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded-sm border border-blue-200 shrink-0">
-                    Primary Track:
-                  </span>
-                  <span className="text-xs text-slate-600">{item.primaryDetail}</span>
-                </div>
+                    {(activeTrack === 'both' || activeTrack === 'primary') && item.primaryDetail && (
+                      <div className="flex items-start gap-2">
+                        <span className="text-[10px] font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded-sm border border-blue-200 shrink-0">
+                          Primary Track:
+                        </span>
+                        <span className="text-xs text-slate-600">{item.primaryDetail}</span>
+                      </div>
+                    )}
+                  </div>
+                </ReadMorePanel>
               )}
             </div>
           </div>

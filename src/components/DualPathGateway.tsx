@@ -2,6 +2,7 @@ import React from 'react';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { PageId } from '../types';
 import { Baby, BookOpen, Check, ArrowRight } from 'lucide-react';
+import { ReadMorePanel } from './ReadMoreBlock';
 
 interface DualPathGatewayProps {
   onNavigate: (page: PageId) => void;
@@ -59,26 +60,28 @@ export const DualPathGateway: React.FC<DualPathGatewayProps> = ({ onNavigate, on
                 A warm, nurturing sanctuary focused on early cognitive development, socialization, and foundational discovery. We cultivate curiosity, bilingual language introduction, and emotional well-being.
               </p>
 
-              <div className="space-y-2 text-xs text-slate-700">
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Three progressive levels:</strong> Baby Class (3y), Middle Class (4y), and Pre-Primary Top Class (5y).
-                  </span>
+              <ReadMorePanel readMoreLabel="Read More Nursery Highlights" showLessLabel="Show Less">
+                <div className="space-y-2 text-xs text-slate-700 pt-2 border-t border-slate-100">
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Three progressive levels:</strong> Baby Class (3y), Middle Class (4y), and Pre-Primary Top Class (5y).
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Play-based learning & Montessori tools:</strong> Sensorial discovery, physical coordination, and early phonics.
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Childcare & nutrition:</strong> Caring educators, mid-morning porridge, and clean dedicated nap areas.
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Play-based learning & Montessori tools:</strong> Sensorial discovery, physical coordination, and early phonics.
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Childcare & nutrition:</strong> Caring educators, mid-morning porridge, and clean dedicated nap areas.
-                  </span>
-                </div>
-              </div>
+              </ReadMorePanel>
             </div>
 
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
@@ -136,26 +139,28 @@ export const DualPathGateway: React.FC<DualPathGatewayProps> = ({ onNavigate, on
                 Rigorous academic foundation aligned with the Rwanda National Curriculum (REB). We empower pupils with English fluency, advanced mathematics, science experimentation, and computer literacy.
               </p>
 
-              <div className="space-y-2 text-xs text-slate-700">
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Rwanda National Standards:</strong> Comprehensive coverage of P1–P6 curricula preparing students for Primary Leaving Examinations (PLE).
-                  </span>
+              <ReadMorePanel readMoreLabel="Read More Primary Highlights" showLessLabel="Show Less">
+                <div className="space-y-2 text-xs text-slate-700 pt-2 border-t border-slate-100">
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Rwanda National Standards:</strong> Comprehensive coverage of P1–P6 curricula preparing students for Primary Leaving Examinations (PLE).
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Computer Literacy & STEM:</strong> Hands-on workstation practice, digital fundamentals, and science experimentation.
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Trilingual Literacy:</strong> English instruction supported with French enrichment and Kinyarwanda cultural heritage.
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Computer Literacy & STEM:</strong> Hands-on workstation practice, digital fundamentals, and science experimentation.
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-blue-900 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Trilingual Literacy:</strong> English instruction supported with French enrichment and Kinyarwanda cultural heritage.
-                  </span>
-                </div>
-              </div>
+              </ReadMorePanel>
             </div>
 
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">

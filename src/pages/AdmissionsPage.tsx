@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { SchoolStaffSection } from '../components/SchoolStaffSection';
+import { ReadMorePanel } from '../components/ReadMoreBlock';
 
 interface AdmissionsPageProps {
   onNavigate: (page: PageId) => void;
@@ -33,6 +34,7 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
       num: '01',
       title: 'Inquire & Campus Visit',
       desc: 'Schedule a campus visit to view our classrooms next to Mugina Police Station and consult with educators.',
+      moreDetails: 'Tour hours run Monday–Friday (7:30 AM – 4:30 PM) and Saturday mornings (8:30 AM – 11:30 AM). Meet class teachers, inspect the ICT Lab, and verify your child’s class placement with our Age Calculator.',
       cta: 'Book Visit',
       action: onOpenTour,
     },
@@ -40,6 +42,7 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
       num: '02',
       title: 'Complete Application',
       desc: 'Submit our online application or download and complete the official registration form.',
+      moreDetails: 'Online submissions instantly generate a Reference Code (e.g. MHA-2026-...) so you can track Director of Studies review and message the admissions office at any time.',
       cta: 'Apply Online',
       action: onOpenApply,
     },
@@ -47,6 +50,7 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
       num: '03',
       title: 'Document Verification',
       desc: 'Present required registration records (Birth certificate, passport photos, and previous academic records).',
+      moreDetails: 'Required documents: (1) Official Birth Certificate copy, (2) Two passport-size photographs, (3) Previous school report cards for Primary P1–P6 transfers, and (4) Parent/Guardian National ID copy.',
       cta: 'Apply Now',
       action: onOpenApply,
     },
@@ -54,6 +58,7 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
       num: '04',
       title: 'Acceptance & Enrollment',
       desc: 'Receive your formal acceptance letter, obtain the school uniform kit, and welcome your child to Mugina Hope Academy.',
+      moreDetails: 'Once approved by the Director of Studies or Principal, pay Term 1 tuition via Bank of Kigali or MTN MoMo Pay (Merchant 788258) and collect the official uniform & stationery pack from the Bursar desk.',
       cta: 'Enroll Child',
       action: onOpenApply,
     },
@@ -153,6 +158,11 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
                 <p className="text-xs text-slate-600 leading-relaxed">
                   {st.desc}
                 </p>
+                <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
+                  <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+                    {st.moreDetails}
+                  </p>
+                </ReadMorePanel>
               </div>
               <div className="pt-3 border-t border-slate-100">
                 <button
