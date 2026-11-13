@@ -3,7 +3,6 @@ import { PageId } from '../types';
 import { SCHOOL_INFO } from '../data/schoolData';
 import { HeroSlider } from '../components/HeroSlider';
 import { DualPathGateway } from '../components/DualPathGateway';
-import { DailyTimeline } from '../components/DailyTimeline';
 import {
   getWebsiteSettings,
   saveWebsiteSettings,
@@ -18,8 +17,6 @@ import {
   Users,
   ShieldCheck,
   CheckCircle2,
-  Clock,
-  Phone,
   Mail,
   MapPin,
   ArrowRight,
@@ -707,69 +704,6 @@ export const HomePage: React.FC<HomePageProps> = ({
           onNavigate={onNavigate}
           onOpenApply={onOpenApply}
         />
-      </section>
-
-      {/* 5. Daily Campus Rhythm & Schedule */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-slate-50 rounded-xl p-6 sm:p-10 border border-slate-200 space-y-8">
-          <div className="text-center max-w-2xl mx-auto space-y-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              School Life
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              Daily Schedule & Campus Rhythm
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-600">
-              From arrival through security gates at 7:00 AM to afternoon creative arts, each hour is balanced between academics, nutrition, and character.
-            </p>
-          </div>
-
-          <DailyTimeline />
-        </div>
-      </section>
-
-      {/* 6. Admissions Information & Contact Strip */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-slate-900 text-white rounded-xl p-6 sm:p-10 border border-slate-800 shadow-sm flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="space-y-3 max-w-xl text-center md:text-left">
-            <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider block">
-              Enrollment for Academic Year 2026 / 2027
-            </span>
-            <h3 className="text-2xl sm:text-3xl font-bold text-white">
-              Begin Your Child&apos;s Application
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Registration is open for Nursery (Baby, Middle, Pre-Primary) and Primary 1 through Primary 6. Contact our admissions desk or visit our Kamonyi campus.
-            </p>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-slate-300 pt-1">
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                Mon–Fri: 7:00 AM – 5:00 PM
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                {SCHOOL_INFO.contact.phone}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={onOpenTour}
-              className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-md transition-colors border border-slate-700"
-            >
-              Schedule Campus Visit
-            </button>
-            <button
-              type="button"
-              onClick={onOpenApply}
-              className="w-full sm:w-auto px-5 py-2.5 text-xs font-semibold text-white bg-blue-700 hover:bg-blue-600 rounded-md transition-colors shadow-xs"
-            >
-              Apply Online Now
-            </button>
-          </div>
-        </div>
       </section>
     </div>
   );
