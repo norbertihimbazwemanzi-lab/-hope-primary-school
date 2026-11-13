@@ -87,10 +87,10 @@ export const DualPathGateway: React.FC<DualPathGatewayProps> = ({ onNavigate, on
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
               <button
                 type="button"
-                onClick={() => onNavigate('academics')}
-                className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                onClick={() => onNavigate('admissions')}
+                className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
               >
-                <span>Nursery Curriculum Details</span>
+                <span>Nursery Admissions Info</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
               <button
@@ -166,10 +166,10 @@ export const DualPathGateway: React.FC<DualPathGatewayProps> = ({ onNavigate, on
             <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center gap-3">
               <button
                 type="button"
-                onClick={() => onNavigate('academics')}
-                className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
+                onClick={() => onNavigate('admissions')}
+                className="w-full sm:w-auto flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
               >
-                <span>View P1–P6 Curriculum</span>
+                <span>Primary Admissions Info</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
               <button

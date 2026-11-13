@@ -1,27 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { SCHOOL_INFO } from '../data/schoolData';
 import { FacilityItem, PageId } from '../types';
 import { GalleryLightbox } from '../components/GalleryLightbox';
-import { ReadMoreText, ReadMorePanel } from '../components/ReadMoreBlock';
+import { ReadMoreText } from '../components/ReadMoreBlock';
 import {
   getGalleryItems,
   syncServerGalleryItems,
   saveGalleryItems,
-  getWebsiteSettings,
   filterGalleryAgainstTombstones,
   isGalleryInitialized,
 } from '../services/adminStore';
 import { fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
 import { fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
 import {
-  Trophy,
-  Music,
-  Heart,
-  Palette,
-  Laptop,
-  Flame,
   Maximize2,
-  Check,
   Image as ImageIcon,
 } from 'lucide-react';
 
@@ -82,190 +73,13 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
     };
   }, []);
 
-  const extracurricularClubs = [
-    {
-      title: 'Traditional Rwandan Dance & Itorero (Umuco)',
-      category: 'Culture',
-      icon: <Flame className="w-5 h-5 text-amber-500" />,
-      desc: 'Pupils learn traditional Rwandan dance (Intore & Umushayayo), drumming, and patriotic poems celebrating Rwandan identity and values.',
-      schedule: 'Tuesdays & Thursdays, 3:45 PM',
-      featured: true,
-    },
-    {
-      title: 'ICT & Coding Explorers Club',
-      category: 'Technology',
-      icon: <Laptop className="w-5 h-5 text-blue-600" />,
-      desc: 'Interactive computer problem solving, typing competitions, digital art, and logic games in our dedicated laboratory.',
-      schedule: 'Wednesdays, 3:30 PM',
-      featured: false,
-    },
-    {
-      title: 'Junior Football & Athletics Squad',
-      category: 'Sports',
-      icon: <Trophy className="w-5 h-5 text-emerald-600" />,
-      desc: 'Physical endurance, sportsmanship, and inter-school friendly matches across Kamonyi District. Boys and girls teams.',
-      schedule: 'Fridays, 3:30 PM & Saturday morning',
-      featured: false,
-    },
-    {
-      title: 'Music, Choir & Drama Club',
-      category: 'Performing Arts',
-      icon: <Music className="w-5 h-5 text-purple-600" />,
-      desc: 'Vocal coaching, church and assembly hymns, theatrical sketches, and confidence-building performance.',
-      schedule: 'Mondays, 3:45 PM',
-      featured: false,
-    },
-    {
-      title: 'English & Kinyarwanda Debate Guild',
-      category: 'Academics',
-      icon: <Palette className="w-5 h-5 text-indigo-600" />,
-      desc: 'Public speaking, articulate argument building, vocabulary enrichment, and storytelling for Upper Primary learners.',
-      schedule: 'Thursdays, 4:00 PM',
-      featured: false,
-    },
-    {
-      title: 'Environmental Care & Gardening (Umuganda)',
-      category: 'Nature & Civics',
-      icon: <Heart className="w-5 h-5 text-teal-600" />,
-      desc: 'Hands-on planting of fruit trees, flower gardens, and vegetables teaching environmental conservation and stewardship.',
-      schedule: 'Alternate Fridays',
-      featured: false,
-    },
-  ];
-
   const filteredFacilities = facilities.filter((fac) => {
     if (activeCategory === 'all') return true;
     return fac.category === activeCategory;
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16">
-      {/* 1. Header */}
-      <div className="text-center max-w-3xl mx-auto space-y-3">
-        <span className="text-xs font-bold uppercase tracking-wider text-blue-700">
-          Campus & Student Life
-        </span>
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 font-display">
-          Vibrant Days Filled with Learning, Culture & Joy
-        </h1>
-        <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-          Education at Mugina Hope Academy extends far beyond textbooks. We nurture well-rounded, expressive children through sports, music, traditional Rwandan heritage, and safe outdoor play.
-        </p>
-      </div>
-
-      {/* 2. Traditional Rwandan Culture & Itorero Spotlight */}
-      <div className="bg-slate-900 text-white rounded-xl overflow-hidden border border-slate-800 shadow-sm grid grid-cols-1 lg:grid-cols-2">
-        <div className="p-5 sm:p-10 flex flex-col justify-between space-y-6">
-          <div className="space-y-3">
-            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Flame className="w-4 h-4 shrink-0" />
-              Rwandan Cultural Heritage (Umuco w&apos;u Rwanda)
-            </span>
-            <h2 className="text-xl sm:text-3xl font-bold font-display text-white">
-              Itorero ry&apos;Abato: Traditional Dance & Drumming
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Every pupil at Mugina Hope Academy is immersed in Rwanda’s rich cultural tradition. Through traditional Intore warrior dance, graceful Umushayayo, and rhythmic drumming, children develop poise, national pride, and teamwork.
-            </p>
-            <ReadMorePanel variant="dark" readMoreLabel="Read More About Cultural Program" showLessLabel="Show Less">
-              <div className="space-y-2 pt-2 text-xs text-slate-300 border-t border-slate-800">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Authentic traditional costumes and traditional drums (Ingoma)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Regular performances during national days and Kamonyi festivals</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Instilling core values: Ubutwari, Ubupfura, and Gukunda Igihugu</span>
-                </div>
-              </div>
-            </ReadMorePanel>
-          </div>
-          <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
-            <span>Open to both Nursery & Primary learners</span>
-            <button
-              type="button"
-              onClick={onOpenTour}
-              className="cursor-pointer text-white bg-blue-700 hover:bg-blue-600 font-bold px-4 py-2 rounded-lg transition-colors shadow-xs whitespace-nowrap"
-            >
-              Experience a Session
-            </button>
-          </div>
-        </div>
-
-        <div className="relative min-h-[260px] sm:min-h-[300px] lg:min-h-full">
-          <img
-            src={getWebsiteSettings().culturalDancePhotoUrl || SCHOOL_INFO.images.culturalDance}
-            alt={getWebsiteSettings().culturalDanceAlt || "Mugina Hope Academy children performing traditional Rwandan cultural dance"}
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              if (!target.dataset.triedBackup) {
-                target.dataset.triedBackup = '1';
-                target.src = '/images/campus_life_traditional_dance_1791823290926.jpg';
-              }
-            }}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      </div>
-
-      {/* 3. Extracurricular Clubs & Activities Grid */}
-      <div className="space-y-6">
-        <div className="text-center max-w-2xl mx-auto space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-blue-700">
-            Student Enrichment
-          </span>
-          <h2 className="text-2xl font-bold text-slate-900 font-display">
-            Clubs & Extracurricular Activities
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-600">
-            Discovering hidden talents and building lifelong friendships after academic hours.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {extracurricularClubs.map((club, idx) => (
-            <div
-              key={idx}
-              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs hover:shadow-xs transition-shadow space-y-4 flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="p-2 rounded-xl bg-slate-50 border border-slate-200">
-                    {club.icon}
-                  </div>
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    {club.category}
-                  </span>
-                </div>
-
-                <h3 className="text-base font-bold text-slate-900 font-display">
-                  {club.title}
-                </h3>
-
-                <ReadMoreText
-                  text={club.desc}
-                  maxChars={95}
-                  paragraphClassName="text-xs text-slate-600 leading-relaxed"
-                  readMoreLabel="Read More"
-                  showLessLabel="Show Less"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-[11px] font-mono text-slate-500">
-                  {club.schedule}
-                </span>
-                <span className="text-[11px] font-bold text-blue-700">Active</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
 
       {/* 4. Facilities Gallery & Lightbox */}
       <div className="space-y-6">

@@ -4,7 +4,6 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { HomePage } from './pages/HomePage';
 import { AboutPage } from './pages/AboutPage';
-import { AcademicsPage } from './pages/AcademicsPage';
 import { AdmissionsPage } from './pages/AdmissionsPage';
 import { SchoolFeesPage } from './pages/SchoolFeesPage';
 import { CampusLifePage } from './pages/CampusLifePage';
@@ -520,7 +519,6 @@ export default function App() {
       'home',
       'about',
       'staff',
-      'academics',
       'admissions',
       'fees',
       'campus-life',
@@ -631,15 +629,7 @@ export default function App() {
               />
             </section>
 
-            {/* 3. Academics Section */}
-            <section id="academics" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
-              <AcademicsPage
-                onNavigate={handleNavigate}
-                onOpenApplyWithGrade={(grade) => handleOpenApply(grade)}
-              />
-            </section>
-
-            {/* 4. Admissions Section */}
+            {/* 3. Admissions Section */}
             <section id="admissions" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
               <AdmissionsPage
                 onNavigate={handleNavigate}

@@ -5,7 +5,7 @@ import {
   getCurrentSessionUser,
   WebsiteSettings,
 } from '../services/adminStore';
-import { Check, X, Edit3, Plus, Trash2, ArrowRight, ShieldCheck, CreditCard } from 'lucide-react';
+import { Check, X, Edit3, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { ReadMorePanel } from './ReadMoreBlock';
 
 interface SchoolFeesSectionProps {
@@ -310,18 +310,6 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
           ))}
         </div>
 
-        {/* Official Bursar & Bank Channels Note */}
-        <div className="mt-8 p-4 bg-slate-50 rounded-lg border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-600">
-          <div className="flex items-center gap-2.5">
-            <CreditCard className="w-4 h-4 text-slate-700 shrink-0" />
-            <span>
-              <strong>Bank of Kigali (BK):</strong> Account 00040-0694852-33 &nbsp;|&nbsp; <strong>MTN MoMo Pay Merchant:</strong> 788258
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Official bank slips or transaction confirmations must be presented to Bursar for verified receipt.
-          </span>
-        </div>
       </div>
 
       {/* Admin Live Edit Modal */}

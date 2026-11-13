@@ -1,18 +1,10 @@
 import React from 'react';
 import { PageId } from '../types';
 import {
-  ArrowRight,
   MessageSquare,
   Clock,
   Download,
-  GraduationCap,
-  Users,
-  CheckCircle2,
-  FileText,
 } from 'lucide-react';
-import { SCHOOL_INFO } from '../data/schoolData';
-import { SchoolStaffSection } from '../components/SchoolStaffSection';
-import { ReadMorePanel } from '../components/ReadMoreBlock';
 
 interface AdmissionsPageProps {
   onNavigate: (page: PageId) => void;
@@ -23,50 +15,13 @@ interface AdmissionsPageProps {
 }
 
 export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
-  onNavigate,
   onOpenApply,
   onOpenPrintableForm,
-  onOpenTour,
   onOpenChatTracker,
 }) => {
-  const steps = [
-    {
-      num: '01',
-      title: 'Inquire & Campus Visit',
-      desc: 'Schedule a campus visit to view our classrooms next to Mugina Police Station and consult with educators.',
-      moreDetails: 'Tour hours run Monday–Friday (7:30 AM – 4:30 PM) and Saturday mornings (8:30 AM – 11:30 AM). Meet class teachers, inspect the ICT Lab, and verify your child’s class placement with our Age Calculator.',
-      cta: 'Book Visit',
-      action: onOpenTour,
-    },
-    {
-      num: '02',
-      title: 'Complete Application',
-      desc: 'Submit our online application or download and complete the official registration form.',
-      moreDetails: 'Online submissions instantly generate a Reference Code (e.g. MHA-2026-...) so you can track Director of Studies review and message the admissions office at any time.',
-      cta: 'Apply Online',
-      action: onOpenApply,
-    },
-    {
-      num: '03',
-      title: 'Document Verification',
-      desc: 'Present required registration records (Birth certificate, passport photos, and previous academic records).',
-      moreDetails: 'Required documents: (1) Official Birth Certificate copy, (2) Two passport-size photographs, (3) Previous school report cards for Primary P1–P6 transfers, and (4) Parent/Guardian National ID copy.',
-      cta: 'Apply Now',
-      action: onOpenApply,
-    },
-    {
-      num: '04',
-      title: 'Acceptance & Enrollment',
-      desc: 'Receive your formal acceptance letter, obtain the school uniform kit, and welcome your child to Mugina Hope Academy.',
-      moreDetails: 'Once approved by the Director of Studies or Principal, pay Term 1 tuition via Bank of Kigali or MTN MoMo Pay (Merchant 788258) and collect the official uniform & stationery pack from the Bursar desk.',
-      cta: 'Enroll Child',
-      action: onOpenApply,
-    },
-  ];
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12">
-      {/* 1. Header Banner */}
+      {/* Header Banner */}
       <div className="text-center max-w-3xl mx-auto space-y-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           Admissions & Enrollment
@@ -75,7 +30,7 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
           Admissions Procedure for Academic Year 2026 / 2027
         </h1>
         <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-2xl mx-auto">
-          We welcome applications for Nursery (Baby, Middle, Pre-Primary) and Primary (P1 through P6). Complete the four-step admissions journey outlined below.
+          We welcome applications for Nursery (Baby, Middle, Pre-Primary) and Primary (P1 through P6). Apply online or download the official registration form below.
         </p>
 
         <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
@@ -130,57 +85,6 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
           </div>
         )}
       </div>
-
-      {/* 2. Step-by-Step Registration Checklist */}
-      <div className="space-y-6">
-        <div className="text-center max-w-2xl mx-auto space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            Admissions Journey
-          </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">
-            Four Steps to Register Your Child
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {steps.map((st) => (
-            <div
-              key={st.num}
-              className="bg-white rounded-lg border border-slate-200 p-5 shadow-xs flex flex-col justify-between space-y-4"
-            >
-              <div className="space-y-2">
-                <span className="text-2xl font-bold text-blue-900 font-mono">
-                  {st.num}
-                </span>
-                <h3 className="text-base font-bold text-slate-900">
-                  {st.title}
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {st.desc}
-                </p>
-                <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
-                  <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
-                    {st.moreDetails}
-                  </p>
-                </ReadMorePanel>
-              </div>
-              <div className="pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={st.action}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-950 hover:text-blue-800 cursor-pointer"
-                >
-                  <span>{st.cta}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 3. School Staff Leadership Team */}
-      <SchoolStaffSection />
     </div>
   );
 };
