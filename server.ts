@@ -1151,6 +1151,41 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString(), school: 'Mugina Hope Academy' });
 });
 
+// Dynamic / static sitemap.xml endpoint with proper XML Content-Type
+app.get('/sitemap.xml', (req, res) => {
+  const baseUrl = (process.env.APP_URL || 'https://mugina-hope-primary-school-u2su.vercel.app').replace(/\/+$/, '');
+  const lastMod = new Date().toISOString().split('T')[0];
+  const routes = [
+    { path: '/', changefreq: 'daily', priority: '1.0' },
+    { path: '/about', changefreq: 'monthly', priority: '0.9' },
+    { path: '/staff', changefreq: 'monthly', priority: '0.8' },
+    { path: '/admissions', changefreq: 'weekly', priority: '0.9' },
+    { path: '/fees', changefreq: 'monthly', priority: '0.9' },
+    { path: '/campus-life', changefreq: 'weekly', priority: '0.8' },
+    { path: '/contact', changefreq: 'monthly', priority: '0.8' },
+  ];
+
+  const urlsXml = routes
+    .map(
+      (r) => `  <url>
+    <loc>${baseUrl}${r.path}</loc>
+    <lastmod>${lastMod}</lastmod>
+    <changefreq>${r.changefreq}</changefreq>
+    <priority>${r.priority}</priority>
+  </url>`
+    )
+    .join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlsXml}
+</urlset>
+`;
+
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.send(xml);
+});
+
 // Mount Vite middleware in development or serve static files in production
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {

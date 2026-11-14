@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /admin
 
-Sitemap: https://muginahopeschool.com/sitemap.xml
+Sitemap: https://mugina-hope-primary-school-u2su.vercel.app/sitemap.xml

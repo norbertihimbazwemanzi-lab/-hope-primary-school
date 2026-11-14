@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PageId } from './types';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -84,6 +84,7 @@ export default function App() {
   const [preselectedGrade, setPreselectedGrade] = useState<string>('N-BABY');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [, setSessionRevision] = useState(0);
+  const ignoreScrollSpyUntilRef = useRef<number>(0);
 
   // Sync user attributes from Firestore on session or Firebase Auth events
   useEffect(() => {
@@ -511,7 +512,35 @@ export default function App() {
     };
   }, []);
 
-  // Scroll-spy to automatically highlight active nav item when scrolling through sections
+  const pageTitles: Record<PageId, string> = {
+    home: 'Mugina Hope Primary & Nursery Academy | Kamonyi, Rwanda',
+    about: 'About Us | Mugina Hope Primary & Nursery Academy',
+    staff: 'School Staff & Leadership | Mugina Hope Primary & Nursery Academy',
+    academics: 'Mugina Hope Primary & Nursery Academy | Kamonyi, Rwanda',
+    admissions: 'Admissions & Enrollment | Mugina Hope Primary & Nursery Academy',
+    fees: 'School Fees Schedule | Mugina Hope Primary & Nursery Academy',
+    'campus-life': 'Campus Life & Facilities Gallery | Mugina Hope Primary & Nursery Academy',
+    contact: 'Contact Us & Location | Mugina Hope Primary & Nursery Academy',
+    admin: 'Staff & Admin Portal | Mugina Hope Primary & Nursery Academy',
+  };
+
+  const syncBrowserUrlAndTitle = (page: PageId, updateHash = true) => {
+    document.title = pageTitles[page] || pageTitles.home;
+    const canonicalEl = document.querySelector('link[rel="canonical"]');
+    if (canonicalEl) {
+      const origin = window.location.origin;
+      const canonicalPath = page === 'home' ? '/' : `/${page}`;
+      canonicalEl.setAttribute('href', `${origin}${canonicalPath}`);
+    }
+    if (updateHash) {
+      const nextUrl = `/#${page}`;
+      if (`${window.location.pathname}${window.location.hash}` !== nextUrl) {
+        window.history.replaceState(null, '', nextUrl);
+      }
+    }
+  };
+
+  // Scroll-spy to automatically highlight active nav item and update URL hash when scrolling through sections
   useEffect(() => {
     if (currentPage === 'admin') return;
 
@@ -526,6 +555,7 @@ export default function App() {
     ];
 
     const handleScrollSpy = () => {
+      if (Date.now() < ignoreScrollSpyUntilRef.current) return;
       const scrollPosition = window.scrollY + 240;
       for (let i = sectionIds.length - 1; i >= 0; i--) {
         const id = sectionIds[i];
@@ -534,6 +564,7 @@ export default function App() {
           const top = el.offsetTop;
           if (scrollPosition >= top) {
             setCurrentPage((prev) => (prev === id || prev === 'admin' ? prev : id));
+            syncBrowserUrlAndTitle(id, true);
             break;
           }
         }
@@ -544,7 +575,70 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScrollSpy);
   }, [currentPage]);
 
+  // Support direct landing and hashchange on sitemap/hash URLs (#home, #about, /about, ?page=about, etc.)
+  useEffect(() => {
+    const validPages: PageId[] = [
+      'home',
+      'about',
+      'staff',
+      'admissions',
+      'fees',
+      'campus-life',
+      'contact',
+      'admin',
+    ];
+
+    const resolveTargetPage = (): PageId | null => {
+      const hashSegment = window.location.hash.replace(/^#/, '').toLowerCase() as PageId;
+      if (hashSegment && validPages.includes(hashSegment)) return hashSegment;
+
+      const params = new URLSearchParams(window.location.search);
+      const queryPage = params.get('page')?.toLowerCase() as PageId | undefined;
+      if (queryPage && validPages.includes(queryPage)) return queryPage;
+
+      const pathSegment = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase() as PageId;
+      if (pathSegment && validPages.includes(pathSegment)) return pathSegment;
+
+      return null;
+    };
+
+    const navigateFromUrl = (isInitial: boolean) => {
+      const targetPage = resolveTargetPage();
+      if (!targetPage) {
+        if (isInitial) {
+          syncBrowserUrlAndTitle('home', true);
+        }
+        return;
+      }
+
+      setCurrentPage(targetPage);
+      // Keep clean path canonical on direct path visits until user scrolls/navigates
+      const isDirectCleanPath = !window.location.hash && window.location.pathname !== '/';
+      syncBrowserUrlAndTitle(targetPage, !isDirectCleanPath);
+
+      if (targetPage !== 'admin' && targetPage !== 'home') {
+        ignoreScrollSpyUntilRef.current = Date.now() + 900;
+        setTimeout(() => {
+          const targetId = targetPage === 'staff' ? 'staff' : targetPage;
+          const el = document.getElementById(targetId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 120);
+      }
+    };
+
+    navigateFromUrl(true);
+
+    const onHashChange = () => navigateFromUrl(false);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const handleNavigate = (page: PageId) => {
+    ignoreScrollSpyUntilRef.current = Date.now() + 900;
+    syncBrowserUrlAndTitle(page, true);
+
     if (page === 'admin') {
       setCurrentPage('admin');
       window.scrollTo({ top: 0, behavior: 'smooth' });
