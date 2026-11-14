@@ -4,10 +4,6 @@
   "framework": "vite",
   "routes": [
     {
-      "src": "^/sitemap\\.xml$",
-      "dest": "/api/sitemap"
-    },
-    {
       "src": "^/api/(.*)$",
       "dest": "/api/$1"
     },
