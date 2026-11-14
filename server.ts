@@ -1152,7 +1152,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Dynamic / static sitemap.xml endpoint with proper XML Content-Type
-app.get('/sitemap.xml', (req, res) => {
+app.get(['/sitemap.xml', '/api/sitemap'], (req, res) => {
   const baseUrl = (process.env.APP_URL || 'https://mugina-hope-primary-school-u2su.vercel.app').replace(/\/+$/, '');
   const lastMod = new Date().toISOString().split('T')[0];
   const routes = [
