@@ -41,7 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-xs">
+    <>
+      <header className="fixed top-0 left-0 right-0 z-40 bg-white/98 backdrop-blur-xs border-b border-slate-200/90 shadow-xs">
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between gap-2 sm:gap-4 h-14 sm:h-20">
@@ -63,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {/* Navigation Links (Desktop) */}
-          <nav className="hidden lg:flex items-center gap-5 xl:gap-6 text-[13px] font-semibold text-slate-700">
+          <nav aria-label="Main navigation" className="hidden lg:flex items-center gap-1.5 xl:gap-3 text-[13px] font-semibold text-slate-700">
             {navItems.map((item) => {
               const isActive = currentPage === item.id;
               return (
@@ -71,13 +72,16 @@ export const Header: React.FC<HeaderProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => handleNavClick(item.id)}
-                  className={`relative py-2 transition-colors whitespace-nowrap shrink-0 hover:text-blue-950 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-900 rounded ${
-                    isActive ? 'text-blue-900 font-bold' : 'text-slate-600'
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`relative px-2.5 py-2 transition-colors whitespace-nowrap shrink-0 hover:text-blue-950 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-blue-900 rounded-md cursor-pointer ${
+                    isActive
+                      ? 'text-blue-950 font-bold bg-blue-50/90'
+                      : 'text-slate-600 hover:bg-slate-50'
                   }`}
                 >
                   {item.label}
                   {isActive && (
-                    <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-900" />
+                    <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-blue-900 rounded-full" />
                   )}
                 </button>
               );
@@ -174,9 +178,10 @@ export const Header: React.FC<HeaderProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => handleNavClick(item.id)}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`cursor-pointer text-left px-3 py-3 min-h-[44px] text-sm font-medium transition-colors rounded-md ${
                     isActive
-                      ? 'text-blue-900 font-bold bg-slate-50'
+                      ? 'text-blue-950 font-bold bg-blue-50 border-l-4 border-blue-900'
                       : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
@@ -187,9 +192,10 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={() => handleNavClick('admin')}
+              aria-current={currentPage === 'admin' ? 'page' : undefined}
               className={`cursor-pointer text-left px-3 py-3 min-h-[44px] text-sm font-medium flex items-center gap-2 rounded-md ${
                 currentPage === 'admin'
-                  ? 'text-blue-950 font-bold bg-slate-50'
+                  ? 'text-blue-950 font-bold bg-blue-50 border-l-4 border-blue-900'
                   : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
@@ -199,7 +205,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       )}
-    </header>
+      </header>
+      <div className="h-[57px] sm:h-[81px] shrink-0 print:hidden" aria-hidden="true" />
+    </>
   );
 };
 

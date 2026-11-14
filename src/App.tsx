@@ -524,23 +524,26 @@ export default function App() {
     admin: 'Staff & Admin Portal | Mugina Hope Primary & Nursery Academy',
   };
 
-  const syncBrowserUrlAndTitle = (page: PageId, updateHash = true) => {
+  const syncBrowserUrlAndTitle = (page: PageId, updateUrl = true, push = false) => {
     document.title = pageTitles[page] || pageTitles.home;
+    const nextPath = page === 'home' ? '/' : `/${page}`;
     const canonicalEl = document.querySelector('link[rel="canonical"]');
     if (canonicalEl) {
-      const origin = window.location.origin;
-      const canonicalPath = page === 'home' ? '/' : `/${page}`;
-      canonicalEl.setAttribute('href', `${origin}${canonicalPath}`);
+      canonicalEl.setAttribute('href', `${window.location.origin}${nextPath}`);
     }
-    if (updateHash) {
-      const nextUrl = `/#${page}`;
-      if (`${window.location.pathname}${window.location.hash}` !== nextUrl) {
-        window.history.replaceState(null, '', nextUrl);
+    if (updateUrl) {
+      const currentFull = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (currentFull !== nextPath) {
+        if (push) {
+          window.history.pushState({ page }, '', nextPath);
+        } else {
+          window.history.replaceState({ page }, '', nextPath);
+        }
       }
     }
   };
 
-  // Scroll-spy to automatically highlight active nav item and update URL hash when scrolling through sections
+  // Scroll-spy to automatically highlight active nav item and update clean URL path when scrolling through sections
   useEffect(() => {
     if (currentPage === 'admin') return;
 
@@ -556,15 +559,24 @@ export default function App() {
 
     const handleScrollSpy = () => {
       if (Date.now() < ignoreScrollSpyUntilRef.current) return;
-      const scrollPosition = window.scrollY + 240;
+
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 24;
+      if (atBottom) {
+        const lastId: PageId = 'contact';
+        setCurrentPage((prev) => (prev === lastId || prev === 'admin' ? prev : lastId));
+        syncBrowserUrlAndTitle(lastId, true, false);
+        return;
+      }
+
       for (let i = sectionIds.length - 1; i >= 0; i--) {
         const id = sectionIds[i];
         const el = document.getElementById(id);
         if (el) {
-          const top = el.offsetTop;
-          if (scrollPosition >= top) {
+          const rectTop = el.getBoundingClientRect().top;
+          if (rectTop <= 180) {
             setCurrentPage((prev) => (prev === id || prev === 'admin' ? prev : id));
-            syncBrowserUrlAndTitle(id, true);
+            syncBrowserUrlAndTitle(id, true, false);
             break;
           }
         }
@@ -575,7 +587,7 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScrollSpy);
   }, [currentPage]);
 
-  // Support direct landing and hashchange on sitemap/hash URLs (#home, #about, /about, ?page=about, etc.)
+  // Support direct landing and browser Back/Forward on clean path routes (/about, /staff, /admissions, /fees, /campus-life, /contact, /admin)
   useEffect(() => {
     const validPages: PageId[] = [
       'home',
@@ -588,7 +600,10 @@ export default function App() {
       'admin',
     ];
 
-    const resolveTargetPage = (): PageId | null => {
+    const resolveTargetPage = (): PageId => {
+      const pathSegment = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase() as PageId;
+      if (pathSegment && validPages.includes(pathSegment)) return pathSegment;
+
       const hashSegment = window.location.hash.replace(/^#/, '').toLowerCase() as PageId;
       if (hashSegment && validPages.includes(hashSegment)) return hashSegment;
 
@@ -596,27 +611,18 @@ export default function App() {
       const queryPage = params.get('page')?.toLowerCase() as PageId | undefined;
       if (queryPage && validPages.includes(queryPage)) return queryPage;
 
-      const pathSegment = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase() as PageId;
-      if (pathSegment && validPages.includes(pathSegment)) return pathSegment;
-
-      return null;
+      return 'home';
     };
 
-    const navigateFromUrl = (isInitial: boolean) => {
+    const navigateFromUrl = () => {
       const targetPage = resolveTargetPage();
-      if (!targetPage) {
-        if (isInitial) {
-          syncBrowserUrlAndTitle('home', true);
-        }
-        return;
-      }
-
       setCurrentPage(targetPage);
-      // Keep clean path canonical on direct path visits until user scrolls/navigates
-      const isDirectCleanPath = !window.location.hash && window.location.pathname !== '/';
-      syncBrowserUrlAndTitle(targetPage, !isDirectCleanPath);
+      syncBrowserUrlAndTitle(targetPage, true, false);
 
-      if (targetPage !== 'admin' && targetPage !== 'home') {
+      if (targetPage === 'home') {
+        ignoreScrollSpyUntilRef.current = Date.now() + 700;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (targetPage !== 'admin') {
         ignoreScrollSpyUntilRef.current = Date.now() + 900;
         setTimeout(() => {
           const targetId = targetPage === 'staff' ? 'staff' : targetPage;
@@ -628,16 +634,20 @@ export default function App() {
       }
     };
 
-    navigateFromUrl(true);
+    navigateFromUrl();
 
-    const onHashChange = () => navigateFromUrl(false);
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    const onPopOrHashChange = () => navigateFromUrl();
+    window.addEventListener('popstate', onPopOrHashChange);
+    window.addEventListener('hashchange', onPopOrHashChange);
+    return () => {
+      window.removeEventListener('popstate', onPopOrHashChange);
+      window.removeEventListener('hashchange', onPopOrHashChange);
+    };
   }, []);
 
   const handleNavigate = (page: PageId) => {
     ignoreScrollSpyUntilRef.current = Date.now() + 900;
-    syncBrowserUrlAndTitle(page, true);
+    syncBrowserUrlAndTitle(page, true, true);
 
     if (page === 'admin') {
       setCurrentPage('admin');
@@ -645,27 +655,30 @@ export default function App() {
       return;
     }
 
-    if (currentPage === 'admin') {
-      setCurrentPage(page);
+    const wasAdmin = currentPage === 'admin';
+    setCurrentPage(page);
+
+    if (page === 'home') {
       setTimeout(() => {
-        const targetId = page === 'staff' ? 'staff' : page;
-        const el = document.getElementById(targetId) || document.getElementById('about');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        } else {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-      }, 100);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, wasAdmin ? 100 : 0);
       return;
     }
 
-    setCurrentPage(page);
-    const targetId = page === 'staff' ? 'staff' : page;
-    const el = document.getElementById(targetId) || document.getElementById('about');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
+    const scrollToSection = () => {
+      const targetId = page === 'staff' ? 'staff' : page;
+      const el = document.getElementById(targetId) || document.getElementById('about');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    };
+
+    if (wasAdmin) {
+      setTimeout(scrollToSection, 100);
     } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToSection();
     }
   };
 
