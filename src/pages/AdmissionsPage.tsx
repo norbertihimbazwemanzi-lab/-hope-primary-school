@@ -15,6 +15,7 @@ interface AdmissionsPageProps {
 }
 
 export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
+  onNavigate,
   onOpenApply,
   onOpenPrintableForm,
   onOpenChatTracker,
@@ -39,6 +40,13 @@ export const AdmissionsPage: React.FC<AdmissionsPageProps> = ({
             className="cursor-pointer px-5 py-2.5 bg-blue-950 hover:bg-blue-900 text-white font-semibold text-xs rounded-md shadow-xs transition-colors"
           >
             Start Online Application
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('verify-admission')}
+            className="cursor-pointer px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs rounded-md shadow-xs transition-colors"
+          >
+            Verify Admission Code
           </button>
           {onOpenChatTracker && (
             <button

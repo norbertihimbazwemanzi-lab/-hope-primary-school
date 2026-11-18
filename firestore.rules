@@ -86,6 +86,27 @@ service cloud.firestore {
     match /campus_tour_bookings/{tourId} {
       allow read, write: if true;
     }
+
+    // SMS Normalized Collections (Academics, Exams, Homework Submissions, Achievements, Notifications)
+    match /sms_academic_years_terms/{docId} { allow read, write: if true; }
+    match /sms_school_classes_streams/{docId} { allow read, write: if true; }
+    match /sms_school_subjects/{docId} { allow read, write: if true; }
+    match /sms_teacher_assignments/{docId} { allow read, write: if true; }
+    match /sms_exam_config/{docId} { allow read, write: if true; }
+    match /sms_exam_schedules/{docId} { allow read, write: if true; }
+    match /sms_exam_marks/{docId} { allow read, write: if true; }
+    match /sms_lesson_plans/{docId} { allow read, write: if true; }
+    match /sms_learning_materials/{docId} { allow read, write: if true; }
+    match /sms_homework_assignments/{docId} { allow read, write: if true; }
+    match /sms_homework_submissions/{docId} { allow read, write: if true; }
+    match /sms_student_achievements/{docId} { allow read, write: if true; }
+    match /sms_student_notifications/{docId} { allow read, write: if true; }
+    match /sms_class_announcements/{docId} { allow read, write: if true; }
+    match /sms_class_timetables/{docId} { allow read, write: if true; }
+    match /sms_parent_teacher_messages/{docId} { allow read, write: if true; }
+    match /sms_audit_logs/{docId} { allow read, write: if true; }
+    match /email_delivery_logs/{docId} { allow read, write: if true; }
+    match /email_templates/{docId} { allow read, write: if true; }
   }
 }
 

@@ -47,7 +47,7 @@ interface ChatThread {
   parentEmail?: string;
   parentPhone?: string;
   gradeCode: string;
-  status: 'Pending Confirmation' | 'Confirmed & Enrolled' | 'Waitlist';
+  status: AdminApplication['status'];
   messages: ChatMessage[];
   updatedAt: string;
 }

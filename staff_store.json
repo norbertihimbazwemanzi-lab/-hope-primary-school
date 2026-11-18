@@ -1,0 +1,53 @@
+[
+  {
+    "id": "staff-admin-legacy",
+    "name": "usanase lilly brave",
+    "role": "DOS",
+    "email": "usanaselillybrave@gmail.com",
+    "phone": "+250 790962628",
+    "username": "usanase lilly brave",
+    "assignedSubjectOrGrade": "director of studies",
+    "enrolledAt": "2026-11-18",
+    "status": "Active",
+    "updatedAt": "2026-11-18T09:16:54.954+00:00",
+    "passwordHash": "scrypt$7a279f492723ad4fa6d1e06c9bdf83b2$c40883b561c2195ab9159b03619053d724c52f96ed69867c765777d270acfa382808244506d137b835dbfba32b5cd13a7b454938e54811648d693341aea5b395"
+  },
+  {
+    "id": "staff-admin-norbert",
+    "name": "ihimbazwe manzi norbert",
+    "role": "SuperAdmin",
+    "email": "norbertihimbazwemanzi@gmail.com",
+    "phone": "+250 798 744 704",
+    "username": "norbertihimbazwemanzi@gmail.com",
+    "assignedSubjectOrGrade": "developer",
+    "enrolledAt": "2026-11-11",
+    "status": "Active",
+    "updatedAt": "2026-11-11T16:36:02.754+00:00",
+    "passwordHash": "scrypt$3c97e76e5e7ee1c46942b59ecb6a2f43$e6126add1209be02f9dd86dd315fda8025fa7087ea4220513f74fb9374f877a6db36a64a0e7b8b9deb722a838623ffb816b6323aa06c997bb1c448b169e278a4"
+  },
+  {
+    "id": "staff-headteacher-1",
+    "name": "Headteacher / School Principal",
+    "role": "Admin",
+    "email": "headteacher@muginahopeschool.com",
+    "phone": "+250 788 258 786",
+    "username": "hopeprimaryschool",
+    "assignedSubjectOrGrade": "Executive School Leadership & Administration",
+    "enrolledAt": "2026-11-11",
+    "status": "Active",
+    "updatedAt": "2026-11-11T16:36:02.754+00:00",
+    "passwordHash": "scrypt$ca56f8f01126092c65b4a1a3e61f1803$7b45ff4c52ff42d3593606d2055de9c686fa6869c3f93f8a20a71eebbf6edaab9d7da4fc07890ee89acee0b16868f56f64ab8bd56285c0f9c3a87bf0ecbb24bb"
+  },
+  {
+    "id": "staff-1794992024672",
+    "name": "ishimwe kelly1",
+    "role": "Teacher",
+    "email": "jeanbarankeza@gmail.com",
+    "phone": "+250 786546513",
+    "username": "ishimwe kelly1",
+    "assignedSubjectOrGrade": "math,p2,lower primary",
+    "enrolledAt": "2026-11-18",
+    "status": "Active",
+    "updatedAt": "2026-11-18T08:53:45.387+00:00"
+  }
+]

@@ -246,6 +246,8 @@ const mapStaffToRow = (s: any, includeExtended = true) => {
   if (includeExtended) {
     base.password = s.password || '';
     base.enrolled_at = s.enrolledAt || '';
+    if (s.photoUrl) base.photo_url = s.photoUrl;
+    if (s.bio) base.bio = s.bio;
   }
   return base;
 };
@@ -259,6 +261,8 @@ const mapRowToStaff = (row: any) => ({
   username: row.username,
   password: row.password || '',
   assignedSubjectOrGrade: row.assigned_subject_or_grade || row.assignedSubjectOrGrade || '',
+  photoUrl: row.photo_url || row.photoUrl || '',
+  bio: row.bio || '',
   enrolledAt: row.enrolled_at || row.enrolledAt || (row.updated_at ? String(row.updated_at).split('T')[0] : ''),
   status: row.status || 'Active',
   updatedAt: row.updated_at || undefined,
@@ -290,6 +294,7 @@ const mapStudentToRow = (st: any, includeExtended = true) => {
     base.admission_date = st.admissionDate || st.enrolledAt || '';
     base.previous_school = st.previousSchool || '';
     base.academic_history = Array.isArray(st.academicHistory) ? st.academicHistory : [];
+    base.student_account_active = st.studentAccountActive !== false;
   }
   return base;
 };
@@ -312,6 +317,7 @@ const mapRowToStudent = (row: any) => ({
   parentEmail: row.parent_email || row.parentEmail || '',
   studentUsername: row.student_username || row.studentUsername || '',
   studentPassword: row.student_password || row.studentPassword || '',
+  studentAccountActive: row.student_account_active !== false && row.studentAccountActive !== false,
   enrolledBy: row.enrolled_by || row.enrolledBy || 'DOS',
   enrolledAt: row.enrolled_at || row.enrolledAt || (row.updated_at ? String(row.updated_at).split('T')[0] : ''),
   status: row.status || 'Active',
@@ -369,27 +375,41 @@ const mapRowToPayment = (row: any) => ({
   updatedAt: row.updated_at || undefined,
 });
 
-const mapApplicationToRow = (app: any) => ({
-  id: app.id,
-  ref_code: app.refCode,
-  student_name: app.studentName,
-  gender: app.gender || 'Female',
-  dob: app.dob || '',
-  grade_code: app.gradeCode,
-  parent_name: app.parentName,
-  parent_phone: app.parentPhone,
-  parent_email: app.parentEmail || '',
-  sector: app.sector || '',
-  wants_lunch: !!app.wantsLunch,
-  wants_transport: !!app.wantsTransport,
-  status: app.status || 'Pending Confirmation',
-  feedback_notes: app.feedbackNotes || null,
-  assigned_student_id: app.assignedStudentId || null,
-  created_at: app.createdAt || new Date().toLocaleString(),
-  confirmed_at: app.confirmedAt || null,
-  confirmed_by: app.confirmedBy || null,
-  updated_at: new Date().toISOString(),
-});
+const mapApplicationToRow = (app: any, includeExtended = true) => {
+  const base: Record<string, any> = {
+    id: app.id,
+    ref_code: app.refCode,
+    student_name: app.studentName,
+    gender: app.gender || 'Female',
+    dob: app.dob || '',
+    grade_code: app.gradeCode,
+    parent_name: app.parentName,
+    parent_phone: app.parentPhone,
+    parent_email: app.parentEmail || '',
+    sector: app.sector || '',
+    wants_lunch: !!app.wantsLunch,
+    wants_transport: !!app.wantsTransport,
+    status: app.status || 'Pending Confirmation',
+    feedback_notes: app.feedbackNotes || null,
+    assigned_student_id: app.assignedStudentId || null,
+    created_at: app.createdAt || new Date().toLocaleString(),
+    confirmed_at: app.confirmedAt || null,
+    confirmed_by: app.confirmedBy || null,
+    updated_at: app.updatedAt || new Date().toISOString(),
+  };
+
+  if (includeExtended) {
+    base.approval_date = app.approvalDate || null;
+    base.email_delivery_status = app.emailDeliveryStatus || null;
+    base.verification_status = app.verificationStatus || 'Unverified';
+    base.verified_at = app.verifiedAt || null;
+    base.reviewed_by = app.reviewedBy || null;
+    base.rejection_reason = app.rejectionReason || null;
+    base.more_info_notes = app.moreInfoNotes || null;
+  }
+
+  return base;
+};
 
 const mapRowToApplication = (row: any) => ({
   id: row.id,
@@ -410,6 +430,13 @@ const mapRowToApplication = (row: any) => ({
   createdAt: row.created_at || '',
   confirmedAt: row.confirmed_at || undefined,
   confirmedBy: row.confirmed_by || undefined,
+  approvalDate: row.approval_date || undefined,
+  emailDeliveryStatus: row.email_delivery_status || undefined,
+  verificationStatus: row.verification_status || undefined,
+  verifiedAt: row.verified_at || undefined,
+  reviewedBy: row.reviewed_by || undefined,
+  rejectionReason: row.rejection_reason || undefined,
+  moreInfoNotes: row.more_info_notes || undefined,
   updatedAt: row.updated_at || undefined,
 });
 
@@ -1130,8 +1157,15 @@ export const saveApplicationToSupabase = async (app: any): Promise<boolean> => {
   try {
     const { error } = await client
       .from('admissions_applications')
-      .upsert(mapApplicationToRow(app), { onConflict: 'id' });
-    return !error;
+      .upsert(mapApplicationToRow(app, true), { onConflict: 'id' });
+    if (!error) return true;
+    if (isMissingColumnError(error)) {
+      const { error: fbErr } = await client
+        .from('admissions_applications')
+        .upsert(mapApplicationToRow(app, false), { onConflict: 'id' });
+      return !fbErr;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -1146,8 +1180,15 @@ export const saveApplicationsBatchToSupabase = async (
   try {
     const { error } = await client
       .from('admissions_applications')
-      .upsert(apps.map(mapApplicationToRow), { onConflict: 'id' });
-    return !error;
+      .upsert(apps.map((a) => mapApplicationToRow(a, true)), { onConflict: 'id' });
+    if (!error) return true;
+    if (isMissingColumnError(error)) {
+      const { error: fbErr } = await client
+        .from('admissions_applications')
+        .upsert(apps.map((a) => mapApplicationToRow(a, false)), { onConflict: 'id' });
+      return !fbErr;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -1958,7 +1999,13 @@ export const syncAllDataToSupabase = async (
         students.map((st) => mapStudentToRow(st, false))
       ),
       upsertTable('payment_transactions', payments.map(mapPaymentToRow), 'id', (n) => (syncedCount.payments = n)),
-      upsertTable('admissions_applications', applications.map(mapApplicationToRow), 'id', (n) => (syncedCount.applications = n)),
+      upsertTable(
+        'admissions_applications',
+        applications.map((a) => mapApplicationToRow(a, true)),
+        'id',
+        (n) => (syncedCount.applications = n),
+        applications.map((a) => mapApplicationToRow(a, false))
+      ),
       upsertTable('attendance_records', attendance.map(mapAttendanceToRow), 'id', (n) => (syncedCount.attendance = n)),
       upsertTable('teacher_attendance_records', teacherAttendance.map(mapTeacherAttToRow), 'id', (n) => (syncedCount.teacherAttendance = n)),
       upsertTable('discipline_records', discipline.map(mapDisciplineToRow), 'id', (n) => (syncedCount.discipline = n)),

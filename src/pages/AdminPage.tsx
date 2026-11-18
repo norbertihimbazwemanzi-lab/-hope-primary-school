@@ -77,6 +77,13 @@ import {
   ensureAdminFirebaseAuth,
   authenticateParentAccount,
   authenticateStudentAccount,
+  authenticateStudentWithBackend,
+  setStudentAuthToken,
+  authenticateStaffWithBackend,
+  exchangeFirebaseTokenForStaffSession,
+  getStaffAuthToken,
+  setStaffAuthToken,
+  requestPasswordReset,
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
@@ -111,13 +118,15 @@ import { SystemAuditAndBackupModule } from '../components/SystemAuditAndBackupMo
 import { ParentPortal } from '../components/ParentPortal';
 import { StudentPortal } from '../components/StudentPortal';
 import { StudentIdAndProfileModal } from '../components/StudentIdAndProfileModal';
+import { AdminEmailNotificationsModule } from '../components/AdminEmailNotificationsModule';
 import {
   hasPermission,
   getRoleDisplayLabel,
   isFullAdmin,
   normalizeUserRole,
+  extractGradesFromAssignment,
 } from '../services/rbac';
-import { logAuditEvent } from '../services/smsStore';
+import { getTeacherAssignments, logAuditEvent } from '../services/smsStore';
 import {
   Shield,
   Lock,
@@ -218,6 +227,7 @@ const resolveDefaultTabForUser = (user: ReturnType<typeof getCurrentSessionUser>
 export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdated }) => {
   const [currentUser, setCurrentUser] = useState(getCurrentSessionUser());
   const [activeTab, setActiveTab] = useState<AdminTab>(() => resolveDefaultTabForUser(getCurrentSessionUser()));
+  const [attendancePreselectGrade, setAttendancePreselectGrade] = useState<string | undefined>(undefined);
   const [loginPortalMode, setLoginPortalMode] = useState<'staff' | 'parent' | 'student'>('staff');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     try {
@@ -226,6 +236,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       return false;
     }
   });
+
+  useEffect(() => {
+    const onSessionUpdated = (e: Event) => {
+      const detail = (e as CustomEvent<ReturnType<typeof getCurrentSessionUser>>).detail;
+      if (detail !== undefined) setCurrentUser(detail);
+    };
+    window.addEventListener('mugina-session-updated', onSessionUpdated);
+    return () => window.removeEventListener('mugina-session-updated', onSessionUpdated);
+  }, []);
 
   const toggleThemeMode = () => {
     setIsDarkMode((prev) => {
@@ -266,6 +285,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [loginError, setLoginError] = useState('');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
+
+  // Forgot Password inline state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotFeedback, setForgotFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Auto-populate saved credentials on phone/browser mount if remember option was enabled
   useEffect(() => {
@@ -400,8 +425,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   } | null>(null);
   const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
 
-  // Staff Enrollment Form Modal
+  // Staff Enrollment & Control Modal
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState<string>('ALL');
+  const [staffActionNotice, setStaffActionNotice] = useState<string | null>(null);
   const [staffFormData, setStaffFormData] = useState({
     name: '',
     role: 'Teacher' as StaffMember['role'],
@@ -410,11 +438,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     username: '',
     password: '',
     assignedSubjectOrGrade: '',
+    status: 'Active' as StaffMember['status'],
   });
 
   // Student Enrollment Form Modal (DOS objective)
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showBulkStudentModal, setShowBulkStudentModal] = useState(false);
+  const [resetPasswordStudent, setResetPasswordStudent] = useState<EnrolledStudent | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('student@2026');
   const [studentFormData, setStudentFormData] = useState({
     regNumber: `MHA-2026-${Math.floor(100 + Math.random() * 900)}`,
     fullName: '',
@@ -431,6 +462,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     parentEmail: '',
     studentUsername: '',
     studentPassword: 'student@2026',
+    studentAccountActive: true,
     status: 'Active' as EnrolledStudent['status'],
   });
 
@@ -440,6 +472,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [confirmStudentUser, setConfirmStudentUser] = useState('');
   const [confirmStudentPass, setConfirmStudentPass] = useState('mugina@2026');
   const [isConfirmingApp, setIsConfirmingApp] = useState(false);
+
+  // Admissions Review Modal (Approve + Verification Code / Request More Info / Reject)
+  const [reviewAppTarget, setReviewAppTarget] = useState<AdminApplication | null>(null);
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject' | 'more_info'>('approve');
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [isReviewSubmitting, setIsReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   // Gallery Upload Modal
   const [showAddImageModal, setShowAddImageModal] = useState(false);
@@ -735,115 +774,60 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
       // B. Student Portal Authentication
       if (loginPortalMode === 'student') {
-        let stuSession = authenticateStudentAccount(cleanUser, cleanPass);
-        if (!stuSession) {
+        let authRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
+        if (!authRes.authorized) {
           await syncServerStudents();
           setStudentList(getEnrolledStudents());
-          stuSession = authenticateStudentAccount(cleanUser, cleanPass);
+          authRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
         }
-        if (stuSession) {
+        if (authRes.authorized) {
           persistCredentialsIfEnabled(cleanUser, cleanPass);
-          setCurrentSessionUser(stuSession);
-          setCurrentUser(stuSession);
-          logAuditEvent('LOGIN', 'Auth', stuSession.id, `${stuSession.name} signed into Student Portal`);
+          setCurrentSessionUser(authRes.session);
+          setCurrentUser(authRes.session);
+          logAuditEvent('LOGIN', 'Auth', authRes.session.id, `${authRes.session.name} signed into Student Portal`);
           return;
         }
-        setLoginError('Invalid student username/Reg ID or password. Ask the DOS office for your portal credentials.');
+        setLoginError(authRes.reason);
         return;
       }
 
-      // C. Staff & Admin Authentication
-      if (
-        (cleanUser.toLowerCase() === 'norbertihimbazwemanzi@gmail.com' && cleanPass === '@0798744704') ||
-        (cleanUser === '' && cleanPass === '@0798744704') ||
-        (cleanUser === '@0798744704' && (cleanPass === '@0798744704' || cleanPass === ''))
-      ) {
-        persistCredentialsIfEnabled(cleanUser || 'norbertihimbazwemanzi@gmail.com', cleanPass || '@0798744704');
-        const adminSession = {
-          id: 'staff-admin-norbert',
-          name: 'Norbert Ihimbazwe Manzi (School Administrator)',
-          role: 'Admin' as UserRole,
-          username: 'norbertihimbazwemanzi@gmail.com',
-          email: 'norbertihimbazwemanzi@gmail.com',
-        };
-        setCurrentSessionUser(adminSession);
-        setCurrentUser(adminSession);
-        logAuditEvent('LOGIN', 'Auth', adminSession.id, `${adminSession.name} signed into Admin Portal`);
+      // C. Staff & Admin Authentication (Server-verified hashed credentials + Active status check)
+      const staffRes = await authenticateStaffWithBackend(cleanUser, cleanPass);
+      if (staffRes.authorized) {
+        persistCredentialsIfEnabled(cleanUser || staffRes.session.username, cleanPass);
+        setCurrentSessionUser(staffRes.session);
+        setCurrentUser(staffRes.session);
+        setActiveTab(resolveDefaultTabForUser(staffRes.session));
+        logAuditEvent(
+          'LOGIN',
+          'Auth',
+          staffRes.session.id,
+          `${staffRes.session.name} (${staffRes.session.role}) signed in`
+        );
         return;
       }
 
-      if (
-        (cleanUser.toLowerCase() === 'hopeprimaryschool' && cleanPass === 'hopeprimary@123') ||
-        (cleanUser === '' && cleanPass === 'hopeprimary@123') ||
-        (cleanUser === 'hopeprimaryschool' && cleanPass === '')
-      ) {
-        persistCredentialsIfEnabled(cleanUser || 'hopeprimaryschool', cleanPass || 'hopeprimary@123');
-        const headteacherSession = {
-          id: 'staff-headteacher-1',
-          name: 'Headteacher / School Principal',
-          role: 'Admin' as UserRole,
-          username: 'hopeprimaryschool',
-          email: 'headteacher@muginahopeschool.com',
-        };
-        setCurrentSessionUser(headteacherSession);
-        setCurrentUser(headteacherSession);
-        logAuditEvent('LOGIN', 'Auth', headteacherSession.id, `${headteacherSession.name} signed in`);
+      if (!staffRes.networkError) {
+        setLoginError(staffRes.reason);
         return;
       }
 
-      if (cleanPass === 'mugina2026' || (cleanUser === 'admin' && cleanPass === 'mugina2026')) {
-        persistCredentialsIfEnabled(cleanUser || 'admin', cleanPass);
-        const adminSession = {
-          id: 'staff-admin-norbert',
-          name: 'Norbert Ihimbazwe Manzi (School Administrator)',
-          role: 'Admin' as UserRole,
-          username: 'norbertihimbazwemanzi@gmail.com',
-          email: 'norbertihimbazwemanzi@gmail.com',
-        };
-        setCurrentSessionUser(adminSession);
-        setCurrentUser(adminSession);
-        logAuditEvent('LOGIN', 'Auth', adminSession.id, `${adminSession.name} signed in`);
-        return;
-      }
-
-      const allStaff = getStaffMembers();
-      const match = allStaff.find(
-        (s) =>
-          (s.username.toLowerCase() === cleanUser.toLowerCase() ||
-            s.email.toLowerCase() === cleanUser.toLowerCase()) &&
-          s.password === cleanPass &&
-          s.status === 'Active'
-      );
-
-      if (match) {
-        persistCredentialsIfEnabled(cleanUser, cleanPass);
-        const session = {
-          id: match.id,
-          name: match.name,
-          role: match.role,
-          username: match.username,
-          email: match.email,
-          assignedSubjectOrGrade: match.assignedSubjectOrGrade,
-        };
-        setCurrentSessionUser(session);
-        setCurrentUser(session);
-        setActiveTab(resolveDefaultTabForUser(session));
-        logAuditEvent('LOGIN', 'Auth', session.id, `${session.name} (${session.role}) signed in`);
-        return;
-      }
-
+      // Offline fallback: sync from Supabase/Firebase if backend was unreachable
       const mergedList = await syncServerStaff();
       setStaffList(mergedList);
-
       const remoteMatch = mergedList.find(
         (s) =>
           (s.username.toLowerCase() === cleanUser.toLowerCase() ||
             s.email.toLowerCase() === cleanUser.toLowerCase()) &&
-          s.password === cleanPass &&
-          s.status === 'Active'
+          s.password &&
+          s.password === cleanPass
       );
 
       if (remoteMatch) {
+        if (remoteMatch.status !== 'Active') {
+          setLoginError('This staff account is currently deactivated. Contact School Administration.');
+          return;
+        }
         persistCredentialsIfEnabled(cleanUser, cleanPass);
         const session = {
           id: remoteMatch.id,
@@ -860,13 +844,29 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         return;
       }
 
-      setLoginError('Invalid username, password, or access code. Please check your credentials or contact the School Administrator.');
+      setLoginError(staffRes.reason || 'Invalid username, email, or password.');
     } catch (err: any) {
       console.warn('Login verification notice:', err);
       setLoginError('Could not verify credentials across database. Please check your connection and try again.');
     } finally {
       setIsVerifyingLogin(false);
     }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotFeedback(null);
+    if (!forgotEmail.trim()) {
+      setForgotFeedback({ type: 'error', text: 'Please enter your registered email address.' });
+      return;
+    }
+    setForgotSending(true);
+    const res = await requestPasswordReset(forgotEmail);
+    setForgotSending(false);
+    setForgotFeedback({
+      type: res.success ? 'success' : 'error',
+      text: res.message,
+    });
   };
 
   // Firebase Google Sign-In with Strict Identity-Based Access Control (Staff & Registered Parents)
@@ -881,6 +881,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
         const resolution = resolveStaffRoleForFirebaseUser(res.user);
         if (resolution.authorized) {
+          if (resolution.session.role !== 'Parent') {
+            await exchangeFirebaseTokenForStaffSession(res.user).catch(() => {});
+          }
           setCurrentSessionUser(resolution.session);
           setCurrentUser(resolution.session);
           setActiveTab(resolveDefaultTabForUser(resolution.session));
@@ -910,6 +913,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     if (currentUser) {
       logAuditEvent('LOGOUT', 'Auth', currentUser.id, `${currentUser.name} signed out`);
     }
+    setStudentAuthToken(null);
+    setStaffAuthToken(null);
     setCurrentSessionUser(null);
     setCurrentUser(null);
     setGoogleUser(null);
@@ -921,33 +926,50 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const handleSaveStaff = (e: React.FormEvent) => {
     e.preventDefault();
     setStaffFormError(null);
-    if (!staffFormData.name.trim() || !staffFormData.username.trim() || !staffFormData.password.trim()) {
-      setStaffFormError('Please fill out full name, username, and password.');
+    if (!staffFormData.name.trim() || !staffFormData.username.trim()) {
+      setStaffFormError('Please fill out full name and username.');
+      return;
+    }
+    if (!editingStaffMember && staffFormData.password.trim().length < 6) {
+      setStaffFormError('Initial password for a new staff member must be at least 6 characters.');
       return;
     }
 
+    const cleanEmail =
+      staffFormData.email.trim() || `${staffFormData.username.trim()}@muginahopeschool.com`;
+
     if (editingStaffMember) {
-      updateStaffMember(editingStaffMember.id, {
-        name: staffFormData.name,
+      const updates: Partial<StaffMember> = {
+        name: staffFormData.name.trim(),
         role: staffFormData.role,
-        email: staffFormData.email || `${staffFormData.username}@muginahopeschool.com`,
-        phone: staffFormData.phone,
-        username: staffFormData.username,
-        password: staffFormData.password,
-        assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade,
-      });
+        email: cleanEmail,
+        phone: staffFormData.phone.trim(),
+        username: staffFormData.username.trim(),
+        assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade.trim(),
+        status: staffFormData.status,
+      };
+      if (staffFormData.password.trim()) {
+        updates.password = staffFormData.password.trim();
+      }
+      updateStaffMember(editingStaffMember.id, updates);
       setEditingStaffMember(null);
+      setStaffActionNotice(`Updated staff account for ${staffFormData.name.trim()}.`);
     } else {
-      enrollStaffMember({
-        name: staffFormData.name,
+      const created = enrollStaffMember({
+        name: staffFormData.name.trim(),
         role: staffFormData.role,
-        email: staffFormData.email || `${staffFormData.username}@muginahopeschool.com`,
-        phone: staffFormData.phone,
-        username: staffFormData.username,
-        password: staffFormData.password,
-        assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade,
+        email: cleanEmail,
+        phone: staffFormData.phone.trim(),
+        username: staffFormData.username.trim(),
+        password: staffFormData.password.trim(),
+        assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade.trim(),
       });
+      if (staffFormData.status === 'Inactive') {
+        updateStaffMember(created.id, { status: 'Inactive' });
+      }
+      setStaffActionNotice(`Enrolled ${staffFormData.name.trim()} (${staffFormData.role}).`);
     }
+    setTimeout(() => setStaffActionNotice(null), 5000);
 
     setStaffList(getStaffMembers());
     setShowAddStaffModal(false);
@@ -959,7 +981,27 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       username: '',
       password: '',
       assignedSubjectOrGrade: '',
+      status: 'Active',
     });
+  };
+
+  const handleToggleStaffStatus = (st: StaffMember) => {
+    const nextStatus: StaffMember['status'] = st.status === 'Active' ? 'Inactive' : 'Active';
+    const updated = updateStaffMember(st.id, { status: nextStatus });
+    setStaffList(updated);
+    setStaffActionNotice(`${st.name} status set to ${nextStatus}.`);
+    setTimeout(() => setStaffActionNotice(null), 4000);
+  };
+
+  const handleSendStaffPasswordReset = async (st: StaffMember) => {
+    const targetEmail = (st.email || '').trim();
+    if (!targetEmail || !targetEmail.includes('@')) {
+      setStaffActionNotice(`Staff member ${st.name} does not have a valid email address.`);
+      return;
+    }
+    const res = await requestPasswordReset(targetEmail);
+    setStaffActionNotice(res.message);
+    setTimeout(() => setStaffActionNotice(null), 5000);
   };
 
   // 2. Student Enrollment & Edit (DOS primary objective & Admin)
@@ -971,7 +1013,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       return;
     }
 
-    const username = studentFormData.studentUsername || `stu.${studentFormData.fullName.toLowerCase().replace(/\s+/g, '')}`;
+    const cleanSlug = studentFormData.fullName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+    const username = studentFormData.studentUsername.trim() || cleanSlug || studentFormData.regNumber.toLowerCase();
 
     if (editingStudent) {
       updateEnrolledStudent(editingStudent.id, {
@@ -990,6 +1033,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         parentEmail: studentFormData.parentEmail,
         studentUsername: username,
         studentPassword: studentFormData.studentPassword,
+        studentAccountActive: studentFormData.studentAccountActive,
         status: studentFormData.status,
       });
       logAuditEvent('UPDATE', 'Student', editingStudent.id, `Updated student record ${studentFormData.fullName}`);
@@ -1010,7 +1054,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         parentPhone: studentFormData.parentPhone,
         parentEmail: studentFormData.parentEmail,
         studentUsername: username,
-        studentPassword: studentFormData.studentPassword || 'mugina@student',
+        studentPassword: studentFormData.studentPassword || 'student@2026',
+        studentAccountActive: studentFormData.studentAccountActive,
         enrolledBy: currentUser?.name || 'DOS',
         status: studentFormData.status,
       });
@@ -1035,6 +1080,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       parentEmail: '',
       studentUsername: '',
       studentPassword: 'student@2026',
+      studentAccountActive: true,
       status: 'Active',
     });
   };
@@ -1584,6 +1630,53 @@ END $$;`;
     }
   };
 
+  // 3b. Official Admissions Review Handler (Approve + Verification Code / Reject / Request More Info)
+  const handleReviewApplication = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewAppTarget) return;
+    setReviewError(null);
+    setIsReviewSubmitting(true);
+    try {
+      const token = getStaffAuthToken();
+      const res = await fetch('/api/admissions/review', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          appId: reviewAppTarget.id,
+          action: reviewAction,
+          notes: reviewNotes.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        setReviewError(data.error || 'Could not process admission review.');
+        setIsReviewSubmitting(false);
+        return;
+      }
+
+      const syncedApps = await syncServerApplications();
+      setApplications(syncedApps);
+      await fetchChatThreads();
+      setReviewAppTarget(null);
+      setReviewNotes('');
+      setDeleteSuccessMsg(
+        reviewAction === 'approve'
+          ? `Approved ${reviewAppTarget.studentName}! Email status: ${data.emailDeliveryStatus}. Parent verification code sent.`
+          : reviewAction === 'reject'
+          ? `Application for ${reviewAppTarget.studentName} marked Rejected and parent notified.`
+          : `More information requested from ${reviewAppTarget.parentName || 'parent'} via email.`
+      );
+      setTimeout(() => setDeleteSuccessMsg(null), 6000);
+    } catch (err: any) {
+      setReviewError(err?.message || 'Network error submitting review.');
+    } finally {
+      setIsReviewSubmitting(false);
+    }
+  };
+
   const handleSendAdminReply = async (refCode: string) => {
     const cleanText = adminReplyText.trim();
     if (!cleanText) return;
@@ -1993,7 +2086,7 @@ END $$;`;
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                Staff &amp; Admin
+                Staff
               </button>
               <button
                 type="button"
@@ -2032,7 +2125,80 @@ END $$;`;
               </div>
             )}
 
-            {/* Password-Protected Security Gate */}
+            {/* Password-Protected Security Gate OR Forgot Password Flow */}
+            {showForgotPassword ? (
+              <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Reset Your Account Password
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Enter the email address registered on your Student, Teacher, or Staff account to receive a secure single-use reset link via Gmail.
+                  </p>
+                </div>
+
+                {forgotFeedback && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                      forgotFeedback.type === 'success'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                    }`}
+                  >
+                    {forgotFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    )}
+                    <span>{forgotFeedback.text}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                    Registered Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="e.g. yourname@gmail.com"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={forgotSending}
+                  className="w-full py-3 px-4 bg-blue-950 hover:bg-blue-900 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
+                >
+                  {forgotSending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                      <span>Sending Reset Link...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 text-amber-400" />
+                      <span>Send Password Reset Link</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setForgotFeedback(null);
+                  }}
+                  className="w-full py-2 text-xs font-semibold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
+                >
+                  Back to Portal Sign In
+                </button>
+              </form>
+            ) : (
+              <>
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
@@ -2118,7 +2284,7 @@ END $$;`;
                 </div>
               </div>
 
-              <div className="pt-1 flex items-center justify-between">
+              <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
                 <label htmlFor="remember-password-check" className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -2137,26 +2303,40 @@ END $$;`;
                     className="w-4 h-4 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
                   />
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Remember login on this device
+                    Remember login
                   </span>
                 </label>
 
-                {hasSavedCredentials && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-emerald-600 font-bold inline-flex items-center gap-1">
-                      <Check className="w-3 h-3 text-emerald-600" />
-                      Saved
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleForgetSavedCredentials}
-                      className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
-                      title="Clear saved login from device"
-                    >
-                      Forget
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-3">
+                  {hasSavedCredentials && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-emerald-600 font-bold inline-flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        Saved
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleForgetSavedCredentials}
+                        className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                        title="Clear saved login from device"
+                      >
+                        Forget
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(true);
+                      setForgotFeedback(null);
+                      if (loginUsername.includes('@')) setForgotEmail(loginUsername.trim());
+                    }}
+                    className="text-xs font-bold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
               </div>
 
               <button
@@ -2207,6 +2387,8 @@ END $$;`;
                   </svg>
                   <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
                 </button>
+              </>
+            )}
               </>
             )}
           </div>
@@ -2268,7 +2450,7 @@ END $$;`;
         {currentUser.role === 'Parent' ? (
           <ParentPortal sessionUser={currentUser} students={studentList} />
         ) : (
-          <StudentPortal sessionUser={currentUser} students={studentList} />
+          <StudentPortal sessionUser={currentUser} students={studentList} onLogout={handleLogout} />
         )}
       </div>
     );
@@ -2635,7 +2817,7 @@ END $$;`;
             }`}
           >
             <Send className="w-4 h-4" />
-            <span>Nodemailer &amp; Gmail API</span>
+            <span>Email &amp; Verification Logs</span>
           </button>
         )}
 
@@ -2662,7 +2844,8 @@ END $$;`;
       {activeTab === 'teacher_classroom' && canAccessTeacherPortal && (
         <TeacherPortal
           students={studentList}
-          onTakeAttendance={() => {
+          onTakeAttendance={(gradeCode) => {
+            setAttendancePreselectGrade(gradeCode);
             setActiveTab('attendance');
           }}
         />
@@ -2704,54 +2887,111 @@ END $$;`;
       {/* ========================================================================= */}
       {activeTab === 'staff' && canManageStaff && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white font-display">
-                Staff Directory: Roles, Credentials &amp; Permissions
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Enroll leadership, teaching, finance, registrar, DOS &amp; DOD staff with role-based access control
-              </p>
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white font-display">
+                  Staff Directory: Roles, Credentials &amp; Access Control
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Add, control, activate/deactivate, and reset credentials for Teachers, DOS, DOD, Registrar, Finance &amp; Admin staff
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingStaffMember(null);
+                  setStaffFormError(null);
+                  setStaffFormData({
+                    name: '',
+                    role: 'Teacher',
+                    email: '',
+                    phone: '+250 78',
+                    username: '',
+                    password: '',
+                    assignedSubjectOrGrade: '',
+                    status: 'Active',
+                  });
+                  setShowAddStaffModal(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Enroll New Staff Member</span>
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setEditingStaffMember(null);
-                setStaffFormData({
-                  name: '',
-                  role: 'Teacher',
-                  email: '',
-                  phone: '+250 78',
-                  username: '',
-                  password: '',
-                  assignedSubjectOrGrade: '',
-                });
-                setShowAddStaffModal(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-sm transition-colors cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Enroll New Staff Member</span>
-            </button>
+
+            {staffActionNotice && (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{staffActionNotice}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={staffSearchQuery}
+                  onChange={(e) => setStaffSearchQuery(e.target.value)}
+                  placeholder="Search staff by name, email, username, or department..."
+                  className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-slate-900 dark:text-white"
+                />
+              </div>
+              <select
+                value={staffRoleFilter}
+                onChange={(e) => setStaffRoleFilter(e.target.value)}
+                className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-semibold text-slate-800 dark:text-slate-200"
+              >
+                <option value="ALL">All Roles ({staffList.length})</option>
+                <option value="Teacher">Teachers</option>
+                <option value="DOS">DOS (Director of Studies)</option>
+                <option value="DOD">DOD (Director of Discipline)</option>
+                <option value="Registrar">Registrars</option>
+                <option value="Finance">Finance / Accountants</option>
+                <option value="Admin">Administrators / Headteachers</option>
+              </select>
+            </div>
           </div>
 
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs min-w-[650px]">
+              <table className="w-full text-left border-collapse text-xs min-w-[780px] tabular-nums">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
-                  <th className="p-3.5">Staff Name</th>
+                  <th className="p-3.5">Staff Member</th>
                   <th className="p-3.5">Assigned Role</th>
-                  <th className="p-3.5">Username</th>
-                  <th className="p-3.5">Password</th>
+                  <th className="p-3.5">Username &amp; Email</th>
                   <th className="p-3.5">Assigned Subject / Class</th>
-                  <th className="p-3.5">Phone</th>
-                  <th className="p-3.5 text-right">Actions</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-right">Controls</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {staffList.map((st) => (
+                {staffList
+                  .filter((st) => {
+                    if (staffRoleFilter !== 'ALL') {
+                      if (staffRoleFilter === 'Admin' && !isFullAdmin(st.role)) return false;
+                      if (staffRoleFilter === 'Finance' && st.role !== 'Finance' && st.role !== 'Accountant') return false;
+                      if (staffRoleFilter !== 'Admin' && staffRoleFilter !== 'Finance' && st.role !== staffRoleFilter) return false;
+                    }
+                    if (staffSearchQuery.trim()) {
+                      const q = staffSearchQuery.toLowerCase();
+                      return (
+                        st.name.toLowerCase().includes(q) ||
+                        st.username.toLowerCase().includes(q) ||
+                        (st.email || '').toLowerCase().includes(q) ||
+                        (st.assignedSubjectOrGrade || '').toLowerCase().includes(q)
+                      );
+                    }
+                    return true;
+                  })
+                  .map((st) => (
                   <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                    <td className="p-3.5 font-bold text-slate-900 dark:text-white">{st.name}</td>
+                    <td className="p-3.5">
+                      <span className="font-bold text-slate-900 dark:text-white block">{st.name}</span>
+                      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{st.phone}</span>
+                    </td>
                     <td className="p-3.5">
                       <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] ${
                         isFullAdmin(st.role) ? 'bg-blue-100 text-blue-900 border border-blue-200' :
@@ -2765,23 +3005,59 @@ END $$;`;
                         {getRoleDisplayLabel(st.role)}
                       </span>
                     </td>
-                    <td className="p-3.5 font-mono text-blue-700 dark:text-sky-400 font-semibold">{st.username}</td>
-                    <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{st.password}</td>
-                    <td className="p-3.5 text-slate-600 dark:text-slate-300">{st.assignedSubjectOrGrade || 'N/A'}</td>
-                    <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{st.phone}</td>
+                    <td className="p-3.5">
+                      <span className="font-mono text-blue-700 dark:text-sky-400 font-semibold block">{st.username}</span>
+                      <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 block">{st.email}</span>
+                    </td>
+                    <td className="p-3.5 text-slate-600 dark:text-slate-300">{st.assignedSubjectOrGrade || 'General School Duties'}</td>
+                    <td className="p-3.5">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          st.status === 'Active'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-400'
+                        }`}
+                      >
+                        {st.status}
+                      </span>
+                    </td>
                     <td className="p-3.5 text-right flex items-center justify-end gap-1">
+                      {!isFullAdmin(st.role) && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStaffStatus(st)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                            st.status === 'Active'
+                              ? 'bg-amber-100 hover:bg-amber-200 text-amber-900'
+                              : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900'
+                          }`}
+                          title={st.status === 'Active' ? 'Deactivate Staff Account' : 'Activate Staff Account'}
+                        >
+                          {st.status === 'Active' ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleSendStaffPasswordReset(st)}
+                        className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                        title="Send Password Reset Email"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
                           setEditingStaffMember(st);
+                          setStaffFormError(null);
                           setStaffFormData({
                             name: st.name,
                             role: st.role,
                             email: st.email,
                             phone: st.phone,
                             username: st.username,
-                            password: st.password,
+                            password: '',
                             assignedSubjectOrGrade: st.assignedSubjectOrGrade || '',
+                            status: st.status,
                           });
                           setShowAddStaffModal(true);
                         }}
@@ -2859,6 +3135,37 @@ END $$;`;
 
               <button
                 type="button"
+                onClick={() => {
+                  let provisioned = 0;
+                  studentList.forEach((st) => {
+                    if (!st.studentUsername || !st.studentPassword || st.studentAccountActive === undefined) {
+                      const slug = st.fullName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+                      updateEnrolledStudent(st.id, {
+                        studentUsername: st.studentUsername || slug || st.regNumber.toLowerCase(),
+                        studentPassword: st.studentPassword || 'student@2026',
+                        studentAccountActive: st.studentAccountActive !== false,
+                      });
+                      provisioned++;
+                    }
+                  });
+                  setStudentList(getEnrolledStudents());
+                  logAuditEvent('PROVISION', 'StudentAccount', 'batch', `Provisioned/verified ${provisioned} student login accounts`);
+                  setDeleteSuccessMsg(
+                    provisioned > 0
+                      ? `Provisioned ${provisioned} student login account(s).`
+                      : 'All enrolled students already have active portal credentials.'
+                  );
+                  setTimeout(() => setDeleteSuccessMsg(null), 4000);
+                }}
+                className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 font-bold text-xs rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                title="Ensure every enrolled student has a generated username & password"
+              >
+                <Key className="w-3.5 h-3.5 text-blue-700 dark:text-amber-400 shrink-0" />
+                <span>Auto-Provision Accounts</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setShowBulkStudentModal(true)}
                 className="min-h-[40px] inline-flex items-center gap-2 px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
@@ -2886,6 +3193,7 @@ END $$;`;
                     parentEmail: '',
                     studentUsername: '',
                     studentPassword: 'student@2026',
+                    studentAccountActive: true,
                     status: 'Active',
                   });
                   setShowAddStudentModal(true);
@@ -2968,6 +3276,9 @@ END $$;`;
                     <td className="p-3.5 font-mono text-[11px]">
                       <div className="text-indigo-700 dark:text-indigo-300 font-semibold">{st.studentUsername}</div>
                       <div className="text-slate-500 dark:text-slate-400">{st.studentPassword}</div>
+                      <div className={`text-[10px] font-sans font-bold mt-0.5 ${st.studentAccountActive !== false ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        Login: {st.studentAccountActive !== false ? 'Active' : 'Deactivated'}
+                      </div>
                     </td>
                     <td className="p-3.5">
                       <div className="font-semibold text-slate-800 dark:text-slate-200">{st.parentName}</div>
@@ -2989,6 +3300,34 @@ END $$;`;
                         <button
                           type="button"
                           onClick={() => {
+                            const nextActive = st.studentAccountActive === false;
+                            updateEnrolledStudent(st.id, { studentAccountActive: nextActive });
+                            setStudentList(getEnrolledStudents());
+                            logAuditEvent('UPDATE_ACCOUNT', 'Student', st.id, `${nextActive ? 'Activated' : 'Deactivated'} student portal account for ${st.fullName}`);
+                          }}
+                          className={`px-2 py-1 text-[10px] font-bold rounded-lg border cursor-pointer ${
+                            st.studentAccountActive !== false
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200'
+                              : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-emerald-50 hover:text-emerald-700'
+                          }`}
+                          title={st.studentAccountActive !== false ? 'Deactivate Student Portal Login' : 'Activate Student Portal Login'}
+                        >
+                          {st.studentAccountActive !== false ? 'Active' : 'Activate'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetPasswordStudent(st);
+                            setResetPasswordInput(st.studentPassword || 'student@2026');
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
+                          title="Reset Student Portal Password"
+                        >
+                          <Key className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                             setEditingStudent(st);
                             setStudentFormData({
                               regNumber: st.regNumber,
@@ -3006,6 +3345,7 @@ END $$;`;
                               parentEmail: st.parentEmail || '',
                               studentUsername: st.studentUsername,
                               studentPassword: st.studentPassword,
+                              studentAccountActive: st.studentAccountActive !== false,
                               status: st.status,
                             });
                             setShowAddStudentModal(true);
@@ -3315,54 +3655,81 @@ END $$;`;
                 <span className="text-xs text-slate-400">Click &ldquo;Chat with Parent&rdquo; or &ldquo;Review & Confirm&rdquo;</span>
               </div>
 
-              {applications.map((app) => (
+              {applications.map((app) => {
+                const isPendingState =
+                  app.status === 'Pending Confirmation' ||
+                  app.status === 'Pending' ||
+                  app.status === 'More Info Requested';
+                return (
                 <div
                   key={app.id}
                   className={`p-6 rounded-3xl border transition-all ${
-                    app.status === 'Pending Confirmation'
-                      ? 'bg-amber-50/40 border-amber-200 shadow-2xs'
-                      : 'bg-white border-slate-200'
+                    isPendingState
+                      ? 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200 dark:border-amber-900 shadow-2xs'
+                      : app.status === 'Rejected'
+                      ? 'bg-rose-50/30 dark:bg-rose-950/10 border-rose-200 dark:border-rose-900'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-sm font-bold text-slate-900">{app.studentName}</span>
-                      <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 dark:border-slate-800 pb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">{app.studentName}</span>
+                      <span className="text-xs font-mono bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-sky-300 px-2 py-0.5 rounded-md font-bold">
                         {app.gradeCode}
                       </span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          app.status === 'Pending Confirmation'
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-emerald-100 text-emerald-900'
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                          app.status === 'Confirmed & Enrolled' || app.status === 'Approved'
+                            ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : app.status === 'Rejected'
+                            ? 'bg-rose-100 text-rose-900 dark:bg-rose-950/60 dark:text-rose-300'
+                            : 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300'
                         }`}
                       >
                         {app.status}
                       </span>
+                      {app.verificationStatus && (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            app.verificationStatus === 'Verified'
+                              ? 'bg-emerald-700 text-white'
+                              : app.verificationStatus === 'Pending Verification'
+                              ? 'bg-sky-100 text-sky-900 dark:bg-sky-950/60 dark:text-sky-300'
+                              : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                          }`}
+                        >
+                          {app.verificationStatus}
+                        </span>
+                      )}
+                      {app.emailDeliveryStatus && (
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                          Email: {app.emailDeliveryStatus}
+                        </span>
+                      )}
                     </div>
                     <span className="text-xs font-mono text-slate-400">Ref: {app.refCode} · Submitted: {app.createdAt}</span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-3 text-xs text-slate-600">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-3 text-xs text-slate-600 dark:text-slate-300">
                     <div>
-                      <span className="font-semibold text-slate-700 block">Parent / Guardian:</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 block">Parent / Guardian:</span>
                       <span>{app.parentName}</span>
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-700 block">Parent Email:</span>
-                      <span className="font-mono text-blue-700">{app.parentEmail || 'Not provided'}</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 block">Parent Email:</span>
+                      <span className="font-mono text-blue-700 dark:text-sky-400">{app.parentEmail || 'Not provided'}</span>
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-700 block">Parent Phone:</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 block">Parent Phone:</span>
                       <span className="font-mono">{app.parentPhone}</span>
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-700 block">Residence / Services:</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 block">Residence / Services:</span>
                       <span>{app.sector} · {app.wantsLunch ? 'Lunch' : 'No lunch'} · {app.wantsTransport ? 'Bus' : 'No bus'}</span>
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -3370,39 +3737,55 @@ END $$;`;
                           setActiveChatRef(app.refCode);
                           setConfirmationsSubTab('chats');
                         }}
-                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5"
+                        className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <MessageSquare className="w-3.5 h-3.5 text-blue-700" />
+                        <MessageSquare className="w-3.5 h-3.5 text-blue-700 dark:text-sky-400" />
                         <span>Chat with Parent</span>
                       </button>
 
-                      {app.parentEmail && (
-                        <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <Mail className="w-3 h-3 text-emerald-600" />
-                          <span>Connected to parent Gmail</span>
+                      {app.approvalDate && (
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Approved: {new Date(app.approvalDate).toLocaleDateString()}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {app.status === 'Pending Confirmation' ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isPendingState && (
                         <button
+                          type="button"
+                          onClick={() => {
+                            setReviewAppTarget(app);
+                            setReviewAction('approve');
+                            setReviewNotes('Your application meets our academic and age placement requirements.');
+                            setReviewError(null);
+                          }}
+                          className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                          <span>Review Application</span>
+                        </button>
+                      )}
+
+                      {app.status !== 'Confirmed & Enrolled' && app.status !== 'Rejected' && (
+                        <button
+                          type="button"
                           onClick={() => {
                             setConfirmAppTarget(app);
                             setConfirmStudentUser(`stu.${app.studentName.toLowerCase().replace(/\s+/g, '')}`);
                             setConfirmStudentPass('mugina@2026');
                           }}
-                          className="px-4 py-2 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
                         >
-                          <CheckCircle2 className="w-4 h-4 text-amber-400" />
-                          <span>Review & Confirm Registration</span>
+                          Direct Enroll &amp; Assign ID
                         </button>
-                      ) : (
-                        <div className="text-xs text-emerald-800 flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                      )}
+
+                      {app.status === 'Confirmed & Enrolled' && (
+                        <div className="text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
                           <span>
-                            Confirmed on {app.confirmedAt}. ID: <code>{app.assignedStudentId}</code>
+                            Enrolled {app.confirmedAt ? `on ${app.confirmedAt}` : ''}. ID: <code>{app.assignedStudentId}</code>
                           </span>
-                          <span className="text-emerald-700 font-semibold">[Feedback & Credentials Sent]</span>
                         </div>
                       )}
 
@@ -3423,7 +3806,8 @@ END $$;`;
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -3647,7 +4031,26 @@ END $$;`;
       {/* TAB 4: STUDENT ATTENDANCE TRACKER & PARENT GMAIL ALERT */}
       {/* ========================================================================= */}
       {activeTab === 'attendance' && canMarkAttendance && (
-        <AdminAttendanceTracker onRecordSaved={() => setStudentList(getEnrolledStudents())} />
+        <AdminAttendanceTracker
+          initialGrade={attendancePreselectGrade}
+          allowedGrades={
+            normalizeUserRole(currentUser?.role) === 'Teacher'
+              ? (() => {
+                  const matrix = getTeacherAssignments()
+                    .filter(
+                      (a) =>
+                        (currentUser?.id && a.teacherId === currentUser.id) ||
+                        (currentUser?.name && a.teacherName.toLowerCase() === currentUser.name.toLowerCase())
+                    )
+                    .map((a) => a.gradeCode);
+                  const fromProfile = extractGradesFromAssignment(currentUser?.assignedSubjectOrGrade);
+                  const combined = Array.from(new Set([...matrix, ...fromProfile]));
+                  return combined.length > 0 ? combined : ['P1'];
+                })()
+              : undefined
+          }
+          onRecordSaved={() => setStudentList(getEnrolledStudents())}
+        />
       )}
 
       {activeTab === 'teacher_attendance' && canManageTeacherAtt && (
@@ -4123,68 +4526,18 @@ END $$;`;
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 8: GMAIL & NODEMAILER CONFIGURATION */}
+      {/* TAB 8: GMAIL DELIVERY LOGS, ADMISSION VERIFICATIONS & TEMPLATES */}
       {/* ========================================================================= */}
       {activeTab === 'gmail' && canManageGmail && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-6">
-          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-            <Mail className="w-6 h-6 text-blue-700" />
-            <div>
-              <h2 className="text-base font-bold text-slate-900 font-display">
-                Backend Nodemailer & Gmail API Engine
-              </h2>
-              <p className="text-xs text-slate-500">
-                All contact form submissions and absent student alerts are forwarded to the school Gmail account
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1">
-                <strong className="block font-bold">Official School Gmail:</strong>
-                <span className="font-mono text-sm font-bold">{adminEmail}</span>
-                <p className="text-[11px] text-emerald-800 mt-1">
-                  Active recipient for all incoming website messages and inquiries.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700 uppercase">Update Official Notification Gmail:</label>
-                <div className="flex gap-2">
-                  <input
-                    type="email"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono"
-                  />
-                  <button
-                    onClick={() => {
-                      setAdminNotificationEmail(adminEmail);
-                      setDeleteSuccessMsg('Updated school notification email to ' + adminEmail);
-                    }}
-                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl cursor-pointer"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 text-xs text-slate-700 space-y-2">
-              <strong className="block font-bold text-slate-900 uppercase">Automated Endpoints Active:</strong>
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-[11px]">
-                POST /api/contact → Forwards inquiries + automated parent feedback
-              </div>
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-[11px]">
-                POST /api/attendance/notify → Dispatches Gmail alert to parents of absent pupils
-              </div>
-              <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-[11px]">
-                POST /api/admissions/confirm → Dispatches DOS approval + student portal credentials
-              </div>
-            </div>
-          </div>
-        </div>
+        <AdminEmailNotificationsModule
+          adminEmail={adminEmail}
+          onUpdateAdminEmail={setAdminEmail}
+          applications={applications}
+          onRefreshApplications={async () => {
+            const synced = await syncServerApplications();
+            setApplications(synced);
+          }}
+        />
       )}
 
       {/* ========================================================================= */}
@@ -5913,6 +6266,32 @@ END $$;`;
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
+                  <label className="font-bold block mb-1">Official Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. staff.name@gmail.com"
+                    value={staffFormData.email}
+                    onChange={(e) => setStaffFormData({ ...staffFormData, email: e.target.value })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Account Status *</label>
+                  <select
+                    value={staffFormData.status}
+                    onChange={(e) =>
+                      setStaffFormData({ ...staffFormData, status: e.target.value as StaffMember['status'] })
+                    }
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl font-semibold"
+                  >
+                    <option value="Active">Active (Allowed Login)</option>
+                    <option value="Inactive">Inactive (Suspended Login)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
                   <label className="font-bold block mb-1">Assigned Username *</label>
                   <input
                     type="text"
@@ -5925,7 +6304,9 @@ END $$;`;
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="font-bold block">Password *</label>
+                    <label className="font-bold block">
+                      {editingStaffMember ? 'New Password (leave blank to keep current)' : 'Password *'}
+                    </label>
                     <button
                       type="button"
                       onClick={() => setShowStaffPassword(!showStaffPassword)}
@@ -5947,8 +6328,8 @@ END $$;`;
                   <div className="relative">
                     <input
                       type={showStaffPassword ? 'text' : 'password'}
-                      required
-                      placeholder="e.g. finance2026"
+                      required={!editingStaffMember}
+                      placeholder={editingStaffMember ? 'Leave blank to preserve existing password' : 'Min 6 characters'}
                       value={staffFormData.password}
                       onChange={(e) => setStaffFormData({ ...staffFormData, password: e.target.value })}
                       className="w-full bg-slate-50 border p-2.5 pr-10 rounded-xl font-mono"
@@ -5965,10 +6346,10 @@ END $$;`;
                 </div>
               </div>
               <div>
-                <label className="font-bold block mb-1">Assigned Subject or Department</label>
+                <label className="font-bold block mb-1">Assigned Subject, Class, or Department</label>
                 <input
                   type="text"
-                  placeholder="e.g. Primary 4 STEM, Accounting & Fees, or Admissions"
+                  placeholder="e.g. Primary 4 STEM, Academics (DOS), Discipline (DOD), or Finance"
                   value={staffFormData.assignedSubjectOrGrade}
                   onChange={(e) => setStaffFormData({ ...staffFormData, assignedSubjectOrGrade: e.target.value })}
                   className="w-full bg-slate-50 border p-2.5 rounded-xl"
@@ -6243,8 +6624,29 @@ END $$;`;
                 />
               </div>
 
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
-                <span className="font-bold text-amber-900 block">Student Portal Login Credentials:</span>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-bold text-amber-900">Student Portal Login Credentials:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const slug = studentFormData.fullName
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '.')
+                        .replace(/^\.+|\.+$/g, '');
+                      const suffix = Math.floor(10 + Math.random() * 89);
+                      setStudentFormData((prev) => ({
+                        ...prev,
+                        studentUsername: slug ? `${slug}` : `stu.${suffix}`,
+                        studentPassword: `Mha@${Math.floor(1000 + Math.random() * 9000)}`,
+                      }));
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] rounded-lg cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Generate Credentials</span>
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-amber-800">Student Username:</label>
@@ -6266,6 +6668,17 @@ END $$;`;
                     />
                   </div>
                 </div>
+                <label className="flex items-center gap-2 pt-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={studentFormData.studentAccountActive}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, studentAccountActive: e.target.checked })}
+                    className="w-4 h-4 rounded border-amber-400 text-blue-900"
+                  />
+                  <span className="text-[11px] font-semibold text-amber-900">
+                    Student Portal Account Active (Uncheck to suspend student login access)
+                  </span>
+                </label>
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
@@ -6279,7 +6692,212 @@ END $$;`;
         </div>
       )}
 
-      {/* Modal: Confirm Application (Wait for Admin/DOS Confirmation) */}
+      {/* Modal: Admin Reset Student Portal Password */}
+      {resetPasswordStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-700">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">Reset Student Portal Password</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {resetPasswordStudent.fullName} ({resetPasswordStudent.regNumber})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetPasswordStudent(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const clean = resetPasswordInput.trim();
+                if (clean.length < 4) return;
+                updateEnrolledStudent(resetPasswordStudent.id, { studentPassword: clean });
+                setStudentList(getEnrolledStudents());
+                logAuditEvent('RESET_PASSWORD', 'Student', resetPasswordStudent.id, `Admin reset portal password for ${resetPasswordStudent.fullName}`);
+                setDeleteSuccessMsg(`Updated portal password for ${resetPasswordStudent.fullName}.`);
+                setTimeout(() => setDeleteSuccessMsg(null), 4000);
+                setResetPasswordStudent(null);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="font-bold block mb-1 text-slate-700 dark:text-slate-200">
+                  Username (Sign-in ID)
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={resetPasswordStudent.studentUsername || resetPasswordStudent.regNumber}
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl font-mono text-slate-600 dark:text-slate-300"
+                />
+              </div>
+              <div>
+                <label className="font-bold block mb-1 text-slate-700 dark:text-slate-200">
+                  New Portal Password *
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={4}
+                  value={resetPasswordInput}
+                  onChange={(e) => setResetPasswordInput(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl font-mono text-slate-900 dark:text-white"
+                />
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResetPasswordStudent(null)}
+                  className="px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-xl cursor-pointer"
+                >
+                  Save New Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Admissions Decision & Email Verification Code Review */}
+      {reviewAppTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white">
+                  Admissions Review: {reviewAppTarget.studentName}
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Ref: {reviewAppTarget.refCode} &bull; Class: {reviewAppTarget.gradeCode}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewAppTarget(null);
+                  setReviewError(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleReviewApplication} className="space-y-4 text-xs">
+              {reviewError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{reviewError}</span>
+                </div>
+              )}
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-700 dark:text-slate-300 space-y-1">
+                <p><strong>Parent / Guardian:</strong> {reviewAppTarget.parentName} ({reviewAppTarget.parentPhone})</p>
+                <p><strong>Parent Email:</strong> <span className="font-mono text-blue-700 dark:text-sky-400">{reviewAppTarget.parentEmail || 'Not provided'}</span></p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold block text-slate-700 dark:text-slate-200">Select Administrative Decision *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReviewAction('approve')}
+                    className={`p-2.5 rounded-xl border font-bold text-center cursor-pointer transition-colors ${
+                      reviewAction === 'approve'
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Approve &amp; Email Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReviewAction('more_info')}
+                    className={`p-2.5 rounded-xl border font-bold text-center cursor-pointer transition-colors ${
+                      reviewAction === 'more_info'
+                        ? 'bg-amber-500 text-slate-950 border-amber-500'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Request More Info
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReviewAction('reject')}
+                    className={`p-2.5 rounded-xl border font-bold text-center cursor-pointer transition-colors ${
+                      reviewAction === 'reject'
+                        ? 'bg-rose-700 text-white border-rose-700'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Reject Application
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-slate-700 dark:text-slate-200">
+                  {reviewAction === 'approve'
+                    ? 'Approval Notes / Welcome Message'
+                    : reviewAction === 'more_info'
+                    ? 'Requested Documents or Details *'
+                    : 'Rejection Reason / Guidance *'}
+                </label>
+                <textarea
+                  rows={3}
+                  required={reviewAction !== 'approve'}
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder={
+                    reviewAction === 'approve'
+                      ? 'Optional note included in official approval records...'
+                      : reviewAction === 'more_info'
+                      ? 'Specify missing documents or clarifications required...'
+                      : 'Provide respectful admissions feedback...'
+                  }
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {reviewAction === 'approve' && (
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5 rounded-xl">
+                  Approving will send an official Gmail confirmation containing a unique 6-digit verification code and direct verification link so the parent can confirm admission.
+                </p>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewAppTarget(null)}
+                  className="px-4 py-2 font-semibold text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isReviewSubmitting}
+                  className="px-5 py-2.5 bg-blue-950 hover:bg-blue-900 text-white font-bold rounded-xl cursor-pointer disabled:opacity-60"
+                >
+                  {isReviewSubmitting ? 'Dispatching Email...' : 'Submit Decision & Notify Parent'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirm Application (Direct Enrollment & Credentials) */}
       {confirmAppTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">

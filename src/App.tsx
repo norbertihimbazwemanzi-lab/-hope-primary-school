@@ -9,6 +9,8 @@ import { SchoolFeesPage } from './pages/SchoolFeesPage';
 import { CampusLifePage } from './pages/CampusLifePage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminPage } from './pages/AdminPage';
+import { VerifyAdmissionPage } from './pages/VerifyAdmissionPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { ApplicationModal } from './components/ApplicationModal';
 import { CampusTourModal } from './components/CampusTourModal';
 import { PrintableApplicationModal } from './components/PrintableApplicationModal';
@@ -532,15 +534,26 @@ export default function App() {
     fees: 'School Fees Schedule | Mugina Hope Primary & Nursery Academy',
     'campus-life': 'Campus Life & Facilities Gallery | Mugina Hope Primary & Nursery Academy',
     contact: 'Contact Us & Location | Mugina Hope Primary & Nursery Academy',
-    admin: 'Staff & Admin Portal | Mugina Hope Primary & Nursery Academy',
+    admin: 'School Portal | Mugina Hope Primary & Nursery Academy',
+    'verify-admission': 'Verify Admission | Mugina Hope Primary & Nursery Academy',
+    'reset-password': 'Reset Password | Mugina Hope Primary & Nursery Academy',
   };
+
+  const isStandalonePage = (p: PageId) =>
+    p === 'admin' || p === 'verify-admission' || p === 'reset-password';
 
   const syncBrowserUrlAndTitle = (page: PageId, updateUrl = true, push = false) => {
     document.title = pageTitles[page] || pageTitles.home;
-    const nextPath = page === 'home' ? '/' : `/${page}`;
+    const basePath = page === 'home' ? '/' : `/${page}`;
+    const keepQuery =
+      (page === 'verify-admission' || page === 'reset-password') &&
+      window.location.pathname === basePath
+        ? window.location.search
+        : '';
+    const nextPath = `${basePath}${keepQuery}`;
     const canonicalEl = document.querySelector('link[rel="canonical"]');
     if (canonicalEl) {
-      canonicalEl.setAttribute('href', `${window.location.origin}${nextPath}`);
+      canonicalEl.setAttribute('href', `${window.location.origin}${basePath}`);
     }
     if (updateUrl) {
       const currentFull = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -556,7 +569,7 @@ export default function App() {
 
   // Scroll-spy to automatically highlight active nav item and update clean URL path when scrolling through sections
   useEffect(() => {
-    if (currentPage === 'admin') return;
+    if (isStandalonePage(currentPage)) return;
 
     const sectionIds: PageId[] = [
       'home',
@@ -575,7 +588,7 @@ export default function App() {
         window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 24;
       if (atBottom) {
         const lastId: PageId = 'contact';
-        setCurrentPage((prev) => (prev === lastId || prev === 'admin' ? prev : lastId));
+        setCurrentPage((prev) => (prev === lastId || isStandalonePage(prev) ? prev : lastId));
         syncBrowserUrlAndTitle(lastId, true, false);
         return;
       }
@@ -586,7 +599,7 @@ export default function App() {
         if (el) {
           const rectTop = el.getBoundingClientRect().top;
           if (rectTop <= 180) {
-            setCurrentPage((prev) => (prev === id || prev === 'admin' ? prev : id));
+            setCurrentPage((prev) => (prev === id || isStandalonePage(prev) ? prev : id));
             syncBrowserUrlAndTitle(id, true, false);
             break;
           }
@@ -609,6 +622,8 @@ export default function App() {
       'campus-life',
       'contact',
       'admin',
+      'verify-admission',
+      'reset-password',
     ];
 
     const resolveTargetPage = (): PageId => {
@@ -633,7 +648,7 @@ export default function App() {
       if (targetPage === 'home') {
         ignoreScrollSpyUntilRef.current = Date.now() + 700;
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else if (targetPage !== 'admin') {
+      } else if (!isStandalonePage(targetPage)) {
         ignoreScrollSpyUntilRef.current = Date.now() + 900;
         setTimeout(() => {
           const targetId = targetPage === 'staff' ? 'staff' : targetPage;
@@ -660,19 +675,19 @@ export default function App() {
     ignoreScrollSpyUntilRef.current = Date.now() + 900;
     syncBrowserUrlAndTitle(page, true, true);
 
-    if (page === 'admin') {
-      setCurrentPage('admin');
+    if (isStandalonePage(page)) {
+      setCurrentPage(page);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
-    const wasAdmin = currentPage === 'admin';
+    const wasStandalone = isStandalonePage(currentPage);
     setCurrentPage(page);
 
     if (page === 'home') {
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, wasAdmin ? 100 : 0);
+      }, wasStandalone ? 100 : 0);
       return;
     }
 
@@ -686,7 +701,7 @@ export default function App() {
       }
     };
 
-    if (wasAdmin) {
+    if (wasStandalone) {
       setTimeout(scrollToSection, 100);
     } else {
       scrollToSection();
@@ -727,6 +742,10 @@ export default function App() {
               setActiveAnnouncement(list.find((a) => a.isActive) || null);
             }}
           />
+        ) : currentPage === 'verify-admission' ? (
+          <VerifyAdmissionPage onNavigate={handleNavigate} />
+        ) : currentPage === 'reset-password' ? (
+          <ResetPasswordPage onNavigate={handleNavigate} />
         ) : (
           <div className="space-y-12">
             {/* 1. Home Section */}

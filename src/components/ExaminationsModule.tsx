@@ -9,6 +9,7 @@ import {
   Trash2,
   Search,
   Send,
+  Download,
 } from 'lucide-react';
 import {
   ExamScheduleItem,
@@ -23,6 +24,7 @@ import {
   saveExamMarks,
   upsertExamMark,
   calculateExamResult,
+  pushStudentNotification,
 } from '../services/smsStore';
 import {
   CurrentSessionUser,
@@ -157,6 +159,14 @@ export const ExaminationsModule: React.FC<ExaminationsModuleProps> = ({
       status: canApprove ? 'Published' : 'Submitted',
     });
     setMarks(getExamMarks());
+    pushStudentNotification({
+      studentId: student.id,
+      gradeCode: student.gradeCode,
+      title: `${selectedSubject.code} Marks Recorded`,
+      message: `${currentUser.name} recorded your ${selectedSubject.name} scores (${selectedTerm} ${selectedYear}).`,
+      category: 'Results',
+      relatedTab: 'results',
+    });
     flash(`Saved ${selectedSubject.code} mark for ${student.fullName}.`);
   };
 
@@ -200,7 +210,56 @@ export const ExaminationsModule: React.FC<ExaminationsModuleProps> = ({
     );
     saveExamMarks(updated);
     setMarks(updated);
+    pushStudentNotification({
+      studentId: `GRADE:${selectedGrade}`,
+      gradeCode: selectedGrade,
+      title: `${selectedTerm} Examination Results Published`,
+      message: `Official ${selectedTerm} (${selectedYear}) results for Class ${selectedGrade} are now available in Exam Results & Report Cards.`,
+      category: 'Results',
+      relatedTab: 'results',
+    });
     flash(`Published ${selectedGrade} ${selectedTerm} (${selectedYear}) results to Parent & Student Portals.`);
+  };
+
+  const handleExportSubjectMarksCSV = () => {
+    const subjName = selectedSubject?.name || selectedSubjectCode;
+    const headerRows = [
+      ['"MUGINA HOPE PRIMARY & NURSERY ACADEMY"'],
+      ['"SUBJECT ASSESSMENT & MARKS RECORD"'],
+      [`"Class: ${selectedGrade}"`, `"Subject: ${subjName} (${selectedSubjectCode})"`, `"Term: ${selectedTerm} ${selectedYear}"`, `"Exported By: ${currentUser.name}"`],
+      ['"No."', '"Reg Number"', '"Student Name"', `"CAT (/${examConfig.catMaxMarks})"`, `"Exam (/${examConfig.examMaxMarks})"`, '"Total %"', '"Grade"', '"Remark"', '"Teacher Comment"', '"Status"'],
+    ];
+    const rows = classStudents.map((stu, idx) => {
+      const existing = getExistingMark(stu.id);
+      const draft = draftEdits[stu.id];
+      const catVal = draft ? draft.cat : existing?.catScore ?? 0;
+      const examVal = draft ? draft.exam : existing?.examScore ?? 0;
+      const commentVal = (draft ? draft.comment : existing?.teacherComment ?? '').replace(/"/g, '""');
+      const calc = calculateExamResult(catVal, examVal, examConfig);
+      return [
+        `"${idx + 1}"`,
+        `"${stu.regNumber}"`,
+        `"${stu.fullName.replace(/"/g, '""')}"`,
+        `"${catVal}"`,
+        `"${examVal}"`,
+        `"${calc.totalPercent}%"`,
+        `"${calc.gradeLetter}"`,
+        `"${calc.remark}"`,
+        `"${commentVal}"`,
+        `"${existing?.status || 'Draft'}"`,
+      ];
+    });
+    const csvContent = '\uFEFF' + [...headerRows, ...rows].map((r) => r.join(',')).join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Marks_${selectedGrade}_${selectedSubjectCode}_${selectedTerm.replace(/\s+/g, '')}_${selectedYear}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    flash(`Exported ${selectedGrade} ${subjName} marks sheet (${rows.length} learners).`);
   };
 
   // Class Rankings computation
@@ -362,6 +421,13 @@ export const ExaminationsModule: React.FC<ExaminationsModuleProps> = ({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExportSubjectMarksCSV}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-lg cursor-pointer"
+              >
+                <Download size={13} /> Export Marks CSV
+              </button>
               {Object.keys(draftEdits).length > 0 && (
                 <button
                   type="button"

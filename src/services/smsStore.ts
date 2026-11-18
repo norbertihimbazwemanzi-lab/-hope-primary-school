@@ -139,6 +139,7 @@ export interface LearningMaterialItem {
   subjectName: string;
   materialType: 'Lesson Notes' | 'Worksheet' | 'Revision Guide' | 'Video / Audio Link';
   description: string;
+  content?: string;
   fileUrl?: string;
   fileName?: string;
   uploadedBy: string;
@@ -146,19 +147,121 @@ export interface LearningMaterialItem {
   createdAt: string;
 }
 
+export interface QuizQuestion {
+  id: string;
+  type: 'mcq' | 'closed';
+  prompt: string;
+  options?: string[];
+  correctAnswer: string;
+  acceptedAnswers?: string[];
+  marks: number;
+  explanation?: string;
+}
+
+export interface SubmissionQuestionResult {
+  questionId: string;
+  type: 'mcq' | 'closed';
+  prompt: string;
+  studentAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+  earnedMarks: number;
+  maxMarks: number;
+  explanation?: string;
+}
+
 export interface HomeworkAssignment {
   id: string;
   title: string;
+  workType?: 'homework' | 'quiz';
   gradeCode: string;
   stream?: string;
   subjectName: string;
   instructions: string;
   dueDate: string;
+  availableUntil?: string;
+  timeLimitMinutes?: number;
+  maxAttempts?: number; // 0 = unlimited retakes; >=1 = exact allowed attempts
   maxMarks: number;
+  questions?: QuizQuestion[];
   teacherId: string;
   teacherName: string;
   status: 'Active' | 'Closed';
   createdAt: string;
+}
+
+export interface HomeworkSubmission {
+  id: string;
+  homeworkId: string;
+  studentId: string;
+  regNumber: string;
+  studentName: string;
+  gradeCode: string;
+  stream?: string;
+  subjectName: string;
+  answerText: string;
+  fileUrl?: string;
+  fileName?: string;
+  attemptNumber?: number;
+  answers?: SubmissionQuestionResult[];
+  timeLimitSeconds?: number;
+  timeRemainingSeconds?: number;
+  timeSpentSeconds?: number;
+  timedOut?: boolean;
+  autoGraded?: boolean;
+  submittedAt: string;
+  status: 'Submitted' | 'Graded';
+  score?: number;
+  maxMarks?: number;
+  teacherFeedback?: string;
+  gradedBy?: string;
+  gradedAt?: string;
+  updatedAt?: string;
+}
+
+export interface StudentAchievement {
+  id: string;
+  studentId: string;
+  regNumber: string;
+  studentName: string;
+  gradeCode: string;
+  title: string;
+  category: 'Academic Excellence' | 'Leadership' | 'Sports & Culture' | 'Attendance' | 'Conduct & Values';
+  description: string;
+  term: 'Term 1' | 'Term 2' | 'Term 3';
+  academicYear: string;
+  awardedBy: string;
+  awardedAt: string;
+  updatedAt?: string;
+}
+
+export interface StudentNotification {
+  id: string;
+  studentId: string; // specific student ID or 'GRADE:<gradeCode>' or 'ALL'
+  gradeCode?: string;
+  title: string;
+  message: string;
+  category: 'Homework' | 'Materials' | 'Results' | 'Attendance' | 'Announcement' | 'Achievement';
+  createdAt: string;
+  readByIds?: string[]; // supports student-specific read state even for class-wide notifications
+  isRead?: boolean;
+  relatedTab?: string;
+  updatedAt?: string;
+}
+
+export interface ClassAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  gradeCode: string; // 'ALL' or specific gradeCode like 'P4'
+  stream?: string;
+  subjectName?: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  publishedAt: string;
+  isActive: boolean;
+  updatedAt?: string;
 }
 
 export interface ClassTimetableSlot {
@@ -230,6 +333,10 @@ const SMS_STORAGE_KEYS: Record<SmsTableDomain, string> = {
   lesson_plans: 'mugina_sms_lesson_plans_v1',
   learning_materials: 'mugina_sms_learning_materials_v1',
   homework_assignments: 'mugina_sms_homework_v1',
+  homework_submissions: 'mugina_sms_homework_submissions_v1',
+  student_achievements: 'mugina_sms_student_achievements_v1',
+  student_notifications: 'mugina_sms_student_notifications_v1',
+  class_announcements: 'mugina_sms_class_announcements_v1',
   class_timetables: 'mugina_sms_timetables_v1',
   parent_teacher_messages: 'mugina_sms_parent_messages_v1',
   audit_logs: 'mugina_sms_audit_logs_v1',
@@ -432,6 +539,53 @@ export const DEFAULT_HOMEWORK: HomeworkAssignment[] = [
   },
 ];
 
+export const DEFAULT_STUDENT_ACHIEVEMENTS: StudentAchievement[] = [
+  {
+    id: 'ach-1',
+    studentId: 'stu-1',
+    regNumber: 'MHA-2026-001',
+    studentName: 'Keza Aline Manzi',
+    gradeCode: 'P4',
+    title: 'Term 1 Mathematics Top Problem Solver',
+    category: 'Academic Excellence',
+    description: 'Recognized for achieving above 90% in Mathematics continuous assessment and helping classmates in group work.',
+    term: 'Term 1',
+    academicYear: '2026',
+    awardedBy: 'Marie Claire Uwimana',
+    awardedAt: '2026-03-15',
+  },
+  {
+    id: 'ach-2',
+    studentId: 'stu-5',
+    regNumber: 'MHA-2026-005',
+    studentName: 'Umutoni Grace',
+    gradeCode: 'P1',
+    title: 'Reading Phonics Star Reader',
+    category: 'Academic Excellence',
+    description: 'Awarded for fluent Kinyarwanda and English reading aloud during morning assembly.',
+    term: 'Term 1',
+    academicYear: '2026',
+    awardedBy: 'Jean Paul Habimana',
+    awardedAt: '2026-03-10',
+  },
+];
+
+export const DEFAULT_CLASS_ANNOUNCEMENTS: ClassAnnouncement[] = [
+  {
+    id: 'cann-1',
+    title: 'P4 Mathematics & Science Practical Kit Reminder',
+    content: 'Please bring your geometry ruler set and clean science notebook every Tuesday and Thursday morning.',
+    gradeCode: 'P4',
+    stream: 'Stream A',
+    subjectName: 'Mathematics',
+    authorId: 'staff-teacher-1',
+    authorName: 'Marie Claire Uwimana',
+    authorRole: 'Teacher',
+    publishedAt: new Date().toISOString().split('T')[0],
+    isActive: true,
+  },
+];
+
 // ============================================================================
 // CONFIGURABLE EXAM & CAT CALCULATION ENGINE (No Hardcoded Rigid Formula)
 // ============================================================================
@@ -605,6 +759,239 @@ export const getHomeworkAssignments = (): HomeworkAssignment[] =>
 export const saveHomeworkAssignments = (items: HomeworkAssignment[]): HomeworkAssignment[] =>
   writeSmsDomain('homework_assignments', items);
 
+export const getHomeworkSubmissions = (): HomeworkSubmission[] =>
+  readLocalSms('homework_submissions', []);
+
+export const saveHomeworkSubmissions = (items: HomeworkSubmission[]): HomeworkSubmission[] =>
+  writeSmsDomain('homework_submissions', items);
+
+export const normalizeAnswerValue = (val: string): string =>
+  String(val || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+export const formatDurationMMSS = (seconds?: number | null): string => {
+  if (seconds === undefined || seconds === null || Number.isNaN(seconds)) return '—';
+  const clamped = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+};
+
+export const gradeStructuredAnswers = (
+  hw: HomeworkAssignment,
+  studentResponses: Record<string, string>
+): { score: number; maxMarks: number; answers: SubmissionQuestionResult[] } => {
+  const questions = Array.isArray(hw.questions) ? hw.questions : [];
+  let totalScore = 0;
+  let totalMax = 0;
+  const answers: SubmissionQuestionResult[] = questions.map((q) => {
+    const qMax = Math.max(1, Number(q.marks) || 1);
+    totalMax += qMax;
+    const rawResp = String(studentResponses[q.id] || '').trim();
+    const normResp = normalizeAnswerValue(rawResp);
+    const acceptedList = [
+      q.correctAnswer,
+      ...(Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : []),
+    ]
+      .map(normalizeAnswerValue)
+      .filter(Boolean);
+    const isCorrect = Boolean(normResp) && acceptedList.includes(normResp);
+    const earnedMarks = isCorrect ? qMax : 0;
+    totalScore += earnedMarks;
+    return {
+      questionId: q.id,
+      type: q.type,
+      prompt: q.prompt,
+      studentAnswer: rawResp,
+      correctAnswer: q.correctAnswer,
+      isCorrect,
+      earnedMarks,
+      maxMarks: qMax,
+      explanation: q.explanation,
+    };
+  });
+  return {
+    score: totalScore,
+    maxMarks: totalMax > 0 ? totalMax : hw.maxMarks,
+    answers,
+  };
+};
+
+export const submitStudentHomework = (
+  input: Omit<HomeworkSubmission, 'id' | 'submittedAt' | 'status' | 'updatedAt'> & {
+    status?: 'Submitted' | 'Graded';
+  }
+): HomeworkSubmission => {
+  const current = getHomeworkSubmissions();
+  const priorAttempts = current.filter(
+    (s) => s.homeworkId === input.homeworkId && s.studentId === input.studentId
+  );
+  const assignments = getHomeworkAssignments();
+  const hw = assignments.find((h) => h.id === input.homeworkId);
+  const hasStructuredQuestions = Boolean(hw?.questions && hw.questions.length > 0);
+  const allowRetakeHistory = hasStructuredQuestions || (hw?.maxAttempts !== undefined && hw.maxAttempts !== 1);
+  const existingEditableIdx =
+    !allowRetakeHistory
+      ? current.findIndex((s) => s.homeworkId === input.homeworkId && s.studentId === input.studentId)
+      : -1;
+
+  const now = new Date().toISOString();
+  const attemptNumber =
+    input.attemptNumber ||
+    (existingEditableIdx >= 0
+      ? current[existingEditableIdx].attemptNumber || 1
+      : priorAttempts.length + 1);
+
+  const isAutoGraded = Boolean(input.autoGraded || (input.answers && input.answers.length > 0));
+  const record: HomeworkSubmission = {
+    ...input,
+    id:
+      existingEditableIdx >= 0
+        ? current[existingEditableIdx].id
+        : `hwsub-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+    attemptNumber,
+    submittedAt: now,
+    status: isAutoGraded ? 'Graded' : input.status || 'Submitted',
+    gradedBy: isAutoGraded ? 'Auto-Graded' : input.gradedBy,
+    gradedAt: isAutoGraded ? now : input.gradedAt,
+    updatedAt: now,
+  };
+  const next =
+    existingEditableIdx >= 0
+      ? current.map((s, i) => (i === existingEditableIdx ? record : s))
+      : [record, ...current];
+  writeSmsDomain('homework_submissions', next);
+  logAuditEvent(
+    'SUBMIT_HOMEWORK',
+    'HomeworkSubmission',
+    record.id,
+    `${record.studentName} (${record.regNumber}) submitted ${record.subjectName} (Attempt #${attemptNumber})`
+  );
+  return record;
+};
+
+export const gradeHomeworkSubmission = (
+  submissionId: string,
+  score: number,
+  teacherFeedback: string,
+  gradedBy: string
+): HomeworkSubmission[] => {
+  const current = getHomeworkSubmissions();
+  const now = new Date().toISOString();
+  let gradedItem: HomeworkSubmission | null = null;
+  const next = current.map((s) => {
+    if (s.id !== submissionId) return s;
+    gradedItem = {
+      ...s,
+      score,
+      teacherFeedback,
+      gradedBy,
+      gradedAt: now,
+      status: 'Graded',
+      updatedAt: now,
+    };
+    return gradedItem;
+  });
+  writeSmsDomain('homework_submissions', next);
+  if (gradedItem) {
+    const g = gradedItem as HomeworkSubmission;
+    pushStudentNotification({
+      studentId: g.studentId,
+      gradeCode: g.gradeCode,
+      title: `Homework Graded: ${g.subjectName}`,
+      message: `Your submission was graded ${score}${g.maxMarks ? `/${g.maxMarks}` : ''}. Feedback: ${teacherFeedback || 'Good effort.'}`,
+      category: 'Homework',
+      relatedTab: 'homework',
+    });
+    logAuditEvent('GRADE_HOMEWORK', 'HomeworkSubmission', g.id, `${gradedBy} graded ${g.studentName} homework (${score})`);
+  }
+  return next;
+};
+
+export const getStudentAchievements = (): StudentAchievement[] =>
+  readLocalSms('student_achievements', DEFAULT_STUDENT_ACHIEVEMENTS);
+
+export const saveStudentAchievements = (items: StudentAchievement[]): StudentAchievement[] =>
+  writeSmsDomain('student_achievements', items);
+
+export const addStudentAchievement = (
+  input: Omit<StudentAchievement, 'id' | 'awardedAt' | 'updatedAt'>
+): StudentAchievement => {
+  const current = getStudentAchievements();
+  const record: StudentAchievement = {
+    ...input,
+    id: `ach-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+    awardedAt: new Date().toISOString().split('T')[0],
+    updatedAt: new Date().toISOString(),
+  };
+  writeSmsDomain('student_achievements', [record, ...current]);
+  pushStudentNotification({
+    studentId: record.studentId,
+    gradeCode: record.gradeCode,
+    title: `New Achievement Awarded: ${record.title}`,
+    message: `${record.awardedBy} awarded you a ${record.category} recognition.`,
+    category: 'Achievement',
+    relatedTab: 'achievements',
+  });
+  logAuditEvent('AWARD_ACHIEVEMENT', 'StudentAchievement', record.id, `${record.awardedBy} awarded "${record.title}" to ${record.studentName}`);
+  return record;
+};
+
+export const getStudentNotifications = (): StudentNotification[] =>
+  readLocalSms('student_notifications', []);
+
+export const saveStudentNotifications = (items: StudentNotification[]): StudentNotification[] =>
+  writeSmsDomain('student_notifications', items);
+
+export const pushStudentNotification = (
+  input: Omit<StudentNotification, 'id' | 'createdAt' | 'readByIds' | 'isRead' | 'updatedAt'>
+): StudentNotification => {
+  const current = getStudentNotifications();
+  const item: StudentNotification = {
+    ...input,
+    id: `notif-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+    createdAt: new Date().toISOString(),
+    readByIds: [],
+    isRead: false,
+    updatedAt: new Date().toISOString(),
+  };
+  writeSmsDomain('student_notifications', [item, ...current].slice(0, 300));
+  return item;
+};
+
+export const markStudentNotificationRead = (notificationId: string, studentId: string): StudentNotification[] => {
+  const current = getStudentNotifications();
+  const next = current.map((n) => {
+    if (n.id !== notificationId) return n;
+    const readByIds = Array.from(new Set([...(n.readByIds || []), studentId]));
+    return { ...n, readByIds, isRead: n.studentId === studentId ? true : n.isRead, updatedAt: new Date().toISOString() };
+  });
+  return writeSmsDomain('student_notifications', next);
+};
+
+export const markAllStudentNotificationsRead = (studentId: string, gradeCode: string): StudentNotification[] => {
+  const current = getStudentNotifications();
+  const next = current.map((n) => {
+    const applies =
+      n.studentId === studentId ||
+      n.studentId === 'ALL' ||
+      n.studentId === `GRADE:${gradeCode}` ||
+      n.gradeCode === gradeCode;
+    if (!applies) return n;
+    const readByIds = Array.from(new Set([...(n.readByIds || []), studentId]));
+    return { ...n, readByIds, isRead: n.studentId === studentId ? true : n.isRead, updatedAt: new Date().toISOString() };
+  });
+  return writeSmsDomain('student_notifications', next);
+};
+
+export const getClassAnnouncements = (): ClassAnnouncement[] =>
+  readLocalSms('class_announcements', DEFAULT_CLASS_ANNOUNCEMENTS);
+
+export const saveClassAnnouncements = (items: ClassAnnouncement[]): ClassAnnouncement[] =>
+  writeSmsDomain('class_announcements', items);
+
 export const getClassTimetables = (): ClassTimetableSlot[] =>
   readLocalSms('class_timetables', DEFAULT_TIMETABLES);
 
@@ -691,6 +1078,10 @@ const ALL_SMS_DOMAINS: SmsTableDomain[] = [
   'lesson_plans',
   'learning_materials',
   'homework_assignments',
+  'homework_submissions',
+  'student_achievements',
+  'student_notifications',
+  'class_announcements',
   'class_timetables',
   'parent_teacher_messages',
   'audit_logs',

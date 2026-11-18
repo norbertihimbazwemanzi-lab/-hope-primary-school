@@ -11,7 +11,7 @@ import {
   User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { getStaffMembers, getEnrolledStudents, UserRole, CurrentSessionUser } from './adminStore';
+import { getStaffMembers, getEnrolledStudents, updateEnrolledStudent, UserRole, CurrentSessionUser } from './adminStore';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
@@ -100,6 +100,9 @@ export const emailPasswordSignIn = async (
         role: match.role as UserRole,
         username: match.username,
         email: match.email,
+        phone: match.phone,
+        photoUrl: match.photoUrl,
+        bio: match.bio,
         assignedSubjectOrGrade: match.assignedSubjectOrGrade,
       };
       return { user: null, fallbackStaff: staffSession };
@@ -175,6 +178,9 @@ export const resolveStaffRoleForFirebaseUser = (firebaseUser: User): RoleResolut
         role: staffMatch.role as UserRole,
         username: staffMatch.username,
         email: staffMatch.email,
+        phone: staffMatch.phone,
+        photoUrl: staffMatch.photoUrl,
+        bio: staffMatch.bio,
         assignedSubjectOrGrade: staffMatch.assignedSubjectOrGrade,
       },
     };
@@ -253,6 +259,217 @@ export const authenticateParentAccount = (
   };
 };
 
+const STUDENT_TOKEN_KEY = 'mugina_student_bearer_token';
+const STAFF_TOKEN_KEY = 'mugina_staff_bearer_token';
+
+export const getStaffAuthToken = (): string | null => {
+  try {
+    return sessionStorage.getItem(STAFF_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setStaffAuthToken = (token: string | null) => {
+  try {
+    if (token) sessionStorage.setItem(STAFF_TOKEN_KEY, token);
+    else sessionStorage.removeItem(STAFF_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+};
+
+export const getStudentAuthToken = (): string | null => {
+  try {
+    return sessionStorage.getItem(STUDENT_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setStudentAuthToken = (token: string | null) => {
+  try {
+    if (token) sessionStorage.setItem(STUDENT_TOKEN_KEY, token);
+    else sessionStorage.removeItem(STUDENT_TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+};
+
+export type StaffLoginResult =
+  | { authorized: true; session: CurrentSessionUser }
+  | { authorized: false; reason: string; networkError?: boolean };
+
+export const authenticateStaffWithBackend = async (
+  identifier: string,
+  secret: string
+): Promise<StaffLoginResult> => {
+  const cleanId = identifier.trim();
+  const cleanSecret = secret.trim();
+  if (!cleanSecret && !cleanId) {
+    return { authorized: false, reason: 'Please enter your username/email and password.' };
+  }
+
+  try {
+    const res = await fetch('/api/auth/staff-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success && data.session) {
+      if (data.token) setStaffAuthToken(data.token);
+      return { authorized: true, session: data.session as CurrentSessionUser };
+    }
+
+    return {
+      authorized: false,
+      reason:
+        data.error ||
+        (res.status === 403
+          ? 'This staff account is currently deactivated. Contact School Administration.'
+          : 'Invalid staff username, email, or password.'),
+    };
+  } catch {
+    // Network unreachable: fallback only to synced client staff registry
+    const allStaff = getStaffMembers();
+    const match = allStaff.find(
+      (s) =>
+        (s.username.toLowerCase() === cleanId.toLowerCase() ||
+          s.email.toLowerCase() === cleanId.toLowerCase()) &&
+        s.password &&
+        s.password === cleanSecret &&
+        s.status === 'Active'
+    );
+    if (match) {
+      return {
+        authorized: true,
+        session: {
+          id: match.id,
+          name: match.name,
+          role: match.role as UserRole,
+          username: match.username,
+          email: match.email,
+          phone: match.phone,
+          photoUrl: match.photoUrl,
+          bio: match.bio,
+          assignedSubjectOrGrade: match.assignedSubjectOrGrade,
+        },
+      };
+    }
+    return {
+      authorized: false,
+      networkError: true,
+      reason: 'Could not reach authentication server and no matching offline credential was found.',
+    };
+  }
+};
+
+export const exchangeFirebaseTokenForStaffSession = async (
+  firebaseUser: User
+): Promise<{ success: boolean; session?: CurrentSessionUser }> => {
+  try {
+    const idToken = await firebaseUser.getIdToken();
+    const res = await fetch('/api/auth/staff-firebase-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+    if (!res.ok) return { success: false };
+    const data = await res.json().catch(() => ({}));
+    if (data.success && data.token) {
+      setStaffAuthToken(data.token);
+      return { success: true, session: data.session as CurrentSessionUser };
+    }
+  } catch {
+    // non-fatal when offline
+  }
+  return { success: false };
+};
+
+export const requestPasswordReset = async (
+  email: string
+): Promise<{ success: boolean; message: string; rateLimited?: boolean }> => {
+  try {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 429) {
+      return {
+        success: false,
+        rateLimited: true,
+        message: data.error || 'Too many password reset requests. Please try again in 15 minutes.',
+      };
+    }
+    if (!res.ok) {
+      return {
+        success: false,
+        message: data.error || 'Unable to process password reset request at this time.',
+      };
+    }
+    return {
+      success: true,
+      message:
+        data.message ||
+        'If an account exists for that email address, password reset instructions have been sent.',
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Network error while connecting to password reset service. Please try again.',
+    };
+  }
+};
+
+export const verifyResetToken = async (
+  token: string
+): Promise<{ valid: boolean; reason?: string; expiresAt?: string }> => {
+  try {
+    const res = await fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(token.trim())}`);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.valid) {
+      return { valid: true, expiresAt: data.expiresAt };
+    }
+    return { valid: false, reason: data.error || 'This password reset link is invalid or has expired.' };
+  } catch {
+    return { valid: false, reason: 'Could not verify reset token. Please check your connection.' };
+  }
+};
+
+export const submitPasswordReset = async (
+  token: string,
+  newPassword: string,
+  confirmPassword: string
+): Promise<{ success: boolean; message: string }> => {
+  try {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token.trim(), newPassword, confirmPassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      return {
+        success: true,
+        message: data.message || 'Your password has been updated securely. You may now sign in.',
+      };
+    }
+    return {
+      success: false,
+      message: data.error || 'Unable to reset password. Please request a new reset link.',
+    };
+  } catch {
+    return {
+      success: false,
+      message: 'Network error while updating password. Please try again.',
+    };
+  }
+};
+
 export const authenticateStudentAccount = (
   identifier: string,
   secret: string
@@ -264,11 +481,14 @@ export const authenticateStudentAccount = (
   const students = getEnrolledStudents();
   const student = students.find(
     (s) =>
-      (s.studentUsername.toLowerCase() === cleanId || s.regNumber.toLowerCase() === cleanId) &&
+      ((s.studentUsername || '').toLowerCase() === cleanId || (s.regNumber || '').toLowerCase() === cleanId) &&
       s.studentPassword === cleanSecret
   );
 
   if (!student) return null;
+  if (student.studentAccountActive === false || student.status !== 'Active') {
+    return null;
+  }
 
   return {
     id: student.id,
@@ -281,11 +501,153 @@ export const authenticateStudentAccount = (
   };
 };
 
+export type StudentLoginResult =
+  | { authorized: true; session: CurrentSessionUser }
+  | { authorized: false; reason: string };
+
+export const authenticateStudentWithBackend = async (
+  identifier: string,
+  secret: string
+): Promise<StudentLoginResult> => {
+  const cleanId = identifier.trim();
+  const cleanSecret = secret.trim();
+  if (!cleanId || !cleanSecret) {
+    return { authorized: false, reason: 'Please enter your Student ID / Username and password.' };
+  }
+
+  // 1. Try server-verified login endpoint first
+  try {
+    const res = await fetch('/api/auth/student-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.session) {
+        if (data.token) setStudentAuthToken(data.token);
+        return { authorized: true, session: data.session as CurrentSessionUser };
+      }
+    } else if (res.status === 403) {
+      const errData = await res.json().catch(() => ({}));
+      return {
+        authorized: false,
+        reason: errData.error || 'This student account is currently deactivated. Contact School Administration.',
+      };
+    }
+  } catch {
+    // Fall back to synced cloud client check if server offline
+  }
+
+  // 2. Check synced Supabase / Firebase / cached student directory
+  const students = getEnrolledStudents();
+  const matched = students.find(
+    (s) =>
+      ((s.studentUsername || '').toLowerCase() === cleanId.toLowerCase() ||
+        (s.regNumber || '').toLowerCase() === cleanId.toLowerCase()) &&
+      s.studentPassword === cleanSecret
+  );
+
+  if (!matched) {
+    return {
+      authorized: false,
+      reason: 'Invalid Student ID / Username or password. Contact the DOS or School Administration office.',
+    };
+  }
+
+  if (matched.studentAccountActive === false || matched.status !== 'Active') {
+    return {
+      authorized: false,
+      reason: `Student portal access is currently ${
+        matched.status !== 'Active' ? matched.status : 'deactivated'
+      }. Please contact School Administration.`,
+    };
+  }
+
+  const session: CurrentSessionUser = {
+    id: matched.id,
+    name: matched.fullName,
+    role: 'Student',
+    username: matched.studentUsername || matched.regNumber,
+    email: matched.parentEmail || '',
+    assignedSubjectOrGrade: `${matched.gradeCode} (${matched.stream || 'Stream A'})`,
+    linkedStudentIds: [matched.id],
+  };
+
+  // Sync student into backend if missing so server token endpoints recognize them too
+  try {
+    await fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: students }),
+    });
+    const tokenRes = await fetch('/api/auth/student-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
+    });
+    if (tokenRes.ok) {
+      const td = await tokenRes.json();
+      if (td.token) setStudentAuthToken(td.token);
+    }
+  } catch {
+    // non-fatal
+  }
+
+  return { authorized: true, session };
+};
+
+export const changeStudentOwnPassword = async (
+  studentId: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> => {
+  const cleanCur = currentPassword.trim();
+  const cleanNew = newPassword.trim();
+  if (cleanNew.length < 6) {
+    return { success: false, message: 'New password must be at least 6 characters long.' };
+  }
+
+  const students = getEnrolledStudents();
+  const target = students.find((s) => s.id === studentId);
+  if (!target) {
+    return { success: false, message: 'Student record not found.' };
+  }
+  if (target.studentPassword !== cleanCur) {
+    return { success: false, message: 'Current password is incorrect.' };
+  }
+
+  const token = getStudentAuthToken();
+  try {
+    const res = await fetch('/api/student/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ studentId, currentPassword: cleanCur, newPassword: cleanNew }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        return { success: false, message: err.error || 'Password update rejected by server.' };
+      }
+    }
+  } catch {
+    // continue persisting via Supabase / Firebase / Store
+  }
+
+  updateEnrolledStudent(studentId, { studentPassword: cleanNew });
+  return { success: true, message: 'Your student portal password has been updated and synchronized.' };
+};
+
 export const getAccessToken = async (): Promise<string | null> => {
   return cachedAccessToken;
 };
 
 export const logoutGoogle = async () => {
+  setStudentAuthToken(null);
+  setStaffAuthToken(null);
   await signOut(auth);
   cachedAccessToken = null;
 };

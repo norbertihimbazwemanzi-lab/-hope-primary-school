@@ -1,0 +1,25 @@
+[
+  {
+    "id": "eml-1794993421793-9625",
+    "recipientEmail": "headteacher@muginahopeschool.com",
+    "emailType": "password_reset",
+    "subject": "Mugina Hope Primary School - Password Reset Request",
+    "status": "Failed",
+    "relatedRef": "staff-headteacher-1",
+    "sentAt": "2026-11-18T09:17:01.793Z",
+    "retryCount": 0,
+    "sanitizedSummary": "Password reset email dispatched to headteacher@muginahopeschool.com (staff account; token redacted).",
+    "errorMessage": "Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5b1f17b1804b1-4bb7d257112sm45479415e9.2 - gsmtp"
+  },
+  {
+    "id": "eml-1794991858736-1032",
+    "recipientEmail": "ishimweshemabertarand@gmail.com",
+    "emailType": "admission_verification",
+    "subject": "Mugina Hope Primary School - Verification Code (MHA-2026-2106)",
+    "status": "Sent",
+    "relatedRef": "MHA-2026-2106",
+    "sentAt": "2026-11-18T08:50:58.736Z",
+    "retryCount": 0,
+    "sanitizedSummary": "Admission verification code sent to ishimweshemabertarand@gmail.com for ishimwe kelly (Ref: MHA-2026-2106). Verification code redacted."
+  }
+]

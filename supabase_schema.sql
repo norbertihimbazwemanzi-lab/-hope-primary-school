@@ -152,8 +152,22 @@ CREATE TABLE IF NOT EXISTS public.admissions_applications (
   created_at TEXT,
   confirmed_at TEXT,
   confirmed_by TEXT,
+  approval_date TEXT,
+  email_delivery_status TEXT,
+  verification_status TEXT DEFAULT 'Unverified',
+  verified_at TEXT,
+  reviewed_by TEXT,
+  rejection_reason TEXT,
+  more_info_notes TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS approval_date TEXT;
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS email_delivery_status TEXT;
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'Unverified';
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS verified_at TEXT;
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE public.admissions_applications ADD COLUMN IF NOT EXISTS more_info_notes TEXT;
 ALTER TABLE public.admissions_applications ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN
   CREATE POLICY "Public Read Applications" ON public.admissions_applications FOR SELECT USING (true);
@@ -376,15 +390,16 @@ DO $$ BEGIN
   CREATE POLICY "Public Write Chats" ON public.applicant_chats FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
--- 15b. Extended Student Profile Columns (Phase 4)
+-- 15b. Extended Student Profile Columns (Phase 4 & Student Role Upgrade)
 ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS photo_url TEXT;
 ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS stream TEXT DEFAULT 'Stream A';
 ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS address TEXT;
 ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS admission_date TEXT;
 ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS previous_school TEXT;
 ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS academic_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS student_account_active BOOLEAN DEFAULT true;
 
--- 15c. SMS Domain Store Tables (Normalized Academic, Exam, LMS, Messaging & Audit tables)
+-- 15c. SMS Domain Store Tables (Normalized Academic, Exam, LMS, Student Portal, Messaging & Audit tables)
 CREATE TABLE IF NOT EXISTS public.academic_years_terms (
   id TEXT PRIMARY KEY,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -475,6 +490,42 @@ ALTER TABLE public.homework_assignments ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN CREATE POLICY "Public Read homework_assignments" ON public.homework_assignments FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE POLICY "Public Write homework_assignments" ON public.homework_assignments FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+CREATE TABLE IF NOT EXISTS public.homework_submissions (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.homework_submissions ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read homework_submissions" ON public.homework_submissions FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write homework_submissions" ON public.homework_submissions FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.student_achievements (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.student_achievements ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read student_achievements" ON public.student_achievements FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write student_achievements" ON public.student_achievements FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.student_notifications (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.student_notifications ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read student_notifications" ON public.student_notifications FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write student_notifications" ON public.student_notifications FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.class_announcements (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.class_announcements ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read class_announcements" ON public.class_announcements FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write class_announcements" ON public.class_announcements FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 CREATE TABLE IF NOT EXISTS public.class_timetables (
   id TEXT PRIMARY KEY,
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -501,6 +552,32 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 DO $$ BEGIN CREATE POLICY "Public Read audit_logs" ON public.audit_logs FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE POLICY "Public Write audit_logs" ON public.audit_logs FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- 15d. Email Delivery Logs & Email Templates
+CREATE TABLE IF NOT EXISTS public.email_delivery_logs (
+  id TEXT PRIMARY KEY,
+  recipient_email TEXT NOT NULL,
+  email_type TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Sent',
+  error_message TEXT,
+  related_ref TEXT,
+  sent_at TEXT NOT NULL,
+  retry_count INTEGER DEFAULT 0,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.email_delivery_logs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read email_delivery_logs" ON public.email_delivery_logs FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write email_delivery_logs" ON public.email_delivery_logs FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.email_templates (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read email_templates" ON public.email_templates FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write email_templates" ON public.email_templates FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- 16. Public Media Storage Bucket (school-media)
 DO $$ BEGIN
@@ -549,9 +626,15 @@ DECLARE
     'lesson_plans',
     'learning_materials',
     'homework_assignments',
+    'homework_submissions',
+    'student_achievements',
+    'student_notifications',
+    'class_announcements',
     'class_timetables',
     'parent_teacher_messages',
-    'audit_logs'
+    'audit_logs',
+    'email_delivery_logs',
+    'email_templates'
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables LOOP

@@ -128,6 +128,8 @@ export interface StaffMember {
   username: string;
   password: string;
   assignedSubjectOrGrade?: string;
+  photoUrl?: string;
+  bio?: string;
   enrolledAt: string;
   status: 'Active' | 'Inactive';
 }
@@ -158,8 +160,10 @@ export interface EnrolledStudent {
   parentName: string;
   parentPhone: string;
   parentEmail: string;
+  email?: string;
   studentUsername: string;
   studentPassword: string;
+  studentAccountActive?: boolean;
   enrolledBy: string;
   enrolledAt: string;
   status: 'Active' | 'Awaiting Approval' | 'Suspended' | 'Transferred' | 'Graduated';
@@ -205,12 +209,27 @@ export interface AdminApplication {
   sector: string;
   wantsLunch: boolean;
   wantsTransport: boolean;
-  status: 'Pending Confirmation' | 'Confirmed & Enrolled' | 'Waitlist';
+  status:
+    | 'Pending Confirmation'
+    | 'Pending'
+    | 'Approved'
+    | 'Rejected'
+    | 'More Info Requested'
+    | 'Confirmed & Enrolled'
+    | 'Waitlist';
   feedbackNotes?: string;
   assignedStudentId?: string;
   createdAt: string;
   confirmedAt?: string;
   confirmedBy?: string;
+  approvalDate?: string;
+  emailDeliveryStatus?: string;
+  verificationStatus?: 'Unverified' | 'Pending Verification' | 'Verified';
+  verifiedAt?: string;
+  reviewedBy?: string;
+  rejectionReason?: string;
+  moreInfoNotes?: string;
+  updatedAt?: string;
 }
 
 export interface AdminTourBooking {
@@ -1130,22 +1149,20 @@ export const getStaffMembers = (): StaffMember[] => {
     const raw = localStorage.getItem(STORAGE_KEYS.STAFF);
     if (raw) {
       const parsed: StaffMember[] = filterStaffAgainstTombstones(JSON.parse(raw));
-      // Ensure requested Norbert admin and Headteacher accounts are present with exact credentials
+      // Guarantee primary admin & headteacher records exist by username without clobbering reset passwords
       const hasNorbert = parsed.some(
-        (s) => s.username === 'norbertihimbazwemanzi@gmail.com' && s.password === '@0798744704'
+        (s) => s.username && s.username.toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
       );
       const hasHeadteacher = parsed.some(
-        (s) => s.username === 'hopeprimaryschool' && s.password === 'hopeprimary@123'
+        (s) => s.username && s.username.toLowerCase() === 'hopeprimaryschool'
       );
       if (!hasNorbert || !hasHeadteacher) {
-        let fixed = [...parsed];
+        const fixed = [...parsed];
         if (!hasNorbert) {
-          fixed = fixed.filter((s) => s.username !== 'norbertihimbazwemanzi@gmail.com');
           fixed.unshift(defaultStaff[0]);
         }
         if (!hasHeadteacher) {
-          fixed = fixed.filter((s) => s.username !== 'hopeprimaryschool');
-          fixed.splice(1, 0, defaultStaff[1]);
+          fixed.splice(Math.min(1, fixed.length), 0, defaultStaff[1]);
         }
         localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(fixed));
         return fixed;
@@ -1188,10 +1205,17 @@ const resolveAuthoritativeCloudArray = <T,>(
 ): T[] | null => {
   const hasSb = Array.isArray(sbItems) && sbItems.length > 0;
   const hasFb = Array.isArray(fbItems) && fbItems.length > 0;
+  const hasServer = Array.isArray(serverItems) && serverItems.length > 0;
+
+  const sbMs = hasSb ? getMaxTimestampMs(sbItems) : 0;
+  const fbMs = hasFb ? getMaxTimestampMs(fbItems) : 0;
+  const serverMs = hasServer ? getMaxTimestampMs(serverItems) : 0;
+
+  if (hasServer && serverMs > Math.max(sbMs, fbMs) + 1500) {
+    return serverItems as T[];
+  }
 
   if (hasSb && hasFb) {
-    const sbMs = getMaxTimestampMs(sbItems);
-    const fbMs = getMaxTimestampMs(fbItems);
     if (fbMs > sbMs + 2500) {
       return fbItems as T[];
     }
@@ -1199,16 +1223,23 @@ const resolveAuthoritativeCloudArray = <T,>(
   }
   if (hasSb) return sbItems as T[];
   if (hasFb) return fbItems as T[];
-  if (Array.isArray(serverItems) && serverItems.length > 0) return serverItems;
+  if (hasServer) return serverItems as T[];
   return null;
 };
 
 // Persistent Server Database Synchronization
 export const persistToServer = (endpoint: string, data: any) => {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const staffToken = sessionStorage.getItem('mugina_staff_bearer_token');
+      const studentToken = sessionStorage.getItem('mugina_student_bearer_token');
+      const token = staffToken || studentToken;
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
     fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(data),
     }).catch((err) => {
       console.warn(`[Database Sync] Auto-sync to ${endpoint} failed:`, err);
@@ -2139,6 +2170,8 @@ export const addApplication = (app: Omit<AdminApplication, 'id' | 'createdAt' | 
     id: `app-${Date.now()}`,
     createdAt: new Date().toLocaleString(),
     status: 'Pending Confirmation',
+    verificationStatus: 'Unverified',
+    updatedAt: new Date().toISOString(),
   };
   const updated = [newApp, ...current];
   localStorage.setItem(STORAGE_KEYS.APPLICATIONS, JSON.stringify(updated));
@@ -2455,6 +2488,9 @@ export interface CurrentSessionUser {
   role: UserRole;
   username: string;
   email: string;
+  phone?: string;
+  photoUrl?: string;
+  bio?: string;
   assignedSubjectOrGrade?: string;
   linkedStudentIds?: string[];
 }

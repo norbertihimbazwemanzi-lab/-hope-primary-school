@@ -1,5 +1,31 @@
 [
   {
+    "refCode": "MHA-2026-2106",
+    "studentName": "ishimwe kelly",
+    "parentName": "niryoryiza eldegard",
+    "parentEmail": "ishimweshemabertarand@gmail.com",
+    "parentPhone": "+250 786946513",
+    "gradeCode": "P5",
+    "status": "Confirmed & Enrolled",
+    "messages": [
+      {
+        "id": "msg-1794991449244",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "Registration received for ishimwe kelly (P5). Application is currently under review by School Administrator Norbert Ihimbazwe Manzi.",
+        "createdAt": "2026-11-18T08:44:09.244Z"
+      },
+      {
+        "id": "msg-1794991553016",
+        "sender": "system",
+        "senderName": "Mugina Hope Administration Desk",
+        "text": "🎉 Registration confirmed! ishimwe kelly has been officially approved and enrolled. Assigned Student Registration ID: MHA-2026-634. Welcome to Mugina Hope Academy!",
+        "createdAt": "2026-11-18T08:45:53.016Z"
+      }
+    ],
+    "updatedAt": "2026-11-18T08:45:53.016Z"
+  },
+  {
     "refCode": "MHA-2026-7841",
     "studentName": "Mugisha Brian",
     "parentName": "Alice Mukamugema",

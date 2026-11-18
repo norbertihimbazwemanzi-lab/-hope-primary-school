@@ -1,4 +1,15 @@
-export type PageId = 'home' | 'about' | 'staff' | 'academics' | 'admissions' | 'fees' | 'campus-life' | 'contact' | 'admin';
+export type PageId =
+  | 'home'
+  | 'about'
+  | 'staff'
+  | 'academics'
+  | 'admissions'
+  | 'fees'
+  | 'campus-life'
+  | 'contact'
+  | 'admin'
+  | 'verify-admission'
+  | 'reset-password';
 
 export interface TimelineEvent {
   time: string;

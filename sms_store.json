@@ -1,0 +1,136 @@
+{
+  "audit_logs": [
+    {
+      "id": "aud-1794993120753-592",
+      "timestamp": "2026-11-18T09:12:00.753Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (Chief Administrator)",
+      "actorRole": "SuperAdmin",
+      "action": "RESET_PASSWORD",
+      "entityType": "Student",
+      "entityId": "stu-1794417426603-432",
+      "summary": "Admin reset portal password for Willy Munyakazi"
+    },
+    {
+      "id": "aud-1794993079456-538",
+      "timestamp": "2026-11-18T09:11:19.456Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (Chief Administrator)",
+      "actorRole": "SuperAdmin",
+      "action": "UPDATE_ACCOUNT",
+      "entityType": "Student",
+      "entityId": "stu-1794417426603-426",
+      "summary": "Deactivated student portal account for Hassan Rugwizangoga"
+    },
+    {
+      "id": "aud-1794992903704-839",
+      "timestamp": "2026-11-18T09:08:23.704Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (Chief Administrator)",
+      "actorRole": "SuperAdmin",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-admin-norbert",
+      "summary": "Norbert Ihimbazwe Manzi (Chief Administrator) (SuperAdmin) signed in"
+    },
+    {
+      "id": "aud-1794992555051-199",
+      "timestamp": "2026-11-18T09:02:35.051Z",
+      "actorId": "stu-1794991552132",
+      "actorName": "ishimwe kelly",
+      "actorRole": "Student",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "stu-1794991552132",
+      "summary": "ishimwe kelly signed into Student Portal"
+    },
+    {
+      "id": "aud-1794992043645-998",
+      "timestamp": "2026-11-18T08:54:03.645Z",
+      "actorId": "staff-1794992024672",
+      "actorName": "ishimwe kelly1",
+      "actorRole": "Teacher",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-1794992024672",
+      "summary": "ishimwe kelly1 (Teacher) signed in"
+    },
+    {
+      "id": "aud-1794991711858-335",
+      "timestamp": "2026-11-18T08:48:31.858Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (Chief Administrator)",
+      "actorRole": "SuperAdmin",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-admin-norbert",
+      "summary": "Norbert Ihimbazwe Manzi (Chief Administrator) (SuperAdmin) signed in"
+    },
+    {
+      "id": "aud-1794991586293-97",
+      "timestamp": "2026-11-18T08:46:26.293Z",
+      "actorId": "stu-1794991552132",
+      "actorName": "ishimwe kelly",
+      "actorRole": "Student",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "stu-1794991552132",
+      "summary": "ishimwe kelly signed into Student Portal"
+    },
+    {
+      "id": "aud-1794990596130-350",
+      "timestamp": "2026-11-18T08:29:56.130Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (School Administrator)",
+      "actorRole": "Admin",
+      "action": "UPDATE",
+      "entityType": "Student",
+      "entityId": "stu-1794417426603-436",
+      "summary": "Updated student record gisubizo eme"
+    },
+    {
+      "id": "aud-1794990020768-219",
+      "timestamp": "2026-11-18T08:20:20.768Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (School Administrator)",
+      "actorRole": "Admin",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-admin-norbert",
+      "summary": "Norbert Ihimbazwe Manzi (School Administrator) signed in"
+    },
+    {
+      "id": "aud-1794989887670-148",
+      "timestamp": "2026-11-18T08:18:07.670Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (School Administrator)",
+      "actorRole": "Admin",
+      "action": "UPDATE",
+      "entityType": "Student",
+      "entityId": "stu-1794417426603-436",
+      "summary": "Updated student record gisubizo eme"
+    },
+    {
+      "id": "aud-1794989614963-967",
+      "timestamp": "2026-11-18T08:13:34.963Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (School Administrator)",
+      "actorRole": "Admin",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-admin-norbert",
+      "summary": "Norbert Ihimbazwe Manzi (School Administrator) signed in"
+    },
+    {
+      "id": "aud-1794988357980-599",
+      "timestamp": "2026-11-18T07:52:37.980Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (School Administrator)",
+      "actorRole": "Admin",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-admin-norbert",
+      "summary": "Norbert Ihimbazwe Manzi (School Administrator) signed in"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
 
-const SCHOOL_OFFICIAL_EMAIL = process.env.SCHOOL_GMAIL || 'norbertihimbazwemanzi@gmail.com';
+const GMAIL_USER = process.env.GMAIL_USER || process.env.SMTP_USER || '';
+const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '';
+const SCHOOL_OFFICIAL_EMAIL = process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com';
 
 interface ApiRequest {
   method?: string;
@@ -42,12 +44,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     // Configure SMTP if credentials are provided in Vercel environment
     let transporter: any;
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    if (GMAIL_USER && GMAIL_APP_PASSWORD) {
       transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: GMAIL_USER,
+          pass: GMAIL_APP_PASSWORD,
         },
       });
     } else {
@@ -56,8 +58,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       });
     }
 
+    const fromHeader = SCHOOL_OFFICIAL_EMAIL.includes('<')
+      ? SCHOOL_OFFICIAL_EMAIL
+      : `"Mugina Hope Primary School" <${SCHOOL_OFFICIAL_EMAIL}>`;
+
     const info = await transporter.sendMail({
-      from: `"Mugina Hope Academy" <${SCHOOL_OFFICIAL_EMAIL}>`,
+      from: fromHeader,
       to,
       subject,
       html,

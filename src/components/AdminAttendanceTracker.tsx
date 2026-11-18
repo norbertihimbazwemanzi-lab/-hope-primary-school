@@ -14,6 +14,8 @@ import {
   getAdminNotificationEmail,
 } from '../services/adminStore';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
+import { extractGradesFromAssignment } from '../services/rbac';
+import { getTeacherAssignments } from '../services/smsStore';
 import { sendGmailMessage } from '../services/gmailService';
 import { BulkStudentImportModal } from './BulkStudentImportModal';
 import { ReadMoreText } from './ReadMoreBlock';
@@ -55,51 +57,86 @@ import {
 
 interface AdminAttendanceTrackerProps {
   onRecordSaved?: () => void;
+  initialGrade?: string;
+  allowedGrades?: string[];
 }
 
-export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ onRecordSaved }) => {
+export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
+  onRecordSaved,
+  initialGrade,
+  allowedGrades,
+}) => {
   const sessionUser = getCurrentSessionUser();
   const [students, setStudents] = useState<EnrolledStudent[]>(getEnrolledStudents());
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const teacherAssignments = useMemo(() => getTeacherAssignments(), []);
+
+  // Derive strict allowed grades when logged in as a Teacher (assigned students only)
+  const scopedGrades = useMemo<string[] | null>(() => {
+    if (Array.isArray(allowedGrades) && allowedGrades.length > 0) {
+      return allowedGrades;
+    }
+    if (sessionUser?.role === 'Teacher') {
+      const fromMatrix = teacherAssignments
+        .filter(
+          (a) =>
+            (sessionUser.id && a.teacherId === sessionUser.id) ||
+            (sessionUser.name && a.teacherName.toLowerCase() === sessionUser.name.toLowerCase())
+        )
+        .map((a) => a.gradeCode);
+      const fromProfile = extractGradesFromAssignment(sessionUser.assignedSubjectOrGrade);
+      const combined = Array.from(new Set([...fromMatrix, ...fromProfile]));
+      return combined.length > 0 ? combined : ['P1'];
+    }
+    return null;
+  }, [allowedGrades, sessionUser, teacherAssignments]);
+
+  const scopedStudents = useMemo(() => {
+    if (!scopedGrades) return students;
+    return students.filter((s) => scopedGrades.includes(s.gradeCode));
+  }, [students, scopedGrades]);
+
   const [selectedGrade, setSelectedGrade] = useState<string>(() => {
+    if (initialGrade && (!scopedGrades || scopedGrades.includes(initialGrade))) {
+      return initialGrade;
+    }
+    if (scopedGrades && scopedGrades.length > 0) {
+      return scopedGrades[0];
+    }
     if (sessionUser?.role === 'Teacher' && sessionUser?.assignedSubjectOrGrade) {
-      const txt = sessionUser.assignedSubjectOrGrade.toUpperCase();
-      if (txt.includes('P1') || txt.includes('PRIMARY 1')) return 'P1';
-      if (txt.includes('P2') || txt.includes('PRIMARY 2')) return 'P2';
-      if (txt.includes('P3') || txt.includes('PRIMARY 3')) return 'P3';
-      if (txt.includes('P4') || txt.includes('PRIMARY 4')) return 'P4';
-      if (txt.includes('P5') || txt.includes('PRIMARY 5')) return 'P5';
-      if (txt.includes('P6') || txt.includes('PRIMARY 6')) return 'P6';
-      if (txt.includes('BABY')) return 'N-BABY';
-      if (txt.includes('MID')) return 'N-MID';
-      if (txt.includes('TOP')) return 'N-TOP';
+      const extracted = extractGradesFromAssignment(sessionUser.assignedSubjectOrGrade);
+      if (extracted.length > 0) return extracted[0];
     }
     return 'P1';
   });
   const [searchQuery, setSearchQuery] = useState<string>('');
-  
+
   // Navigation view mode: 'class-select' (Click to class hub) or 'class-rollcall' (Chosen class roll call only)
   const [viewMode, setViewMode] = useState<'class-select' | 'class-rollcall'>(() => {
-    if (sessionUser?.role === 'Teacher') return 'class-rollcall';
+    if (sessionUser?.role === 'Teacher' || initialGrade) return 'class-rollcall';
     return 'class-select';
   });
   const [classSectionTab, setClassSectionTab] = useState<'ALL' | 'NURSERY' | 'PRIMARY'>('ALL');
 
+  // Keep selectedGrade synced with initialGrade / scopedGrades
+  useEffect(() => {
+    if (initialGrade && (!scopedGrades || scopedGrades.includes(initialGrade))) {
+      setSelectedGrade(initialGrade);
+      setViewMode('class-rollcall');
+    } else if (scopedGrades && scopedGrades.length > 0 && !scopedGrades.includes(selectedGrade)) {
+      setSelectedGrade(scopedGrades[0]);
+      setViewMode('class-rollcall');
+    }
+  }, [initialGrade, scopedGrades]);
+
   // Detect assigned class for Teacher / Leader
   const assignedGrade = useMemo(() => {
+    if (scopedGrades && scopedGrades.length > 0) return scopedGrades[0];
     if (!sessionUser?.assignedSubjectOrGrade) return null;
-    const txt = sessionUser.assignedSubjectOrGrade.toUpperCase();
-    if (txt.includes('P1') || txt.includes('PRIMARY 1')) return 'P1';
-    if (txt.includes('P2') || txt.includes('PRIMARY 2')) return 'P2';
-    if (txt.includes('P3') || txt.includes('PRIMARY 3')) return 'P3';
-    if (txt.includes('P4') || txt.includes('PRIMARY 4')) return 'P4';
-    if (txt.includes('P5') || txt.includes('PRIMARY 5')) return 'P5';
-    if (txt.includes('P6') || txt.includes('PRIMARY 6')) return 'P6';
-    if (txt.includes('BABY')) return 'N-BABY';
-    if (txt.includes('MID')) return 'N-MID';
-    if (txt.includes('TOP')) return 'N-TOP';
-    return null;
-  }, [sessionUser]);
+    const extracted = extractGradesFromAssignment(sessionUser.assignedSubjectOrGrade);
+    return extracted[0] || null;
+  }, [scopedGrades, sessionUser]);
 
   // Current selected grade object
   const currentGradeObj = useMemo(() => {
@@ -108,11 +145,12 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
   // Handle clicking on a class card -> directly goes to students of chosen class only
   const handleSelectClass = (gradeCode: string) => {
+    if (scopedGrades && !scopedGrades.includes(gradeCode)) return;
     setSelectedGrade(gradeCode);
     setViewMode('class-rollcall');
     setNewLearnerData((prev) => ({
       ...prev,
-      gradeCode: gradeCode === 'ALL' ? 'P1' : gradeCode,
+      gradeCode: gradeCode === 'ALL' ? (scopedGrades?.[0] || 'P1') : gradeCode,
     }));
   };
 
@@ -237,9 +275,9 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     setSuccessMessage(null);
   }, [selectedDate, students, attendanceSyncTick]);
 
-  // Filter students
+  // Filter students (strictly within scopedGrades if teacher-scoped)
   const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
+    return scopedStudents.filter((s) => {
       if (selectedGrade !== 'ALL' && s.gradeCode !== selectedGrade) {
         return false;
       }
@@ -252,7 +290,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
       }
       return true;
     });
-  }, [students, selectedGrade, searchQuery]);
+  }, [scopedStudents, selectedGrade, searchQuery]);
 
   // Attendance metrics
   const stats = useMemo(() => {
@@ -458,7 +496,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
   // Excel Handlers: Template Download & File Upload / Connection
   const handleDownloadExcelTemplate = () => {
-    const dataToExport = students.map((s) => ({
+    const dataToExport = (filteredStudents.length > 0 ? filteredStudents : scopedStudents).map((s) => ({
       'Student Name': s.fullName,
       'Registration Number': s.regNumber,
       'Grade / Class': s.gradeCode,
@@ -477,7 +515,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
   // 1. Export Daily Attendance Records to CSV (Official School Reporting Format)
   const handleExportCSV = () => {
-    const targetStudents = filteredStudents.length > 0 ? filteredStudents : students;
+    const targetStudents = filteredStudents.length > 0 ? filteredStudents : scopedStudents;
     const gradeLabel = selectedGrade === 'ALL' ? 'All Classes' : (currentGradeObj ? currentGradeObj.name : selectedGrade);
     
     // School reporting header metadata
@@ -528,7 +566,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
   // 2. Export Daily Attendance Records to PDF (Formal Printable Document with Sign-off)
   const handleExportPDF = () => {
-    const targetStudents = filteredStudents.length > 0 ? filteredStudents : students;
+    const targetStudents = filteredStudents.length > 0 ? filteredStudents : scopedStudents;
     const gradeLabel = selectedGrade === 'ALL' ? 'All Classes Combined' : (currentGradeObj ? currentGradeObj.name : selectedGrade);
 
     const doc = new jsPDF({
@@ -997,18 +1035,20 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
         {/* Mode Switcher Tabs: 1. Click to Class Hub | 2. Chosen Class Roll Call */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
           <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-full sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setViewMode('class-select')}
-              className={`min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
-                viewMode === 'class-select'
-                  ? 'bg-blue-800 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers className="w-4 h-4 shrink-0" />
-              <span>1. Choose Class (All Grades)</span>
-            </button>
+            {(!scopedGrades || scopedGrades.length > 1) && (
+              <button
+                type="button"
+                onClick={() => setViewMode('class-select')}
+                className={`min-h-[42px] px-3.5 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+                  viewMode === 'class-select'
+                    ? 'bg-blue-800 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Layers className="w-4 h-4 shrink-0" />
+                <span>{scopedGrades ? `1. Assigned Classes (${scopedGrades.join(', ')})` : '1. Choose Class (All Grades)'}</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -1020,7 +1060,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
               }`}
             >
               <Users className="w-4 h-4 text-amber-300 shrink-0" />
-              <span>2. {currentGradeObj ? currentGradeObj.name : selectedGrade} Roll Call Form</span>
+              <span>{scopedGrades && scopedGrades.length === 1 ? `${currentGradeObj ? currentGradeObj.name : selectedGrade} Roll Call (Your Students Only)` : `2. ${currentGradeObj ? currentGradeObj.name : selectedGrade} Roll Call Form`}</span>
             </button>
           </div>
 
@@ -1160,6 +1200,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
             {/* Class Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {ACADEMIC_GRADES.filter((g) => {
+                if (scopedGrades && !scopedGrades.includes(g.code)) return false;
                 if (classSectionTab === 'NURSERY') return g.level === 'Nursery';
                 if (classSectionTab === 'PRIMARY') return g.level === 'Primary';
                 return true;
@@ -1248,52 +1289,54 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                 );
               })}
 
-              {/* Card for All Classes Combined Roster Overview */}
-              <div
-                onClick={() => handleSelectClass('ALL')}
-                className="group relative rounded-3xl border border-dashed border-slate-300 hover:border-blue-400 bg-slate-50/70 p-5 transition-all cursor-pointer hover:shadow-md flex flex-col justify-between space-y-4"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-black px-2.5 py-1 rounded-xl bg-purple-100 text-purple-900 border border-purple-200">
-                      ALL
-                    </span>
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      School-Wide
-                    </span>
+              {/* Card for All Classes Combined Roster Overview (Hidden for Teachers) */}
+              {!scopedGrades && (
+                <div
+                  onClick={() => handleSelectClass('ALL')}
+                  className="group relative rounded-3xl border border-dashed border-slate-300 hover:border-blue-400 bg-slate-50/70 p-5 transition-all cursor-pointer hover:shadow-md flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-black px-2.5 py-1 rounded-xl bg-purple-100 text-purple-900 border border-purple-200">
+                        ALL
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        School-Wide
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="text-base font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
+                        All Classes Combined Roster
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Full view across all Nursery and Primary classes for administrator audits and bulk Excel exports.
+                      </p>
+                    </div>
                   </div>
 
-                  <div>
-                    <h4 className="text-base font-bold text-slate-900 group-hover:text-blue-700 transition-colors">
-                      All Classes Combined Roster
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Full view across all Nursery and Primary classes for administrator audits and bulk Excel exports.
-                    </p>
+                  <div className="space-y-3 pt-3 border-t border-slate-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600 font-medium">Total Enrolled:</span>
+                      <span className="font-bold font-mono text-slate-900 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
+                        {students.length} Learners
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectClass('ALL');
+                      }}
+                      className="w-full py-2.5 bg-slate-800 group-hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Open All Classes Overview</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-amber-300" />
+                    </button>
                   </div>
                 </div>
-
-                <div className="space-y-3 pt-3 border-t border-slate-200">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-600 font-medium">Total Enrolled:</span>
-                    <span className="font-bold font-mono text-slate-900 bg-white px-2 py-0.5 rounded-lg border border-slate-200">
-                      {students.length} Learners
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSelectClass('ALL');
-                    }}
-                    className="w-full py-2.5 bg-slate-800 group-hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Open All Classes Overview</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-amber-300" />
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1308,14 +1351,16 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
           <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('class-select')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>← Back to Classes Directory</span>
-                </button>
+                {(!scopedGrades || scopedGrades.length > 1) && (
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('class-select')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>← Back to Classes Directory</span>
+                  </button>
+                )}
 
                 <div className="h-5 w-px bg-slate-200 hidden sm:block" />
 
@@ -1333,39 +1378,43 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
               </div>
             </div>
 
-            {/* Quick Switch Class Pills (Click any class to jump immediately) */}
-            <div className="pt-2 border-t border-slate-100">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                Quick Switch Class:
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {ACADEMIC_GRADES.map((g) => (
-                  <button
-                    key={g.code}
-                    type="button"
-                    onClick={() => handleSelectClass(g.code)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      selectedGrade === g.code
-                        ? 'bg-blue-800 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {g.code}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => handleSelectClass('ALL')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    selectedGrade === 'ALL'
-                      ? 'bg-blue-800 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  All
-                </button>
+            {/* Quick Switch Class Pills (Scoped strictly to assigned grades if teacher) */}
+            {(!scopedGrades || scopedGrades.length > 1) && (
+              <div className="pt-2 border-t border-slate-100">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                  {scopedGrades ? 'Switch Your Assigned Class:' : 'Quick Switch Class:'}
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {ACADEMIC_GRADES.filter((g) => !scopedGrades || scopedGrades.includes(g.code)).map((g) => (
+                    <button
+                      key={g.code}
+                      type="button"
+                      onClick={() => handleSelectClass(g.code)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        selectedGrade === g.code
+                          ? 'bg-blue-800 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {g.code}
+                    </button>
+                  ))}
+                  {!scopedGrades && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectClass('ALL')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        selectedGrade === 'ALL'
+                          ? 'bg-blue-800 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      All
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Action Controls & Excel Tools for this Chosen Class */}
