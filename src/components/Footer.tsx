@@ -64,7 +64,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenApply, onOpenT
             </p>
             <div className="pt-2 text-xs text-slate-400">
               <span className="font-semibold text-slate-300 block mb-0.5">School Motto:</span>
-              <span className="italic font-serif">&ldquo;Nurturing Minds, Building Character, Inspiring Hope.&rdquo;</span>
+              <span className="italic font-serif">&ldquo;{SCHOOL_INFO.motto}&rdquo;</span>
             </div>
           </div>
 
@@ -127,7 +127,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenApply, onOpenT
                   onClick={() => onNavigate('admin')}
                   className="text-amber-400 hover:text-amber-300 font-medium transition-colors cursor-pointer"
                 >
-                  Staff & Management Portal
+                  School Management Portal
                 </button>
               </li>
             </ul>
@@ -208,7 +208,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenApply, onOpenT
               onClick={() => onNavigate('admin')}
               className="hover:text-white transition-colors cursor-pointer"
             >
-              Staff Portal
+              School Portal
             </button>
           </div>
         </div>

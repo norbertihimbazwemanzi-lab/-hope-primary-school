@@ -121,7 +121,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     Record<
       string,
       {
-        status: 'Present' | 'Absent' | 'Late';
+        status: 'Present' | 'Absent' | 'Late' | 'Excused';
         notes: string;
         dispatched?: boolean;
         dispatchError?: string;
@@ -135,6 +135,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     let present = 0;
     let absent = 0;
     let late = 0;
+    let excused = 0;
     let markedCount = 0;
 
     classStudents.forEach((s) => {
@@ -144,10 +145,11 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
         if (rec.status === 'Present') present++;
         else if (rec.status === 'Absent') absent++;
         else if (rec.status === 'Late') late++;
+        else if (rec.status === 'Excused') excused++;
       }
     });
 
-    return { total: classStudents.length, present, absent, late, markedCount };
+    return { total: classStudents.length, present, absent, late, excused, markedCount };
   };
 
   const [isSavingAndSending, setIsSavingAndSending] = useState(false);
@@ -165,7 +167,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
       regNumber: string;
       gradeCode: string;
       date: string;
-      status: 'Present' | 'Absent' | 'Late';
+      status: 'Present' | 'Absent' | 'Late' | 'Excused';
       parentEmail: string;
       parentPhone: string;
       notes: string;
@@ -211,7 +213,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
   // Load existing records for the selected date
   useEffect(() => {
     const existingRecords = getAttendanceRecords(selectedDate);
-    const stateMap: Record<string, { status: 'Present' | 'Absent' | 'Late'; notes: string; dispatched?: boolean }> = {};
+    const stateMap: Record<string, { status: 'Present' | 'Absent' | 'Late' | 'Excused'; notes: string; dispatched?: boolean }> = {};
     
     // Default all students to 'Present' unless a record already exists
     students.forEach((s) => {
@@ -257,22 +259,24 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     let present = 0;
     let absent = 0;
     let late = 0;
+    let excused = 0;
 
     filteredStudents.forEach((s) => {
       const status = attendanceState[s.id]?.status || 'Present';
       if (status === 'Present') present++;
       else if (status === 'Absent') absent++;
       else if (status === 'Late') late++;
+      else if (status === 'Excused') excused++;
     });
 
     const total = filteredStudents.length;
-    const presentRate = total > 0 ? Math.round((present / total) * 100) : 0;
+    const presentRate = total > 0 ? Math.round(((present + excused) / total) * 100) : 0;
 
-    return { total, present, absent, late, presentRate };
+    return { total, present, absent, late, excused, presentRate };
   }, [filteredStudents, attendanceState]);
 
   // Set single student status
-  const handleSetStatus = (studentId: string, status: 'Present' | 'Absent' | 'Late') => {
+  const handleSetStatus = (studentId: string, status: 'Present' | 'Absent' | 'Late' | 'Excused') => {
     setAttendanceState((prev) => ({
       ...prev,
       [studentId]: {
@@ -306,7 +310,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
   };
 
   // Dispatch attendance notification for a single student directly to parent Gmail
-  const sendNotificationToParent = async (student: EnrolledStudent, status: 'Present' | 'Absent' | 'Late', notes: string) => {
+  const sendNotificationToParent = async (student: EnrolledStudent, status: 'Present' | 'Absent' | 'Late' | 'Excused', notes: string) => {
     if (!student.parentEmail || !student.parentEmail.includes('@')) {
       return { success: false, error: 'No valid parent Gmail' };
     }
@@ -395,7 +399,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     setSuccessMessage(null);
 
     const recordsToSave: AttendanceRecord[] = [];
-    const absentOrLateStudents: { student: EnrolledStudent; status: 'Present' | 'Absent' | 'Late'; notes: string }[] = [];
+    const absentOrLateStudents: { student: EnrolledStudent; status: 'Present' | 'Absent' | 'Late' | 'Excused'; notes: string }[] = [];
 
     filteredStudents.forEach((s) => {
       const entry = attendanceState[s.id] || { status: 'Present', notes: '' };
@@ -727,8 +731,9 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
         const date = getVal('Date', 'Attendance Date') || selectedDate;
 
         let statusRaw = getVal('Status (Present/Absent/Late)', 'Status', 'Attendance', 'Presence').toUpperCase();
-        let status: 'Present' | 'Absent' | 'Late' = 'Present';
-        if (statusRaw.includes('ABS') || statusRaw === 'A') status = 'Absent';
+        let status: 'Present' | 'Absent' | 'Late' | 'Excused' = 'Present';
+        if (statusRaw.includes('EXC') || statusRaw === 'E') status = 'Excused';
+        else if (statusRaw.includes('ABS') || statusRaw === 'A') status = 'Absent';
         else if (statusRaw.includes('LAT') || statusRaw === 'L') status = 'Late';
         else status = 'Present';
 
@@ -771,7 +776,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
     setIsProcessingExcel(true);
 
     const recordsToSave: AttendanceRecord[] = [];
-    const absentOrLateToNotify: { student: EnrolledStudent; status: 'Present' | 'Absent' | 'Late'; notes: string }[] = [];
+    const absentOrLateToNotify: { student: EnrolledStudent; status: 'Present' | 'Absent' | 'Late' | 'Excused'; notes: string }[] = [];
     const currentStudents = getEnrolledStudents();
 
     for (const row of parsedExcelRows) {
@@ -856,7 +861,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
 
   const executeClearDateAttendance = () => {
     clearAttendanceForDate(selectedDate);
-    const resetMap: Record<string, { status: 'Present' | 'Absent' | 'Late'; notes: string; dispatched?: boolean }> = {};
+    const resetMap: Record<string, { status: 'Present' | 'Absent' | 'Late' | 'Excused'; notes: string; dispatched?: boolean }> = {};
     students.forEach((s) => {
       resetMap[s.id] = { status: 'Present', notes: '', dispatched: false };
     });
@@ -1050,8 +1055,8 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
           </div>
 
           <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-3.5 space-y-1">
-            <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider block">Late Arrivals</span>
-            <span className="text-2xl font-black text-amber-700 font-mono">{stats.late}</span>
+            <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider block">Late / Excused</span>
+            <span className="text-2xl font-black text-amber-700 font-mono">{stats.late} / {stats.excused}</span>
           </div>
 
           <div className="col-span-2 sm:col-span-1 bg-blue-50/70 border border-blue-200 rounded-2xl p-3.5 space-y-1">
@@ -1658,6 +1663,19 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({ 
                         >
                           <Clock className="w-3.5 h-3.5" />
                           <span>Late</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSetStatus(student.id, 'Excused')}
+                          className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                            currentStatus === 'Excused'
+                              ? 'bg-blue-700 text-white shadow-sm ring-2 ring-blue-600/30'
+                              : 'bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-800'
+                          }`}
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                          <span>Excused</span>
                         </button>
 
                         <button

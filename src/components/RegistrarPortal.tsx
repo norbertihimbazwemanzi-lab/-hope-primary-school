@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import {
   EnrolledStudent,
-  getEnrolledStudents,
   enrollStudentByDOS,
   updateEnrolledStudent,
-  deleteEnrolledStudent,
+  promoteStudentsBatch,
   getCurrentSessionUser,
 } from '../services/adminStore';
+import { uploadSchoolAsset } from '../services/storageService';
+import { StudentIdAndProfileModal } from './StudentIdAndProfileModal';
 import { ACADEMIC_GRADES } from '../data/schoolData';
 import {
   UserCheck,
@@ -47,11 +48,21 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
     gender: 'Female' as 'Male' | 'Female',
     dob: '2018-05-15',
     gradeCode: 'P1',
+    stream: 'Stream A',
+    address: 'Mugina Sector, Kamonyi',
+    admissionDate: new Date().toISOString().split('T')[0],
+    previousSchool: '',
+    photoUrl: '',
     parentName: '',
     parentPhone: '+250 78',
     parentEmail: '',
     feedbackNotes: '',
   });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Selected IDs for bulk promotion & Profile/ID modal
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [profileModalStudent, setProfileModalStudent] = useState<EnrolledStudent | null>(null);
 
   // Modal 2: Edit Profile & Fix Typos
   const [editingStudent, setEditingStudent] = useState<EnrolledStudent | null>(null);
@@ -59,6 +70,8 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
     fullName: '',
     gender: 'Female' as 'Male' | 'Female',
     dob: '',
+    stream: 'Stream A',
+    address: '',
     parentName: '',
     parentPhone: '',
     parentEmail: '',
@@ -74,6 +87,26 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
   // Feedback banner
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [onboardError, setOnboardError] = useState<string | null>(null);
+
+  const handleBulkPromoteSelected = () => {
+    if (selectedIds.length === 0) return;
+    promoteStudentsBatch(selectedIds, String(new Date().getFullYear()), sessionUser?.name || 'Registrar');
+    setSuccessMsg(`Promoted ${selectedIds.length} selected learner(s) to their next grade level.`);
+    setSelectedIds([]);
+    onStudentsUpdated();
+  };
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const res = await uploadSchoolAsset(file, onboardForm.fullName || 'student_photo', 'student_photo');
+      if (res.url) setOnboardForm((p) => ({ ...p, photoUrl: res.url }));
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   // Filtered Students
   const filteredStudents = useMemo(() => {
@@ -109,12 +142,17 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
       gender: onboardForm.gender,
       dob: onboardForm.dob,
       gradeCode: onboardForm.gradeCode,
+      stream: onboardForm.stream || 'Stream A',
+      address: onboardForm.address.trim() || undefined,
+      admissionDate: onboardForm.admissionDate || undefined,
+      previousSchool: onboardForm.previousSchool.trim() || undefined,
+      photoUrl: onboardForm.photoUrl || undefined,
       parentName: onboardForm.parentName.trim(),
       parentPhone: onboardForm.parentPhone.trim(),
       parentEmail: onboardForm.parentEmail.trim() || `${cleanName}.parent@gmail.com`,
       studentUsername: cleanName,
       studentPassword: 'student@2026',
-      enrolledBy: `${sessionUser?.name || 'Chantal Mukashyaka'} (Registrar)`,
+      enrolledBy: `${sessionUser?.name || 'Registrar'}`,
       status: 'Active',
       feedbackNotes: onboardForm.feedbackNotes.trim() || undefined,
     });
@@ -128,6 +166,11 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
       gender: 'Female',
       dob: '2018-05-15',
       gradeCode: 'P1',
+      stream: 'Stream A',
+      address: 'Mugina Sector, Kamonyi',
+      admissionDate: new Date().toISOString().split('T')[0],
+      previousSchool: '',
+      photoUrl: '',
       parentName: '',
       parentPhone: '+250 78',
       parentEmail: '',
@@ -143,6 +186,8 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
       fullName: student.fullName,
       gender: student.gender,
       dob: student.dob || '',
+      stream: student.stream || 'Stream A',
+      address: student.address || '',
       parentName: student.parentName,
       parentPhone: student.parentPhone,
       parentEmail: student.parentEmail,
@@ -160,6 +205,8 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
       fullName: editForm.fullName.trim(),
       gender: editForm.gender,
       dob: editForm.dob,
+      stream: editForm.stream.trim() || 'Stream A',
+      address: editForm.address.trim() || undefined,
       parentName: editForm.parentName.trim(),
       parentPhone: editForm.parentPhone.trim(),
       parentEmail: editForm.parentEmail.trim(),
@@ -281,8 +328,17 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
             />
           </div>
 
-          {/* Grade Filter */}
-          <div className="flex items-center gap-2">
+          {/* Grade Filter & Bulk Promote */}
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedIds.length > 0 && (
+              <button
+                type="button"
+                onClick={handleBulkPromoteSelected}
+                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Promote Selected ({selectedIds.length})
+              </button>
+            )}
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
@@ -303,6 +359,7 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
               <tr>
+                <th className="p-3.5 w-8">Sel</th>
                 <th className="p-3.5">Reg Number</th>
                 <th className="p-3.5">Learner Profile</th>
                 <th className="p-3.5">Gender & DOB</th>
@@ -315,6 +372,17 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
             <tbody className="divide-y divide-slate-100">
               {filteredStudents.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="p-3.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(s.id)}
+                      onChange={(e) =>
+                        setSelectedIds((prev) =>
+                          e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id)
+                        )
+                      }
+                    />
+                  </td>
                   <td className="p-3.5 font-mono font-bold text-purple-900">{s.regNumber}</td>
                   <td className="p-3.5">
                     <strong className="block font-bold text-slate-900">{s.fullName}</strong>
@@ -330,7 +398,7 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
                   </td>
                   <td className="p-3.5">
                     <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-mono bg-purple-50 text-purple-900 border border-purple-200">
-                      {s.gradeCode}
+                      {s.gradeCode} · {s.stream || 'Stream A'}
                     </span>
                   </td>
                   <td className="p-3.5">
@@ -351,6 +419,15 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
                   </td>
                   <td className="p-3.5">
                     <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setProfileModalStudent(s)}
+                        className="px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                        title="View Profile, Student ID Card & Transfer"
+                      >
+                        ID / Profile
+                      </button>
+
                       {/* Action 1: Edit Profile & Fix Typos */}
                       <button
                         type="button"
@@ -507,6 +584,52 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
                   />
                 </div>
 
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Stream</label>
+                  <input
+                    type="text"
+                    value={onboardForm.stream}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, stream: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3 py-2.5"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Admission Date</label>
+                  <input
+                    type="date"
+                    value={onboardForm.admissionDate}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, admissionDate: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3 py-2.5"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Home Address</label>
+                  <input
+                    type="text"
+                    value={onboardForm.address}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, address: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3 py-2.5"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Previous School (Optional)</label>
+                  <input
+                    type="text"
+                    value={onboardForm.previousSchool}
+                    onChange={(e) => setOnboardForm({ ...onboardForm, previousSchool: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3 py-2.5"
+                  />
+                </div>
+
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Student Portrait Photo (Optional)</label>
+                  <input type="file" accept="image/*" onChange={handlePhotoFileChange} className="text-xs text-slate-500 w-full" />
+                  {uploadingPhoto && <span className="text-[11px] text-purple-700">Uploading photo...</span>}
+                </div>
+
                 <div className="space-y-1 sm:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Admissions Notes / Special Instructions
@@ -659,6 +782,27 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Stream</label>
+                  <input
+                    type="text"
+                    value={editForm.stream}
+                    onChange={(e) => setEditForm({ ...editForm, stream: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3 py-2"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Home Address</label>
+                  <input
+                    type="text"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3 py-2"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Enrollment Status
@@ -779,6 +923,13 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
           </div>
         </div>
       )}
+
+      <StudentIdAndProfileModal
+        student={profileModalStudent}
+        onClose={() => setProfileModalStudent(null)}
+        onStudentUpdated={onStudentsUpdated}
+        canTransfer
+      />
     </div>
   );
 };

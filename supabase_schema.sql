@@ -376,6 +376,132 @@ DO $$ BEGIN
   CREATE POLICY "Public Write Chats" ON public.applicant_chats FOR ALL USING (true) WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- 15b. Extended Student Profile Columns (Phase 4)
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS photo_url TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS stream TEXT DEFAULT 'Stream A';
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS admission_date TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS previous_school TEXT;
+ALTER TABLE public.enrolled_students ADD COLUMN IF NOT EXISTS academic_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- 15c. SMS Domain Store Tables (Normalized Academic, Exam, LMS, Messaging & Audit tables)
+CREATE TABLE IF NOT EXISTS public.academic_years_terms (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.academic_years_terms ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read academic_years_terms" ON public.academic_years_terms FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write academic_years_terms" ON public.academic_years_terms FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.school_classes_streams (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.school_classes_streams ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read school_classes_streams" ON public.school_classes_streams FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write school_classes_streams" ON public.school_classes_streams FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.school_subjects (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.school_subjects ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read school_subjects" ON public.school_subjects FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write school_subjects" ON public.school_subjects FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.teacher_assignments (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.teacher_assignments ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read teacher_assignments" ON public.teacher_assignments FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write teacher_assignments" ON public.teacher_assignments FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.exam_config (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.exam_config ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read exam_config" ON public.exam_config FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write exam_config" ON public.exam_config FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.exam_schedules (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.exam_schedules ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read exam_schedules" ON public.exam_schedules FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write exam_schedules" ON public.exam_schedules FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.exam_marks (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.exam_marks ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read exam_marks" ON public.exam_marks FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write exam_marks" ON public.exam_marks FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.lesson_plans (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.lesson_plans ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read lesson_plans" ON public.lesson_plans FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write lesson_plans" ON public.lesson_plans FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.learning_materials (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.learning_materials ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read learning_materials" ON public.learning_materials FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write learning_materials" ON public.learning_materials FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.homework_assignments (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.homework_assignments ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read homework_assignments" ON public.homework_assignments FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write homework_assignments" ON public.homework_assignments FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.class_timetables (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.class_timetables ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read class_timetables" ON public.class_timetables FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write class_timetables" ON public.class_timetables FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.parent_teacher_messages (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.parent_teacher_messages ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read parent_teacher_messages" ON public.parent_teacher_messages FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write parent_teacher_messages" ON public.parent_teacher_messages FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id TEXT PRIMARY KEY,
+  data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY "Public Read audit_logs" ON public.audit_logs FOR SELECT USING (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY "Public Write audit_logs" ON public.audit_logs FOR ALL USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- 16. Public Media Storage Bucket (school-media)
 DO $$ BEGIN
   INSERT INTO storage.buckets (id, name, public)
@@ -393,7 +519,7 @@ DO $$ BEGIN
     ON storage.objects FOR ALL USING (bucket_id = 'school-media') WITH CHECK (bucket_id = 'school-media');
 EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
--- 17. Enable Real-Time Replication safely across ALL 15 tables
+-- 17. Enable Real-Time Replication safely across ALL tables
 DO $$
 DECLARE
   tbl TEXT;
@@ -412,7 +538,20 @@ DECLARE
     'registration_documents',
     'visitor_inquiries',
     'campus_tour_bookings',
-    'applicant_chats'
+    'applicant_chats',
+    'academic_years_terms',
+    'school_classes_streams',
+    'school_subjects',
+    'teacher_assignments',
+    'exam_config',
+    'exam_schedules',
+    'exam_marks',
+    'lesson_plans',
+    'learning_materials',
+    'homework_assignments',
+    'class_timetables',
+    'parent_teacher_messages',
+    'audit_logs'
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables LOOP

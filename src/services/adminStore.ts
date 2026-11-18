@@ -95,12 +95,34 @@ import {
   fetchApplicantChatByRefFromSupabase,
 } from './supabaseClient';
 
-export type UserRole = 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD' | 'Student';
+export type UserRole =
+  | 'SuperAdmin'
+  | 'SchoolAdmin'
+  | 'HeadTeacher'
+  | 'Accountant'
+  | 'Teacher'
+  | 'Parent'
+  | 'Student'
+  | 'Admin'
+  | 'DOS'
+  | 'Finance'
+  | 'Registrar'
+  | 'DOD';
 
 export interface StaffMember {
   id: string;
   name: string;
-  role: 'Admin' | 'DOS' | 'Finance' | 'Registrar' | 'Teacher' | 'DOD';
+  role:
+    | 'SuperAdmin'
+    | 'SchoolAdmin'
+    | 'HeadTeacher'
+    | 'Accountant'
+    | 'Admin'
+    | 'DOS'
+    | 'Finance'
+    | 'Registrar'
+    | 'Teacher'
+    | 'DOD';
   email: string;
   phone: string;
   username: string;
@@ -110,6 +132,16 @@ export interface StaffMember {
   status: 'Active' | 'Inactive';
 }
 
+export interface StudentAcademicHistoryEntry {
+  year: string;
+  fromGrade: string;
+  toGrade: string;
+  action: 'Enrolled' | 'Promoted' | 'Transferred' | 'Graduated';
+  date: string;
+  notes?: string;
+  recordedBy: string;
+}
+
 export interface EnrolledStudent {
   id: string;
   regNumber: string;
@@ -117,6 +149,12 @@ export interface EnrolledStudent {
   gender: 'Male' | 'Female';
   dob: string;
   gradeCode: string;
+  stream?: string;
+  photoUrl?: string;
+  address?: string;
+  admissionDate?: string;
+  previousSchool?: string;
+  academicHistory?: StudentAcademicHistoryEntry[];
   parentName: string;
   parentPhone: string;
   parentEmail: string;
@@ -124,7 +162,7 @@ export interface EnrolledStudent {
   studentPassword: string;
   enrolledBy: string;
   enrolledAt: string;
-  status: 'Active' | 'Awaiting Approval' | 'Suspended';
+  status: 'Active' | 'Awaiting Approval' | 'Suspended' | 'Transferred' | 'Graduated';
   feedbackNotes?: string;
 }
 
@@ -136,7 +174,7 @@ export interface AttendanceRecord {
   studentName: string;
   parentEmail: string;
   parentPhone: string;
-  status: 'Present' | 'Absent' | 'Late';
+  status: 'Present' | 'Absent' | 'Late' | 'Excused';
   markedBy: string;
   notes?: string;
   emailNotified: boolean;
@@ -1451,6 +1489,84 @@ export const deleteEnrolledStudent = (id: string): EnrolledStudent[] => {
   return updated;
 };
 
+const GRADE_PROGRESSION_ORDER = ['N-BABY', 'N-MID', 'N-TOP', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
+
+export const getNextGradeCode = (currentGrade: string): string | 'GRADUATED' => {
+  const idx = GRADE_PROGRESSION_ORDER.indexOf(currentGrade);
+  if (idx === -1) return 'P1';
+  if (idx >= GRADE_PROGRESSION_ORDER.length - 1) return 'GRADUATED';
+  return GRADE_PROGRESSION_ORDER[idx + 1];
+};
+
+export const promoteStudentsBatch = (
+  studentIds: string[],
+  targetGradeOverride?: string,
+  targetStream?: string,
+  academicYear = '2026',
+  recordedBy = 'Head Teacher'
+): EnrolledStudent[] => {
+  const list = getEnrolledStudents();
+  const idSet = new Set(studentIds);
+  const today = new Date().toISOString().split('T')[0];
+
+  const updated = list.map((s) => {
+    if (!idSet.has(s.id)) return s;
+    const nextGrade = targetGradeOverride || getNextGradeCode(s.gradeCode);
+    const isGrad = nextGrade === 'GRADUATED';
+    const nextStatus: EnrolledStudent['status'] = isGrad ? 'Graduated' : 'Active';
+    const finalGrade = isGrad ? s.gradeCode : nextGrade;
+    const historyEntry: StudentAcademicHistoryEntry = {
+      year: academicYear,
+      fromGrade: s.gradeCode,
+      toGrade: isGrad ? 'Graduated (PLE Completed)' : finalGrade,
+      action: isGrad ? 'Graduated' : 'Promoted',
+      date: today,
+      notes: isGrad ? 'Completed Primary 6' : `Promoted from ${s.gradeCode} to ${finalGrade}`,
+      recordedBy,
+    };
+    return {
+      ...s,
+      gradeCode: finalGrade,
+      stream: targetStream || s.stream || 'Stream A',
+      status: nextStatus,
+      academicHistory: [historyEntry, ...(s.academicHistory || [])],
+    };
+  });
+
+  saveEnrolledStudents(updated);
+  return updated;
+};
+
+export const transferStudentRecord = (
+  studentId: string,
+  destinationSchool: string,
+  transferNotes: string,
+  recordedBy = 'School Administration'
+): EnrolledStudent[] => {
+  const list = getEnrolledStudents();
+  const today = new Date().toISOString().split('T')[0];
+  const updated = list.map((s) => {
+    if (s.id !== studentId) return s;
+    const historyEntry: StudentAcademicHistoryEntry = {
+      year: today.slice(0, 4),
+      fromGrade: s.gradeCode,
+      toGrade: destinationSchool || 'External Transfer',
+      action: 'Transferred',
+      date: today,
+      notes: transferNotes,
+      recordedBy,
+    };
+    return {
+      ...s,
+      status: 'Transferred' as const,
+      feedbackNotes: `Transferred to ${destinationSchool} on ${today}. ${transferNotes}`.trim(),
+      academicHistory: [historyEntry, ...(s.academicHistory || [])],
+    };
+  });
+  saveEnrolledStudents(updated);
+  return updated;
+};
+
 // --- Attendance Tracker ---
 export const getAttendanceRecords = (date?: string, gradeCode?: string): AttendanceRecord[] => {
   try {
@@ -2340,6 +2456,7 @@ export interface CurrentSessionUser {
   username: string;
   email: string;
   assignedSubjectOrGrade?: string;
+  linkedStudentIds?: string[];
 }
 
 let inMemorySessionUser: CurrentSessionUser | null = null;
@@ -2416,7 +2533,12 @@ export const setAdminNotificationEmail = (email: string) => {
 
 export const isAdminAuthenticated = (): boolean => {
   const user = getCurrentSessionUser();
-  return !!user && ['Admin', 'DOS', 'Finance', 'Registrar', 'Teacher', 'DOD'].includes(user.role);
+  return (
+    !!user &&
+    ['SuperAdmin', 'SchoolAdmin', 'HeadTeacher', 'Accountant', 'Admin', 'DOS', 'Finance', 'Registrar', 'Teacher', 'DOD'].includes(
+      user.role
+    )
+  );
 };
 
 // --- Required Registration Documentation Management (Admin configurable) ---

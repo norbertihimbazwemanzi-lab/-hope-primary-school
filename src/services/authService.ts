@@ -11,7 +11,7 @@ import {
   User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { getStaffMembers, UserRole, CurrentSessionUser } from './adminStore';
+import { getStaffMembers, getEnrolledStudents, UserRole, CurrentSessionUser } from './adminStore';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
@@ -109,7 +109,7 @@ export const emailPasswordSignIn = async (
 };
 
 /**
- * Resolves an authenticated Firebase identity to their strict institutional staff role.
+ * Resolves an authenticated Firebase identity to their strict institutional staff or parent role.
  * Replaces manual role switching with zero-trust identity-based access control.
  */
 export type RoleResolutionResult =
@@ -155,7 +155,7 @@ export const resolveStaffRoleForFirebaseUser = (firebaseUser: User): RoleResolut
     };
   }
 
-  // 3. Registered Enrolled Staff Members (DOS, DOD, Teacher, Finance, Registrar)
+  // 3. Registered Enrolled Staff Members (SuperAdmin, SchoolAdmin, HeadTeacher, DOS, DOD, Teacher, Accountant/Finance, Registrar)
   const staffList = getStaffMembers();
   const staffMatch = staffList.find(
     (s) =>
@@ -180,12 +180,104 @@ export const resolveStaffRoleForFirebaseUser = (firebaseUser: User): RoleResolut
     };
   }
 
-  // 4. Unauthorized User: Not in authorized staff directory
+  // 4. Verified Parent / Guardian email matched to enrolled learners
+  const enrolledStudents = getEnrolledStudents();
+  const linkedChildren = enrolledStudents.filter(
+    (st) => userEmail && st.parentEmail && st.parentEmail.toLowerCase().trim() === userEmail
+  );
+  if (linkedChildren.length > 0) {
+    const primaryParentName = linkedChildren[0].parentName || firebaseUser.displayName || 'Parent / Guardian';
+    return {
+      authorized: true,
+      firebaseUser,
+      session: {
+        id: `parent-${userEmail}`,
+        name: primaryParentName,
+        role: 'Parent',
+        username: userEmail,
+        email: userEmail,
+        linkedStudentIds: linkedChildren.map((c) => c.id),
+      },
+    };
+  }
+
+  // 5. Unauthorized User: Not in authorized staff or parent directory
   return {
     authorized: false,
     email: userEmail || 'No email associated with account',
     reason:
-      'This Google / Firebase identity is not enrolled in the Mugina Hope Academy staff directory. Access to the administration portal is restricted to verified school personnel.',
+      'This Google / Firebase identity is not enrolled in the Mugina Hope Academy staff or parent directory. Access is restricted to verified school personnel and registered guardians.',
+  };
+};
+
+/**
+ * Credential authentication for Parents (Parent Email/Phone + Student Reg# or 'parent2026')
+ * and Students (Student Username or Reg# + Student Password)
+ */
+export const authenticateParentAccount = (
+  identifier: string,
+  secret: string
+): CurrentSessionUser | null => {
+  const cleanId = identifier.trim().toLowerCase();
+  const cleanPhone = cleanId.replace(/\s+/g, '');
+  const cleanSecret = secret.trim();
+  if (!cleanId || !cleanSecret) return null;
+
+  const students = getEnrolledStudents();
+  const matchedChildren = students.filter((s) => {
+    const pEmail = (s.parentEmail || '').trim().toLowerCase();
+    const pPhone = (s.parentPhone || '').replace(/\s+/g, '').toLowerCase();
+    return (pEmail && pEmail === cleanId) || (pPhone && (pPhone === cleanPhone || pPhone.endsWith(cleanPhone)));
+  });
+
+  if (matchedChildren.length === 0) return null;
+
+  // Parent verifies using child's registration number, child's studentPassword, or shared guardian PIN 'parent2026'
+  const isSecretValid =
+    cleanSecret.toLowerCase() === 'parent2026' ||
+    matchedChildren.some(
+      (c) =>
+        c.regNumber.toLowerCase() === cleanSecret.toLowerCase() ||
+        c.studentPassword === cleanSecret
+    );
+
+  if (!isSecretValid) return null;
+
+  return {
+    id: `parent-${matchedChildren[0].parentEmail || cleanId}`,
+    name: matchedChildren[0].parentName || 'Parent / Guardian',
+    role: 'Parent',
+    username: matchedChildren[0].parentEmail || identifier.trim(),
+    email: matchedChildren[0].parentEmail || '',
+    linkedStudentIds: matchedChildren.map((c) => c.id),
+  };
+};
+
+export const authenticateStudentAccount = (
+  identifier: string,
+  secret: string
+): CurrentSessionUser | null => {
+  const cleanId = identifier.trim().toLowerCase();
+  const cleanSecret = secret.trim();
+  if (!cleanId || !cleanSecret) return null;
+
+  const students = getEnrolledStudents();
+  const student = students.find(
+    (s) =>
+      (s.studentUsername.toLowerCase() === cleanId || s.regNumber.toLowerCase() === cleanId) &&
+      s.studentPassword === cleanSecret
+  );
+
+  if (!student) return null;
+
+  return {
+    id: student.id,
+    name: student.fullName,
+    role: 'Student',
+    username: student.studentUsername || student.regNumber,
+    email: student.parentEmail || '',
+    assignedSubjectOrGrade: `${student.gradeCode} (${student.stream || 'Stream A'})`,
+    linkedStudentIds: [student.id],
   };
 };
 

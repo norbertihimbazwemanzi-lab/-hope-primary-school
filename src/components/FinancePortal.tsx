@@ -7,6 +7,8 @@ import {
   requestTransactionRefund,
   getCurrentSessionUser,
 } from '../services/adminStore';
+import { getFeeStructures } from '../services/smsStore';
+import { exportFeeStatementPDF } from '../services/reportCardPdf';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
 import {
   DollarSign,
@@ -39,7 +41,8 @@ interface FinancePortalProps {
 export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransactionsUpdated }) => {
   const sessionUser = getCurrentSessionUser();
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(getPaymentTransactions());
-  const [activeSubTab, setActiveSubTab] = useState<'billing' | 'ledger' | 'refunds'>('billing');
+  const [feeStructures] = useState(() => getFeeStructures());
+  const [activeSubTab, setActiveSubTab] = useState<'billing' | 'balances' | 'ledger' | 'refunds'>('billing');
 
   // Search & Selection for Billing Form
   const [learnerSearch, setLearnerSearch] = useState('');
@@ -286,6 +289,19 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
 
           <button
             type="button"
+            onClick={() => setActiveSubTab('balances')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'balances'
+                ? 'bg-emerald-500 text-slate-950 shadow-md font-black'
+                : 'bg-white/10 text-white hover:bg-white/20'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>2. Student Fee Balances</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveSubTab('ledger')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'ledger'
@@ -294,7 +310,7 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>2. Transactional Ledgers & History ({transactions.length})</span>
+            <span>3. Transactional Ledgers & History ({transactions.length})</span>
           </button>
 
           <button
@@ -307,7 +323,7 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
             }`}
           >
             <RotateCcw className="w-4 h-4" />
-            <span>3. Routed Refund Tracker</span>
+            <span>4. Routed Refund Tracker</span>
             {metrics.pendingRefunds > 0 && (
               <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black">
                 {metrics.pendingRefunds}
@@ -589,6 +605,95 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
                 <p className="text-xs">Select a learner from the list on the left to start billing.</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* STUDENT FEE BALANCES VIEW */}
+      {activeSubTab === 'balances' && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-black text-slate-900 font-display">Student Fee Balances & Statements</h3>
+              <p className="text-xs text-slate-500">Compares expected term tuition fee schedule against completed payments per learner.</p>
+            </div>
+            <input
+              type="text"
+              placeholder="Search student or reg number..."
+              value={learnerSearch}
+              onChange={(e) => setLearnerSearch(e.target.value)}
+              className="bg-slate-50 border border-slate-200 px-3 py-2 text-xs rounded-xl w-64"
+            />
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase text-[10px]">
+                <tr>
+                  <th className="p-3.5">Learner</th>
+                  <th className="p-3.5">Class</th>
+                  <th className="p-3.5 text-right">Term Fee (RWF)</th>
+                  <th className="p-3.5 text-right">Total Paid</th>
+                  <th className="p-3.5 text-right">Balance Due</th>
+                  <th className="p-3.5 text-right">Statement</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredLearners.map((stu) => {
+                  const expected = feeStructures.find((f) => f.gradeCode === stu.gradeCode)?.totalExpected || 92000;
+                  const paid = transactions
+                    .filter(
+                      (tx) =>
+                        tx.studentId === stu.id &&
+                        (tx.status === 'Completed' || tx.status === 'Refund Requested')
+                    )
+                    .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+                  const bal = Math.max(0, expected - paid);
+                  return (
+                    <tr key={stu.id} className="hover:bg-slate-50/70">
+                      <td className="p-3.5">
+                        <strong className="block text-slate-900">{stu.fullName}</strong>
+                        <span className="font-mono text-[11px] text-slate-500">{stu.regNumber}</span>
+                      </td>
+                      <td className="p-3.5 font-mono font-bold">{stu.gradeCode}</td>
+                      <td className="p-3.5 text-right font-mono tabular-nums">{expected.toLocaleString()}</td>
+                      <td className="p-3.5 text-right font-mono font-bold text-emerald-700 tabular-nums">{paid.toLocaleString()}</td>
+                      <td className="p-3.5 text-right font-mono font-bold tabular-nums">
+                        <span className={bal > 0 ? 'text-rose-700' : 'text-emerald-700'}>
+                          {bal === 0 ? 'Cleared (0)' : bal.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedStudent(stu);
+                            setActiveSubTab('billing');
+                          }}
+                          className="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-[11px] font-bold cursor-pointer"
+                        >
+                          Pay Fee
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            exportFeeStatementPDF({
+                              student: stu,
+                              transactions,
+                              feeStructures,
+                              term,
+                              academicYear,
+                            })
+                          }
+                          className="px-2.5 py-1 bg-slate-900 text-white rounded-lg text-[11px] font-bold cursor-pointer"
+                        >
+                          PDF Statement
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

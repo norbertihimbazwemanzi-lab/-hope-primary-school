@@ -1146,6 +1146,117 @@ app.post('/api/applications', (req, res) => {
   }
 });
 
+// 7. School Management System (SMS) Extended Domain Store (Academics, Exams, LMS, Messages, Audit Logs)
+const smsStoreFile = path.resolve(__dirname, 'sms_store.json');
+function loadSmsStore(): Record<string, any> {
+  try {
+    if (fs.existsSync(smsStoreFile)) {
+      return JSON.parse(fs.readFileSync(smsStoreFile, 'utf8'));
+    }
+  } catch (err) {
+    console.warn('Error reading sms_store.json:', err);
+  }
+  return {};
+}
+function saveSmsStore(store: Record<string, any>) {
+  try {
+    fs.writeFileSync(smsStoreFile, JSON.stringify(store, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Error saving sms_store.json:', err);
+  }
+}
+
+const VALID_SMS_DOMAINS = new Set([
+  'academic_years_terms',
+  'school_classes_streams',
+  'school_subjects',
+  'teacher_assignments',
+  'exam_config',
+  'exam_schedules',
+  'exam_marks',
+  'lesson_plans',
+  'learning_materials',
+  'homework_assignments',
+  'class_timetables',
+  'parent_teacher_messages',
+  'audit_logs',
+  'fee_structures',
+]);
+
+app.get('/api/sms/backup', (req, res) => {
+  try {
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      school: 'Mugina Hope Primary & Nursery Academy',
+      version: '2.0',
+      websiteSettings: loadServerSettings(),
+      gallery: loadServerGallery(),
+      staff: loadServerStaff(),
+      students: loadServerStudents(),
+      attendance: loadServerAttendance(),
+      teacherAttendance: loadServerTeacherAttendance(),
+      discipline: loadServerDiscipline(),
+      payments: loadServerPayments(),
+      documents: loadServerDocuments(),
+      applications: loadServerApplications(),
+      chats: loadServerChats(),
+      sms: loadSmsStore(),
+    };
+    res.json({ success: true, backup });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to generate backup' });
+  }
+});
+
+app.post('/api/sms/restore', (req, res) => {
+  try {
+    const b = req.body?.backup || req.body;
+    if (!b || typeof b !== 'object') {
+      return res.status(400).json({ error: 'Invalid backup payload' });
+    }
+    if (b.websiteSettings) saveServerSettings(b.websiteSettings);
+    if (Array.isArray(b.gallery)) saveServerGallery(b.gallery);
+    if (Array.isArray(b.staff)) saveServerStaff(b.staff);
+    if (Array.isArray(b.students)) saveServerStudents(b.students);
+    if (Array.isArray(b.attendance)) saveServerAttendance(b.attendance);
+    if (Array.isArray(b.teacherAttendance)) saveServerTeacherAttendance(b.teacherAttendance);
+    if (Array.isArray(b.discipline)) saveServerDiscipline(b.discipline);
+    if (Array.isArray(b.payments)) saveServerPayments(b.payments);
+    if (Array.isArray(b.documents)) saveServerDocuments(b.documents);
+    if (Array.isArray(b.applications)) saveServerApplications(b.applications);
+    if (Array.isArray(b.chats)) saveServerChats(b.chats);
+    if (b.sms && typeof b.sms === 'object') saveSmsStore(b.sms);
+    return res.json({ success: true, message: 'Server backup restored successfully' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to restore backup' });
+  }
+});
+
+app.get('/api/sms/:domain', (req, res) => {
+  const { domain } = req.params;
+  if (!VALID_SMS_DOMAINS.has(domain)) {
+    return res.status(400).json({ error: 'Invalid SMS domain' });
+  }
+  const store = loadSmsStore();
+  return res.json({ success: true, items: store[domain] ?? null });
+});
+
+app.post('/api/sms/:domain', (req, res) => {
+  try {
+    const { domain } = req.params;
+    if (!VALID_SMS_DOMAINS.has(domain)) {
+      return res.status(400).json({ error: 'Invalid SMS domain' });
+    }
+    const store = loadSmsStore();
+    const payload = req.body?.items !== undefined ? req.body.items : req.body;
+    store[domain] = payload;
+    saveSmsStore(store);
+    return res.json({ success: true, items: payload });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to save SMS domain data' });
+  }
+});
+
 // Server health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString(), school: 'Mugina Hope Academy' });

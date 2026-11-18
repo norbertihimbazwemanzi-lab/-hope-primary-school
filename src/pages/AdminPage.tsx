@@ -65,6 +65,7 @@ import {
   syncServerStaff,
   syncServerStudents,
   syncServerApplications,
+  promoteStudentsBatch,
 } from '../services/adminStore';
 import { FacilityItem, PageId } from '../types';
 import { ACADEMIC_GRADES } from '../data/schoolData';
@@ -74,6 +75,8 @@ import {
   logoutGoogle,
   resolveStaffRoleForFirebaseUser,
   ensureAdminFirebaseAuth,
+  authenticateParentAccount,
+  authenticateStudentAccount,
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
@@ -101,6 +104,20 @@ import { TeacherAttendanceTracker } from '../components/TeacherAttendanceTracker
 import { DODDisciplinePortal } from '../components/DODDisciplinePortal';
 import { PrincipalQueueModal } from '../components/PrincipalQueueModal';
 import { BulkStudentImportModal } from '../components/BulkStudentImportModal';
+import { AcademicManagementModule } from '../components/AcademicManagementModule';
+import { ExaminationsModule } from '../components/ExaminationsModule';
+import { ReportsAnalyticsModule } from '../components/ReportsAnalyticsModule';
+import { SystemAuditAndBackupModule } from '../components/SystemAuditAndBackupModule';
+import { ParentPortal } from '../components/ParentPortal';
+import { StudentPortal } from '../components/StudentPortal';
+import { StudentIdAndProfileModal } from '../components/StudentIdAndProfileModal';
+import {
+  hasPermission,
+  getRoleDisplayLabel,
+  isFullAdmin,
+  normalizeUserRole,
+} from '../services/rbac';
+import { logAuditEvent } from '../services/smsStore';
 import {
   Shield,
   Lock,
@@ -153,6 +170,12 @@ import {
   FolderArchive,
   HardDrive,
   FileUp,
+  Sun,
+  Moon,
+  Award,
+  Layers,
+  CreditCard,
+  ArrowUpRight,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 
@@ -167,31 +190,65 @@ export type AdminTab =
   | 'registrar'
   | 'staff'
   | 'students'
+  | 'academics'
+  | 'examinations'
   | 'attendance'
   | 'teacher_attendance'
   | 'discipline'
   | 'confirmations'
   | 'documents'
+  | 'reports'
   | 'gallery'
   | 'news'
   | 'settings'
   | 'inquiries'
-  | 'gmail';
+  | 'gmail'
+  | 'system_audit';
+
+const resolveDefaultTabForUser = (user: ReturnType<typeof getCurrentSessionUser>): AdminTab => {
+  if (!user) return 'students';
+  if (user.role === 'Registrar') return 'registrar';
+  if (user.role === 'DOD') return 'discipline';
+  const r = normalizeUserRole(user.role);
+  if (r === 'Accountant') return 'finance';
+  if (r === 'Teacher') return 'teacher_classroom';
+  return 'students';
+};
 
 export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdated }) => {
   const [currentUser, setCurrentUser] = useState(getCurrentSessionUser());
-  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
-    const user = getCurrentSessionUser();
-    if (user?.role === 'Finance') return 'finance';
-    if (user?.role === 'Teacher') return 'teacher_classroom';
-    if (user?.role === 'Registrar') return 'registrar';
-    if (user?.role === 'DOS') return 'students';
-    if (user?.role === 'DOD') return 'discipline';
-    return 'students';
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => resolveDefaultTabForUser(getCurrentSessionUser()));
+  const [loginPortalMode, setLoginPortalMode] = useState<'staff' | 'parent' | 'student'>('staff');
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    try {
+      return document.documentElement.classList.contains('dark');
+    } catch {
+      return false;
+    }
   });
+
+  const toggleThemeMode = () => {
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      try {
+        if (next) {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('mugina_theme_mode', 'dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('mugina_theme_mode', 'light');
+        }
+      } catch {}
+      return next;
+    });
+  };
 
   const [paymentTransactions, setPaymentTransactions] = useState<PaymentTransaction[]>(getPaymentTransactions());
   const [showPrincipalQueueModal, setShowPrincipalQueueModal] = useState(false);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [studentGradeFilter, setStudentGradeFilter] = useState<string>('ALL');
+  const [inspectedStudent, setInspectedStudent] = useState<EnrolledStudent | null>(null);
+  const [isUploadingStudentPhoto, setIsUploadingStudentPhoto] = useState(false);
 
   // Login form state - with reveal password and device persistence
   const [loginUsername, setLoginUsername] = useState('');
@@ -324,7 +381,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   // Attendance tracker states
   const [attendanceDate, setAttendanceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [attendanceGrade, setAttendanceGrade] = useState<string>('P4');
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: 'Present' | 'Absent' | 'Late'; notes: string }>>({});
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: 'Present' | 'Absent' | 'Late' | 'Excused'; notes: string }>>({});
   const [attendanceSaving, setAttendanceSaving] = useState(false);
   const [attendanceSuccessMsg, setAttendanceSuccessMsg] = useState<string | null>(null);
 
@@ -364,6 +421,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     gender: 'Female' as 'Male' | 'Female',
     dob: '2017-05-10',
     gradeCode: 'P4',
+    stream: 'A',
+    address: 'Mugina Sector, Kamonyi District',
+    admissionDate: new Date().toISOString().split('T')[0],
+    previousSchool: '',
+    photoUrl: '',
     parentName: '',
     parentPhone: '+250 78',
     parentEmail: '',
@@ -618,14 +680,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   // Update default tab based on user role to ensure only permitted views are visible
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === 'Finance') setActiveTab('finance');
-      else if (currentUser.role === 'Teacher') setActiveTab('teacher_classroom');
-      else if (currentUser.role === 'Registrar') setActiveTab('registrar');
-      else if (currentUser.role === 'DOS') setActiveTab('students');
-      else if (currentUser.role === 'DOD') setActiveTab('discipline');
-      else if (currentUser.role === 'Admin') {
-        setActiveTab((prev) => prev || 'students');
-      }
+      setActiveTab(resolveDefaultTabForUser(currentUser));
     }
   }, [currentUser]);
 
@@ -633,7 +688,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   useEffect(() => {
     const existing = getAttendanceRecords(attendanceDate, attendanceGrade);
     const studentsInClass = studentList.filter((s) => s.gradeCode === attendanceGrade);
-    const newMap: Record<string, { status: 'Present' | 'Absent' | 'Late'; notes: string }> = {};
+    const newMap: Record<string, { status: 'Present' | 'Absent' | 'Late' | 'Excused'; notes: string }> = {};
 
     studentsInClass.forEach((s) => {
       const match = existing.find((r) => r.studentId === s.id);
@@ -648,7 +703,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setAttendanceSuccessMsg(null);
   }, [attendanceDate, attendanceGrade, studentList]);
 
-  // Secure Password-Protected Gate Handler with Cross-Device Database Check
+  // Secure Password-Protected Gate Handler across Staff, Parent & Student Portals
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -659,7 +714,45 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     const cleanPass = loginPassword.trim();
 
     try {
-      // 1. Primary requested Admin credentials (or shared access code @0798744704)
+      // A. Parent Portal Authentication
+      if (loginPortalMode === 'parent') {
+        let parentSession = authenticateParentAccount(cleanUser, cleanPass);
+        if (!parentSession) {
+          await syncServerStudents();
+          setStudentList(getEnrolledStudents());
+          parentSession = authenticateParentAccount(cleanUser, cleanPass);
+        }
+        if (parentSession) {
+          persistCredentialsIfEnabled(cleanUser, cleanPass);
+          setCurrentSessionUser(parentSession);
+          setCurrentUser(parentSession);
+          logAuditEvent('LOGIN', 'Auth', parentSession.id, `${parentSession.name} signed into Parent Portal`);
+          return;
+        }
+        setLoginError('No linked child matched that parent email/phone and verification code (Child Reg ID or parent2026).');
+        return;
+      }
+
+      // B. Student Portal Authentication
+      if (loginPortalMode === 'student') {
+        let stuSession = authenticateStudentAccount(cleanUser, cleanPass);
+        if (!stuSession) {
+          await syncServerStudents();
+          setStudentList(getEnrolledStudents());
+          stuSession = authenticateStudentAccount(cleanUser, cleanPass);
+        }
+        if (stuSession) {
+          persistCredentialsIfEnabled(cleanUser, cleanPass);
+          setCurrentSessionUser(stuSession);
+          setCurrentUser(stuSession);
+          logAuditEvent('LOGIN', 'Auth', stuSession.id, `${stuSession.name} signed into Student Portal`);
+          return;
+        }
+        setLoginError('Invalid student username/Reg ID or password. Ask the DOS office for your portal credentials.');
+        return;
+      }
+
+      // C. Staff & Admin Authentication
       if (
         (cleanUser.toLowerCase() === 'norbertihimbazwemanzi@gmail.com' && cleanPass === '@0798744704') ||
         (cleanUser === '' && cleanPass === '@0798744704') ||
@@ -675,10 +768,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         };
         setCurrentSessionUser(adminSession);
         setCurrentUser(adminSession);
+        logAuditEvent('LOGIN', 'Auth', adminSession.id, `${adminSession.name} signed into Admin Portal`);
         return;
       }
 
-      // 2. Primary requested Headteacher credentials (or shared access code hopeprimary@123)
       if (
         (cleanUser.toLowerCase() === 'hopeprimaryschool' && cleanPass === 'hopeprimary@123') ||
         (cleanUser === '' && cleanPass === 'hopeprimary@123') ||
@@ -694,10 +787,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         };
         setCurrentSessionUser(headteacherSession);
         setCurrentUser(headteacherSession);
+        logAuditEvent('LOGIN', 'Auth', headteacherSession.id, `${headteacherSession.name} signed in`);
         return;
       }
 
-      // 3. Fallback shared access code (mugina2026)
       if (cleanPass === 'mugina2026' || (cleanUser === 'admin' && cleanPass === 'mugina2026')) {
         persistCredentialsIfEnabled(cleanUser || 'admin', cleanPass);
         const adminSession = {
@@ -709,10 +802,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         };
         setCurrentSessionUser(adminSession);
         setCurrentUser(adminSession);
+        logAuditEvent('LOGIN', 'Auth', adminSession.id, `${adminSession.name} signed in`);
         return;
       }
 
-      // 4. Check locally cached staff members
       const allStaff = getStaffMembers();
       const match = allStaff.find(
         (s) =>
@@ -734,16 +827,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         };
         setCurrentSessionUser(session);
         setCurrentUser(session);
-        if (session.role === 'Finance') setActiveTab('finance');
-        else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
-        else if (session.role === 'Registrar') setActiveTab('registrar');
-        else if (session.role === 'DOS') setActiveTab('students');
-        else if (session.role === 'DOD') setActiveTab('discipline');
-        else setActiveTab('students');
+        setActiveTab(resolveDefaultTabForUser(session));
+        logAuditEvent('LOGIN', 'Auth', session.id, `${session.name} (${session.role}) signed in`);
         return;
       }
 
-      // 5. Cross-Device Cloud Query: Fetch directly from Supabase & Firebase Firestore
       const mergedList = await syncServerStaff();
       setStaffList(mergedList);
 
@@ -767,12 +855,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         };
         setCurrentSessionUser(session);
         setCurrentUser(session);
-        if (session.role === 'Finance') setActiveTab('finance');
-        else if (session.role === 'Teacher') setActiveTab('teacher_classroom');
-        else if (session.role === 'Registrar') setActiveTab('registrar');
-        else if (session.role === 'DOS') setActiveTab('students');
-        else if (session.role === 'DOD') setActiveTab('discipline');
-        else setActiveTab('students');
+        setActiveTab(resolveDefaultTabForUser(session));
+        logAuditEvent('LOGIN', 'Auth', session.id, `${session.name} (${session.role}) signed in`);
         return;
       }
 
@@ -785,7 +869,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     }
   };
 
-  // Firebase Google Sign-In with Strict Identity-Based Access Control
+  // Firebase Google Sign-In with Strict Identity-Based Access Control (Staff & Registered Parents)
   const handleGoogleConnect = async () => {
     setIsGoogleLoading(true);
     setLoginError('');
@@ -795,26 +879,23 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         setGoogleUser(res.user);
         setAccessToken(res.accessToken);
 
-        // Verify identity against authorized staff & administration directory
         const resolution = resolveStaffRoleForFirebaseUser(res.user);
         if (resolution.authorized) {
           setCurrentSessionUser(resolution.session);
           setCurrentUser(resolution.session);
-
-          // Route to authorized workspace based strictly on authenticated role
-          if (resolution.session.role === 'Finance') setActiveTab('finance');
-          else if (resolution.session.role === 'Teacher') setActiveTab('teacher_classroom');
-          else if (resolution.session.role === 'Registrar') setActiveTab('registrar');
-          else if (resolution.session.role === 'DOS') setActiveTab('students');
-          else if (resolution.session.role === 'DOD') setActiveTab('discipline');
-          else setActiveTab('students');
+          setActiveTab(resolveDefaultTabForUser(resolution.session));
+          logAuditEvent(
+            'LOGIN',
+            'Auth',
+            resolution.session.id,
+            `Google OAuth sign-in by ${resolution.session.name} (${resolution.session.role})`
+          );
         } else {
-          // Explicitly sign out unauthorized identity
           await logoutGoogle();
           setGoogleUser(null);
           setAccessToken(null);
           setLoginError(
-            `Access Denied: Google identity (${resolution.email}) is not registered in the Mugina Hope Academy staff directory. Access is restricted to authorized school personnel. Please log in with an authorized account (e.g. norbertihimbazwemanzi@gmail.com).`
+            `Access Denied: Google identity (${resolution.email}) is not registered in the Mugina Hope Academy staff or parent directory.`
           );
         }
       }
@@ -826,6 +907,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   };
 
   const handleLogout = async () => {
+    if (currentUser) {
+      logAuditEvent('LOGOUT', 'Auth', currentUser.id, `${currentUser.name} signed out`);
+    }
     setCurrentSessionUser(null);
     setCurrentUser(null);
     setGoogleUser(null);
@@ -896,6 +980,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         gender: studentFormData.gender,
         dob: studentFormData.dob,
         gradeCode: studentFormData.gradeCode,
+        stream: studentFormData.stream || 'A',
+        address: studentFormData.address,
+        admissionDate: studentFormData.admissionDate,
+        previousSchool: studentFormData.previousSchool,
+        photoUrl: studentFormData.photoUrl,
         parentName: studentFormData.parentName,
         parentPhone: studentFormData.parentPhone,
         parentEmail: studentFormData.parentEmail,
@@ -903,14 +992,20 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         studentPassword: studentFormData.studentPassword,
         status: studentFormData.status,
       });
+      logAuditEvent('UPDATE', 'Student', editingStudent.id, `Updated student record ${studentFormData.fullName}`);
       setEditingStudent(null);
     } else {
-      enrollStudentByDOS({
+      const created = enrollStudentByDOS({
         regNumber: studentFormData.regNumber,
         fullName: studentFormData.fullName,
         gender: studentFormData.gender,
         dob: studentFormData.dob,
         gradeCode: studentFormData.gradeCode,
+        stream: studentFormData.stream || 'A',
+        address: studentFormData.address,
+        admissionDate: studentFormData.admissionDate,
+        previousSchool: studentFormData.previousSchool,
+        photoUrl: studentFormData.photoUrl,
         parentName: studentFormData.parentName,
         parentPhone: studentFormData.parentPhone,
         parentEmail: studentFormData.parentEmail,
@@ -919,6 +1014,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         enrolledBy: currentUser?.name || 'DOS',
         status: studentFormData.status,
       });
+      logAuditEvent('CREATE', 'Student', created.id, `Enrolled student ${created.fullName} into ${created.gradeCode}`);
     }
 
     setStudentList(getEnrolledStudents());
@@ -929,6 +1025,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       gender: 'Female',
       dob: '2017-05-10',
       gradeCode: 'P4',
+      stream: 'A',
+      address: 'Mugina Sector, Kamonyi District',
+      admissionDate: new Date().toISOString().split('T')[0],
+      previousSchool: '',
+      photoUrl: '',
       parentName: '',
       parentPhone: '+250 78',
       parentEmail: '',
@@ -1858,24 +1959,74 @@ END $$;`;
     setTimeout(() => setDeleteSuccessMsg(null), 4000);
   };
 
-  // If not logged in, render the Multi-Role Staff Portal Logon Screen
+  // If not logged in, render Unified Portal Gate (Staff/Admin, Parent Portal, Student Portal)
   if (!currentUser) {
     return (
       <div className="w-full max-w-md mx-auto px-3.5 sm:px-4 py-6 sm:py-12">
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
           <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 p-6 text-white text-center space-y-2">
             <SchoolLogo size="lg" className="mx-auto" />
             <h1 className="text-lg sm:text-xl font-black font-display tracking-tight text-white mt-1">
-              Mugina Hope Academy Staff & Admin Portal
+              Mugina Hope School Management Portal
             </h1>
             <p className="text-xs text-amber-300">
-              Role-Based Access for Headmaster, DOS, DOD & Teachers
+              {loginPortalMode === 'parent'
+                ? 'Parent Portal — Results, Fees, Attendance & Teacher Messaging'
+                : loginPortalMode === 'student'
+                ? 'Student Portal — Timetable, Assignments, Grades & Digital ID'
+                : 'Role-Based Access for Administration, DOS, DOD, Registrar, Finance & Teachers'}
             </p>
           </div>
 
-          <div className="p-5 sm:p-8 space-y-6">
+          <div className="p-5 sm:p-8 space-y-5">
+            {/* Portal Mode Switcher */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginPortalMode('staff');
+                  setLoginError('');
+                }}
+                className={`py-2 px-2 rounded-lg transition-colors cursor-pointer ${
+                  loginPortalMode === 'staff'
+                    ? 'bg-blue-900 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Staff &amp; Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginPortalMode('parent');
+                  setLoginError('');
+                }}
+                className={`py-2 px-2 rounded-lg transition-colors cursor-pointer ${
+                  loginPortalMode === 'parent'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Parent Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginPortalMode('student');
+                  setLoginError('');
+                }}
+                className={`py-2 px-2 rounded-lg transition-colors cursor-pointer ${
+                  loginPortalMode === 'student'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Student Portal
+              </button>
+            </div>
+
             {loginError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-start gap-2">
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{loginError}</span>
               </div>
@@ -1884,28 +2035,43 @@ END $$;`;
             {/* Password-Protected Security Gate */}
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Username or Official Email
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                  {loginPortalMode === 'parent'
+                    ? 'Parent Email or Phone Number'
+                    : loginPortalMode === 'student'
+                    ? 'Student Username or Reg ID'
+                    : 'Username or Official Email'}
                 </label>
                 <input
                   type="text"
+                  required={loginPortalMode !== 'staff'}
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="e.g. norbertihimbazwemanzi@gmail.com"
+                  placeholder={
+                    loginPortalMode === 'parent'
+                      ? 'parent@gmail.com or +250 78...'
+                      : loginPortalMode === 'student'
+                      ? 'e.g. MHA-2026-101 or stu.keza'
+                      : 'e.g. norbertihimbazwemanzi@gmail.com'
+                  }
                   autoComplete="username"
-                  className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Password or Shared Access Code
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                    {loginPortalMode === 'parent'
+                      ? 'Child Reg ID or Parent Code'
+                      : loginPortalMode === 'student'
+                      ? 'Student Portal Password'
+                      : 'Password or Shared Access Code'}
                   </label>
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="text-xs text-blue-700 hover:text-blue-900 font-semibold inline-flex items-center gap-1 focus:outline-hidden cursor-pointer"
+                    className="text-xs text-blue-700 dark:text-amber-400 hover:text-blue-900 font-semibold inline-flex items-center gap-1 focus:outline-hidden cursor-pointer"
                   >
                     {showLoginPassword ? (
                       <>
@@ -1926,19 +2092,25 @@ END $$;`;
                     required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your password or code"
+                    placeholder={
+                      loginPortalMode === 'parent'
+                        ? 'Child Reg ID (e.g. MHA-2026-101)'
+                        : loginPortalMode === 'student'
+                        ? 'Enter your student password'
+                        : 'Enter your password or code'
+                    }
                     autoComplete="current-password"
-                    className="w-full text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 pr-11 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden font-mono"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 pr-11 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-hidden font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus:outline-hidden cursor-pointer"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-hidden cursor-pointer"
                     aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
                     title={showLoginPassword ? 'Hide password' : 'Show password'}
                   >
                     {showLoginPassword ? (
-                      <EyeOff className="w-4 h-4 text-blue-700" />
+                      <EyeOff className="w-4 h-4 text-blue-700 dark:text-amber-400" />
                     ) : (
                       <Eye className="w-4 h-4 text-slate-400" />
                     )}
@@ -1946,7 +2118,6 @@ END $$;`;
                 </div>
               </div>
 
-              {/* Remember Password Checkbox & Device Persistence Status */}
               <div className="pt-1 flex items-center justify-between">
                 <label htmlFor="remember-password-check" className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -1965,8 +2136,8 @@ END $$;`;
                     }}
                     className="w-4 h-4 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
                   />
-                  <span className="text-xs font-semibold text-slate-700">
-                    Remember password on this device
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Remember login on this device
                   </span>
                 </label>
 
@@ -1991,90 +2162,199 @@ END $$;`;
               <button
                 type="submit"
                 disabled={isVerifyingLogin}
-                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-75 disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 bg-blue-950 hover:bg-blue-900 active:bg-slate-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-75 disabled:cursor-not-allowed"
               >
                 {isVerifyingLogin ? (
                   <>
                     <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
-                    <span>Verifying Account with Database...</span>
+                    <span>Verifying Account...</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-4 h-4 text-amber-400" />
-                    <span>Verify Access & Unlock Console</span>
+                    <span>
+                      {loginPortalMode === 'parent'
+                        ? 'Sign In to Parent Portal'
+                        : loginPortalMode === 'student'
+                        ? 'Sign In to Student Portal'
+                        : 'Verify Access & Unlock Console'}
+                    </span>
                   </>
                 )}
               </button>
             </form>
 
-            <div className="relative flex items-center justify-center">
-              <div className="border-t border-slate-200 w-full" />
-              <span className="bg-white px-3 text-[11px] uppercase tracking-wider text-slate-400 font-semibold absolute">
-                or authenticate with Google Workspace
-              </span>
-            </div>
+            {loginPortalMode !== 'student' && (
+              <>
+                <div className="relative flex items-center justify-center">
+                  <div className="border-t border-slate-200 dark:border-slate-700 w-full" />
+                  <span className="bg-white dark:bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-400 font-semibold absolute">
+                    or continue with Google
+                  </span>
+                </div>
 
-            <button
-              type="button"
-              onClick={handleGoogleConnect}
-              disabled={isGoogleLoading}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-300 shadow-2xs transition-colors"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-              </svg>
-              <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
-            </button>
-
-
+                <button
+                  type="button"
+                  onClick={handleGoogleConnect}
+                  disabled={isGoogleLoading}
+                  className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100 font-semibold text-xs rounded-xl border border-slate-300 dark:border-slate-700 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                  </svg>
+                  <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
+  // Strictly Scoped Parent & Student Portals (Zero Access to Staff/Admin Tabs)
+  if (currentUser.role === 'Parent' || currentUser.role === 'Student') {
+    return (
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <SchoolLogo size="md" />
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white font-display">
+                  {currentUser.role === 'Parent' ? 'Parent & Guardian Portal' : 'Student Academic Portal'}
+                </h1>
+                <span className="text-xs font-bold uppercase px-2.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-900 dark:text-amber-400 border border-blue-200 dark:border-blue-800">
+                  {getRoleDisplayLabel(currentUser.role)}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Signed in as <strong>{currentUser.name}</strong> ({currentUser.email || currentUser.username})
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleThemeMode}
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label="Toggle color mode"
+            >
+              {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('home')}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-xl cursor-pointer"
+            >
+              View Public Site
+            </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+
+        {currentUser.role === 'Parent' ? (
+          <ParentPortal sessionUser={currentUser} students={studentList} />
+        ) : (
+          <StudentPortal sessionUser={currentUser} students={studentList} />
+        )}
+      </div>
+    );
+  }
+
   // Filter students
   const filteredStudents = studentList.filter((s) => {
+    const matchesGrade = studentGradeFilter === 'ALL' || s.gradeCode === studentGradeFilter;
+    if (!matchesGrade) return false;
     if (!studentSearchQuery) return true;
     const q = studentSearchQuery.toLowerCase();
-    return s.fullName.toLowerCase().includes(q) || s.regNumber.toLowerCase().includes(q) || s.gradeCode.toLowerCase().includes(q) || s.parentName.toLowerCase().includes(q);
+    return (
+      s.fullName.toLowerCase().includes(q) ||
+      s.regNumber.toLowerCase().includes(q) ||
+      s.gradeCode.toLowerCase().includes(q) ||
+      s.parentName.toLowerCase().includes(q) ||
+      (s.stream || '').toLowerCase().includes(q)
+    );
   });
+
+  const handleBulkPromoteSelected = () => {
+    if (selectedStudentIds.length === 0) return;
+    const promotedCount = promoteStudentsBatch(selectedStudentIds, currentUser?.name || 'Administrator');
+    setStudentList(getEnrolledStudents());
+    setSelectedStudentIds([]);
+    logAuditEvent(
+      'PROMOTE',
+      'Student',
+      'batch',
+      `Promoted ${promotedCount} student(s) to next academic class`
+    );
+    setDeleteSuccessMsg(`Successfully promoted ${promotedCount} learner(s) to their next class level.`);
+    setTimeout(() => setDeleteSuccessMsg(null), 4500);
+  };
+
+  const canManageAcademics = hasPermission(currentUser, 'manage_academics');
+  const canConfigureExams = hasPermission(currentUser, 'configure_exam_rules');
+  const canViewExams =
+    hasPermission(currentUser, 'approve_exam_results') ||
+    hasPermission(currentUser, 'enter_assigned_marks');
+  const canAccessFinance = hasPermission(currentUser, 'access_accounting');
+  const canAccessTeacherPortal =
+    normalizeUserRole(currentUser.role) === 'Teacher' || isFullAdmin(currentUser.role);
+  const canAccessRegistrar =
+    currentUser.role === 'Registrar' || isFullAdmin(currentUser.role);
+  const canManageStudents = hasPermission(currentUser, 'manage_students');
+  const canManageAdmissions = hasPermission(currentUser, 'manage_admissions');
+  const canMarkAttendance =
+    hasPermission(currentUser, 'manage_all_attendance') ||
+    hasPermission(currentUser, 'manage_assigned_attendance');
+  const canManageTeacherAtt = hasPermission(currentUser, 'manage_teacher_attendance');
+  const canManageDiscipline = hasPermission(currentUser, 'manage_discipline');
+  const canManageDocuments = hasPermission(currentUser, 'manage_documents');
+  const canViewReports = hasPermission(currentUser, 'view_school_reports');
+  const canManageStaff = hasPermission(currentUser, 'manage_staff_roles');
+  const canManageWebsite = hasPermission(currentUser, 'manage_website_content');
+  const canManageGallery = hasPermission(currentUser, 'manage_gallery');
+  const canManageNews = hasPermission(currentUser, 'manage_announcements');
+  const canManageInquiries = hasPermission(currentUser, 'manage_inquiries');
+  const canManageGmail = hasPermission(currentUser, 'manage_system_settings');
+  const canViewAuditBackup =
+    hasPermission(currentUser, 'view_audit_logs') || hasPermission(currentUser, 'manage_backups');
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6 sm:space-y-8">
       {/* Top Banner with Active Staff Persona */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <SchoolLogo size="md" />
           <div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-xl font-black text-slate-900 font-display">
+              <h1 className="text-xl font-black text-slate-900 dark:text-white font-display">
                 Mugina Hope Academy Portal
               </h1>
-              <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded-full border ${
-                currentUser.role === 'Admin' ? 'bg-blue-100 text-blue-900 border-blue-300' :
-                currentUser.role === 'Finance' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
+              <span className={`text-xs font-black uppercase px-2.5 py-0.5 rounded-md border ${
+                isFullAdmin(currentUser.role) ? 'bg-blue-100 text-blue-900 border-blue-300' :
+                canAccessFinance ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
                 currentUser.role === 'Teacher' ? 'bg-indigo-100 text-indigo-900 border-indigo-300' :
                 currentUser.role === 'Registrar' ? 'bg-purple-100 text-purple-900 border-purple-300' :
                 currentUser.role === 'DOS' ? 'bg-amber-100 text-amber-900 border-amber-300' :
                 'bg-slate-100 text-slate-900 border-slate-300'
               }`}>
-                Role: {
-                  currentUser.role === 'Finance' ? 'Finance Officer' :
-                  currentUser.role === 'Registrar' ? 'Registrar' :
-                  currentUser.role === 'Admin' ? 'Headmaster / Admin' :
-                  currentUser.role === 'Teacher' ? 'Class Teacher' :
-                  currentUser.role === 'DOS' ? 'Director of Studies (DOS)' :
-                  currentUser.role === 'DOD' ? 'Director of Discipline (DOD)' :
-                  currentUser.role
-                }
+                {getRoleDisplayLabel(currentUser.role)}
               </span>
 
-              {/* Principal Queue Badge Button for Admin */}
-              {currentUser.role === 'Admin' && (
+              {isFullAdmin(currentUser.role) && (
                 <button
                   type="button"
                   onClick={() => setShowPrincipalQueueModal(true)}
@@ -2083,14 +2363,14 @@ END $$;`;
                   <ShieldAlert className="w-3.5 h-3.5 text-amber-700" />
                   <span>Principal Queue</span>
                   {paymentTransactions.filter((t) => t.status === 'Refund Requested').length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-rose-600 text-white font-mono text-[10px] font-black">
+                    <span className="px-1.5 py-0.2 rounded-md bg-rose-600 text-white font-mono text-[10px] font-black tabular-nums">
                       {paymentTransactions.filter((t) => t.status === 'Refund Requested').length}
                     </span>
                   )}
                 </button>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Logged in as <strong>{currentUser.name}</strong> ({currentUser.username})
               {currentUser.assignedSubjectOrGrade && (
                 <span> • Assigned: <strong>{currentUser.assignedSubjectOrGrade}</strong></span>
@@ -2099,31 +2379,34 @@ END $$;`;
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Authorized Staff Session */}
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-[11px]">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-emerald-900 font-bold">
-              Active Session:
-            </span>
-            <span className="text-emerald-800 font-mono text-[10px] truncate max-w-[160px] sm:max-w-none">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900 px-3 py-1.5 rounded-lg text-[11px]">
+            <div className="w-2 h-2 rounded-full bg-emerald-600" />
+            <span className="text-emerald-900 dark:text-emerald-200 font-mono text-[10px] truncate max-w-[160px] sm:max-w-none">
               {currentUser.email || currentUser.username}
-            </span>
-            <span className="bg-emerald-700 text-white font-bold text-[10px] px-2 py-0.5 rounded-md shadow-2xs">
-              {currentUser.role}
             </span>
           </div>
 
           <button
+            type="button"
+            onClick={toggleThemeMode}
+            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-amber-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+            title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle light or dark theme"
+          >
+            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          <button
             onClick={() => onNavigate('home')}
-            className="px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-300 shadow-2xs rounded-xl cursor-pointer transition-all active:scale-95"
+            className="px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 shadow-2xs rounded-xl cursor-pointer transition-all"
             title="Return to the public school website"
           >
             View Public Site
           </button>
           <button
             onClick={handleLogout}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:scale-95 rounded-xl shadow-xs border border-rose-700 transition-all cursor-pointer ring-offset-1 focus:ring-2 focus:ring-rose-400"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs border border-rose-700 transition-all cursor-pointer"
             title="Sign out of administrative session"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -2132,85 +2415,103 @@ END $$;`;
         </div>
       </div>
 
-      {/* Role-Based Dynamic Navigation Tabs - Smooth Horizontal Swipe on Phones */}
-      <div className="flex overflow-x-auto no-scrollbar scroll-smooth items-center gap-2 border-b border-slate-200 pb-3 text-xs font-semibold -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
-        {/* 1. FINANCE OFFICER PORTAL (Accessible to Finance Officer and Admin) */}
-        {(currentUser.role === 'Finance' || currentUser.role === 'Admin') && (
+      {/* Role-Based Dynamic Navigation Tabs (18 Complete SMS Modules) */}
+      <div className="flex overflow-x-auto no-scrollbar scroll-smooth items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3 text-xs font-semibold -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
+        {canAccessFinance && (
           <button
             onClick={() => setActiveTab('finance')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
               activeTab === 'finance'
                 ? 'bg-emerald-800 text-white shadow-xs font-bold'
-                : 'text-slate-600 hover:bg-slate-100'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <DollarSign className="w-4 h-4 text-emerald-300" />
-            <span>Accounting & Ledger Portal</span>
+            <DollarSign className="w-4 h-4 text-emerald-400" />
+            <span>Accounting &amp; Ledger Portal</span>
           </button>
         )}
 
-        {/* 2. TEACHER CLASSROOM & PORTAL (Accessible to Teacher and Admin) */}
-        {(currentUser.role === 'Teacher' || currentUser.role === 'Admin') && (
+        {canAccessTeacherPortal && (
           <button
             onClick={() => setActiveTab('teacher_classroom')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
               activeTab === 'teacher_classroom'
                 ? 'bg-indigo-800 text-white shadow-xs font-bold'
-                : 'text-slate-600 hover:bg-slate-100'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            <GraduationCap className="w-4 h-4 text-amber-300" />
-            <span>My Classroom & Streams</span>
+            <GraduationCap className="w-4 h-4 text-amber-400" />
+            <span>My Classroom &amp; Streams</span>
           </button>
         )}
 
-        {/* 3. REGISTRAR ADMISSIONS & ENROLLMENT SUITE (Accessible to Registrar and Admin) */}
-        {(currentUser.role === 'Registrar' || currentUser.role === 'Admin') && (
+        {canAccessRegistrar && (
           <button
             onClick={() => setActiveTab('registrar')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
               activeTab === 'registrar'
                 ? 'bg-purple-800 text-white shadow-xs font-bold'
-                : 'text-slate-600 hover:bg-slate-100'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <UserCheck className="w-4 h-4 text-purple-300" />
-            <span>Admissions & Enrollment Suite</span>
+            <span>Admissions &amp; Enrollment Suite</span>
           </button>
         )}
 
-        {/* 4. STUDENT ENROLLMENT & CREDENTIALS (Admin and DOS) */}
-        {(currentUser.role === 'Admin' || currentUser.role === 'DOS') && (
+        {canManageStudents && (
           <button
             onClick={() => setActiveTab('students')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'students' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'students' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Student Enrollment & Credentials ({studentList.length})</span>
+            <span className="tabular-nums">Students &amp; Credentials ({studentList.length})</span>
           </button>
         )}
 
-        {/* 5. ADMISSION CHARTS, APPLICANT CHATS & CONFIRMATIONS (Admin, DOS, Registrar) */}
-        {(currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'Registrar') && (
+        {canManageAcademics && (
+          <button
+            onClick={() => setActiveTab('academics')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'academics' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-amber-400" />
+            <span>Academics, Timetables &amp; Grading Formula</span>
+          </button>
+        )}
+
+        {canViewExams && (
+          <button
+            onClick={() => setActiveTab('examinations')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'examinations' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Award className="w-4 h-4 text-amber-400" />
+            <span>Examinations &amp; Report Cards</span>
+          </button>
+        )}
+
+        {canManageAdmissions && (
           <button
             onClick={() => setActiveTab('confirmations')}
             className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeTab === 'confirmations' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+              activeTab === 'confirmations' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <BarChart2 className="w-4 h-4 text-amber-400" />
-            <span>Admissions Charts & Chat History ({applications.length})</span>
+            <span className="tabular-nums">Admissions &amp; Chat History ({applications.length})</span>
           </button>
         )}
 
-        {/* 6. ATTENDANCE TRACKER (Admin, DOS, DOD, Teacher) */}
-        {(currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'DOD' || currentUser.role === 'Teacher') && (
+        {canMarkAttendance && (
           <button
             onClick={() => setActiveTab('attendance')}
             className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeTab === 'attendance' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+              activeTab === 'attendance' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <ClipboardList className="w-4 h-4 text-emerald-400" />
@@ -2218,12 +2519,11 @@ END $$;`;
           </button>
         )}
 
-        {/* 6B. TEACHER & STAFF ATTENDANCE TRACKER (Admin & DOS) */}
-        {(currentUser.role === 'Admin' || currentUser.role === 'DOS') && (
+        {canManageTeacherAtt && (
           <button
             onClick={() => setActiveTab('teacher_attendance')}
             className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeTab === 'teacher_attendance' ? 'bg-indigo-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+              activeTab === 'teacher_attendance' ? 'bg-indigo-800 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Clock className="w-4 h-4 text-sky-400" />
@@ -2231,51 +2531,59 @@ END $$;`;
           </button>
         )}
 
-        {/* 6C. DISCIPLINE & CONDUCT CONTROL (Admin, DOS, DOD) */}
-        {(currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'DOD') && (
+        {canManageDiscipline && (
           <button
             onClick={() => setActiveTab('discipline')}
             className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeTab === 'discipline' ? 'bg-rose-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+              activeTab === 'discipline' ? 'bg-rose-800 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <ShieldAlert className="w-4 h-4 text-amber-300" />
-            <span>Discipline & Conduct (DOD)</span>
+            <span>Discipline &amp; Conduct (DOD)</span>
           </button>
         )}
 
-        {/* 7. REGISTRATION DOCUMENTATION (Admin, DOS, Registrar) */}
-        {(currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'Registrar') && (
+        {canManageDocuments && (
           <button
             onClick={() => setActiveTab('documents')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'documents' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'documents' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <FileText className="w-4 h-4 text-amber-300" />
-            <span>Registration Documentation ({docList.length})</span>
+            <span className="tabular-nums">Registration Docs ({docList.length})</span>
           </button>
         )}
 
-        {/* 8. STAFF ENROLLMENT (Admin Only) */}
-        {currentUser.role === 'Admin' && (
+        {canViewReports && (
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'reports' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <PieChart className="w-4 h-4 text-emerald-400" />
+            <span>Reports &amp; Analytics</span>
+          </button>
+        )}
+
+        {canManageStaff && (
           <button
             onClick={() => setActiveTab('staff')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'staff' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'staff' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Shield className="w-4 h-4" />
-            <span>Staff Roles & Enrollment ({staffList.length})</span>
+            <span className="tabular-nums">Staff &amp; Roles ({staffList.length})</span>
           </button>
         )}
 
-        {/* 9. UPDATE WEBSITE CONTENT (Admin Only) */}
-        {currentUser.role === 'Admin' && (
+        {canManageWebsite && (
           <button
             onClick={() => setActiveTab('settings')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'settings' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'settings' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Globe className="w-4 h-4 text-sky-400" />
@@ -2283,73 +2591,75 @@ END $$;`;
           </button>
         )}
 
-        {/* 10. SCHOOL IMAGES & GALLERY (Admin Only) */}
-        {currentUser.role === 'Admin' && (
+        {canManageGallery && (
           <button
             onClick={() => setActiveTab('gallery')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'gallery' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'gallery' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>School Images & Gallery ({galleryItems.length})</span>
+            <span className="tabular-nums">Gallery ({galleryItems.length})</span>
           </button>
         )}
 
-        {/* 11. NEWS & ANNOUNCEMENTS (Admin Only) */}
-        {currentUser.role === 'Admin' && (
+        {canManageNews && (
           <button
             onClick={() => setActiveTab('news')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'news' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'news' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Bell className="w-4 h-4" />
-            <span>News & Announcements ({announcements.length})</span>
+            <span className="tabular-nums">News ({announcements.length})</span>
           </button>
         )}
 
-        {/* 12. INQUIRIES (Admin Only) */}
-        {currentUser.role === 'Admin' && (
+        {canManageInquiries && (
           <button
             onClick={() => setActiveTab('inquiries')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'inquiries' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'inquiries' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Mail className="w-4 h-4" />
-            <span>Inquiries ({inquiries.length})</span>
+            <span className="tabular-nums">Inquiries ({inquiries.length})</span>
           </button>
         )}
 
-        {/* 13. GMAIL & NODEMAILER (Admin Only) */}
-        {currentUser.role === 'Admin' && (
+        {canManageGmail && (
           <button
             onClick={() => setActiveTab('gmail')}
-            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors ${
-              activeTab === 'gmail' ? 'bg-blue-800 text-white shadow-xs font-bold' : 'text-slate-600 hover:bg-slate-100'
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'gmail' ? 'bg-blue-900 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Send className="w-4 h-4" />
-            <span>Nodemailer & Gmail API</span>
+            <span>Nodemailer &amp; Gmail API</span>
+          </button>
+        )}
+
+        {canViewAuditBackup && (
+          <button
+            onClick={() => setActiveTab('system_audit')}
+            className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-colors cursor-pointer ${
+              activeTab === 'system_audit' ? 'bg-slate-900 text-amber-400 shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>Audit Logs, RBAC &amp; Backup</span>
           </button>
         )}
       </div>
 
-      {/* ========================================================================= */}
-      {/* ROLE TAB 1: FINANCE OFFICER PORTAL (ACCOUNTING & LEDGER) */}
-      {/* ========================================================================= */}
-      {activeTab === 'finance' && (currentUser.role === 'Admin' || currentUser.role === 'Finance') && (
+      {activeTab === 'finance' && canAccessFinance && (
         <FinancePortal
           students={studentList}
           onTransactionsUpdated={() => setPaymentTransactions(getPaymentTransactions())}
         />
       )}
 
-      {/* ========================================================================= */}
-      {/* ROLE TAB 2: TEACHER CLASSROOM & PORTAL (ONLY ASSIGNED STREAMS) */}
-      {/* ========================================================================= */}
-      {activeTab === 'teacher_classroom' && (currentUser.role === 'Admin' || currentUser.role === 'Teacher') && (
+      {activeTab === 'teacher_classroom' && canAccessTeacherPortal && (
         <TeacherPortal
           students={studentList}
           onTakeAttendance={() => {
@@ -2358,17 +2668,31 @@ END $$;`;
         />
       )}
 
-      {/* ========================================================================= */}
-      {/* ROLE TAB 3: REGISTRAR ADMISSIONS & ENROLLMENT SUITE */}
-      {/* ========================================================================= */}
-      {activeTab === 'registrar' && (currentUser.role === 'Admin' || currentUser.role === 'Registrar') && (
+      {activeTab === 'registrar' && canAccessRegistrar && (
         <RegistrarPortal
           students={studentList}
           onStudentsUpdated={() => setStudentList(getEnrolledStudents())}
         />
       )}
 
-      {/* PRINCIPAL REFUND AUTHORIZATION QUEUE MODAL */}
+      {activeTab === 'academics' && canManageAcademics && (
+        <AcademicManagementModule
+          canConfigureExam={canConfigureExams}
+          canManageFees={isFullAdmin(currentUser.role) || canAccessFinance}
+        />
+      )}
+
+      {activeTab === 'examinations' && canViewExams && (
+        <ExaminationsModule
+          currentUser={currentUser}
+          scopedToTeacher={normalizeUserRole(currentUser.role) === 'Teacher'}
+        />
+      )}
+
+      {activeTab === 'reports' && canViewReports && <ReportsAnalyticsModule />}
+
+      {activeTab === 'system_audit' && canViewAuditBackup && <SystemAuditAndBackupModule />}
+
       <PrincipalQueueModal
         isOpen={showPrincipalQueueModal}
         onClose={() => setShowPrincipalQueueModal(false)}
@@ -2378,15 +2702,15 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 1: STAFF ENROLLMENT (ADMIN ONLY) */}
       {/* ========================================================================= */}
-      {activeTab === 'staff' && currentUser.role === 'Admin' && (
+      {activeTab === 'staff' && canManageStaff && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-base font-bold text-slate-900 font-display">
-                Staff Directory: Roles, Credentials & Permissions
+              <h2 className="text-base font-bold text-slate-900 dark:text-white font-display">
+                Staff Directory: Roles, Credentials &amp; Permissions
               </h2>
-              <p className="text-xs text-slate-500">
-                Enroll leadership, teaching, finance and admissions staff with role-based access control
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Enroll leadership, teaching, finance, registrar, DOS &amp; DOD staff with role-based access control
               </p>
             </div>
             <button
@@ -2410,11 +2734,11 @@ END $$;`;
             </button>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-2xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs min-w-[650px]">
               <thead>
-                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
                   <th className="p-3.5">Staff Name</th>
                   <th className="p-3.5">Assigned Role</th>
                   <th className="p-3.5">Username</th>
@@ -2424,31 +2748,27 @@ END $$;`;
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {staffList.map((st) => (
-                  <tr key={st.id} className="hover:bg-slate-50/60">
-                    <td className="p-3.5 font-bold text-slate-900">{st.name}</td>
+                  <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                    <td className="p-3.5 font-bold text-slate-900 dark:text-white">{st.name}</td>
                     <td className="p-3.5">
                       <span className={`px-2.5 py-1 rounded-md font-bold text-[10px] ${
-                        st.role === 'Admin' ? 'bg-blue-100 text-blue-900 border border-blue-200' :
-                        st.role === 'Finance' ? 'bg-emerald-100 text-emerald-900 border border-emerald-200' :
+                        isFullAdmin(st.role) ? 'bg-blue-100 text-blue-900 border border-blue-200' :
+                        st.role === 'Finance' || st.role === 'Accountant' ? 'bg-emerald-100 text-emerald-900 border border-emerald-200' :
                         st.role === 'Teacher' ? 'bg-indigo-100 text-indigo-900 border border-indigo-200' :
                         st.role === 'Registrar' ? 'bg-purple-100 text-purple-900 border border-purple-200' :
                         st.role === 'DOS' ? 'bg-amber-100 text-amber-900 border border-amber-200' :
                         st.role === 'DOD' ? 'bg-rose-100 text-rose-900 border border-rose-200' :
                         'bg-slate-100 text-slate-800 border border-slate-200'
                       }`}>
-                        {st.role === 'Finance' ? 'Finance Officer' :
-                         st.role === 'Registrar' ? 'Registrar' :
-                         st.role === 'Teacher' ? 'Class Teacher' :
-                         st.role === 'Admin' ? 'Headmaster / Admin' :
-                         st.role}
+                        {getRoleDisplayLabel(st.role)}
                       </span>
                     </td>
-                    <td className="p-3.5 font-mono text-blue-700 font-semibold">{st.username}</td>
-                    <td className="p-3.5 font-mono text-slate-600 bg-slate-50 rounded px-2">{st.password}</td>
-                    <td className="p-3.5 text-slate-600">{st.assignedSubjectOrGrade || 'N/A'}</td>
-                    <td className="p-3.5 font-mono text-slate-600">{st.phone}</td>
+                    <td className="p-3.5 font-mono text-blue-700 dark:text-sky-400 font-semibold">{st.username}</td>
+                    <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{st.password}</td>
+                    <td className="p-3.5 text-slate-600 dark:text-slate-300">{st.assignedSubjectOrGrade || 'N/A'}</td>
+                    <td className="p-3.5 font-mono text-slate-600 dark:text-slate-300">{st.phone}</td>
                     <td className="p-3.5 text-right flex items-center justify-end gap-1">
                       <button
                         type="button"
@@ -2470,7 +2790,7 @@ END $$;`;
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
-                      {st.role !== 'Admin' && (
+                      {!isFullAdmin(st.role) && (
                         <button
                           type="button"
                           onClick={() => setDeleteTarget({ type: 'staff', id: st.id, name: st.name })}
@@ -2490,42 +2810,57 @@ END $$;`;
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 2: STUDENT ENROLLMENT & CREDENTIALS (DOS & ADMIN) */}
-      {/* ========================================================================= */}
-      {activeTab === 'students' && (
+      {activeTab === 'students' && canManageStudents && (
         <div className="space-y-6">
-          <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 font-display">
-                  Student Enrollment &amp; Credentials Portal
-                </h2>
-                <span className="text-[11px] font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full">
-                  DOS Objective
-                </span>
-              </div>
-              <p className="text-xs text-slate-500">
-                Enroll students individually or import an entire class roster from Word (.docx) or PDF (.pdf)
+              <h2 className="text-base font-bold text-slate-900 dark:text-white font-display">
+                Student Enrollment, Class Promotion &amp; Credentials
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Manage learner profiles, issue ID cards, promote classes in bulk, or import Word/PDF rosters
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+            <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
               <div className="relative flex-1 sm:flex-initial">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
-                  placeholder="Search student or ID..."
+                  placeholder="Search student, ID, stream..."
                   value={studentSearchQuery}
                   onChange={(e) => setStudentSearchQuery(e.target.value)}
-                  className="w-full sm:w-56 min-h-[42px] pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                  className="w-full sm:w-48 min-h-[40px] pl-8 pr-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:outline-hidden"
                 />
               </div>
+
+              <select
+                value={studentGradeFilter}
+                onChange={(e) => setStudentGradeFilter(e.target.value)}
+                aria-label="Filter students by class"
+                className="min-h-[40px] px-3 py-2 text-xs font-semibold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-white"
+              >
+                <option value="ALL">All Classes ({studentList.length})</option>
+                {ACADEMIC_GRADES.map((g) => (
+                  <option key={g.code} value={g.code}>{g.code} — {g.name}</option>
+                ))}
+              </select>
+
+              {selectedStudentIds.length > 0 && hasPermission(currentUser, 'promote_transfer_students') && (
+                <button
+                  type="button"
+                  onClick={handleBulkPromoteSelected}
+                  className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  <span className="tabular-nums">Promote Selected ({selectedStudentIds.length})</span>
+                </button>
+              )}
 
               <button
                 type="button"
                 onClick={() => setShowBulkStudentModal(true)}
-                className="min-h-[42px] inline-flex items-center gap-2 px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[40px] inline-flex items-center gap-2 px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <FileUp className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Import Word / PDF</span>
@@ -2533,8 +2868,29 @@ END $$;`;
 
               <button
                 type="button"
-                onClick={() => setShowAddStudentModal(true)}
-                className="min-h-[42px] inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                onClick={() => {
+                  setEditingStudent(null);
+                  setStudentFormData({
+                    regNumber: `MHA-2026-${Math.floor(100 + Math.random() * 900)}`,
+                    fullName: '',
+                    gender: 'Female',
+                    dob: '2017-05-10',
+                    gradeCode: 'P4',
+                    stream: 'A',
+                    address: 'Mugina Sector, Kamonyi District',
+                    admissionDate: new Date().toISOString().split('T')[0],
+                    previousSchool: '',
+                    photoUrl: '',
+                    parentName: '',
+                    parentPhone: '+250 78',
+                    parentEmail: '',
+                    studentUsername: '',
+                    studentPassword: 'student@2026',
+                    status: 'Active',
+                  });
+                  setShowAddStudentModal(true);
+                }}
+                className="min-h-[40px] inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Plus className="w-4 h-4 shrink-0" />
                 <span>Enroll Student</span>
@@ -2542,50 +2898,138 @@ END $$;`;
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-2xs">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs min-w-[720px]">
+              <table className="w-full text-left border-collapse text-xs min-w-[820px]">
               <thead>
-                <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold border-b border-slate-200 dark:border-slate-700">
+                  <th className="p-3.5 w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all filtered students"
+                      checked={filteredStudents.length > 0 && filteredStudents.every((s) => selectedStudentIds.includes(s.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedStudentIds(filteredStudents.map((s) => s.id));
+                        } else {
+                          setSelectedStudentIds([]);
+                        }
+                      }}
+                      className="rounded border-slate-300 cursor-pointer"
+                    />
+                  </th>
                   <th className="p-3.5">Reg ID</th>
-                  <th className="p-3.5">Student Full Name</th>
-                  <th className="p-3.5">Class Level</th>
-                  <th className="p-3.5">Student Username</th>
-                  <th className="p-3.5">Student Password</th>
-                  <th className="p-3.5">Parent Email</th>
-                  <th className="p-3.5">Parent Phone</th>
+                  <th className="p-3.5">Learner Name &amp; Status</th>
+                  <th className="p-3.5">Class / Stream</th>
+                  <th className="p-3.5">Portal Credentials</th>
+                  <th className="p-3.5">Guardian Contact</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredStudents.map((st) => (
-                  <tr key={st.id} className="hover:bg-slate-50/60">
-                    <td className="p-3.5 font-mono font-bold text-blue-700">{st.regNumber}</td>
-                    <td className="p-3.5 font-bold text-slate-900">{st.fullName}</td>
+                  <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                     <td className="p-3.5">
-                      <span className="bg-blue-50 text-blue-800 px-2 py-0.5 rounded-sm font-bold text-[10px]">
-                        {st.gradeCode}
+                      <input
+                        type="checkbox"
+                        checked={selectedStudentIds.includes(st.id)}
+                        onChange={(e) => {
+                          setSelectedStudentIds((prev) =>
+                            e.target.checked ? [...prev, st.id] : prev.filter((id) => id !== st.id)
+                          );
+                        }}
+                        aria-label={`Select ${st.fullName}`}
+                        className="rounded border-slate-300 cursor-pointer"
+                      />
+                    </td>
+                    <td className="p-3.5 font-mono font-bold text-blue-700 dark:text-sky-400 tabular-nums">{st.regNumber}</td>
+                    <td className="p-3.5">
+                      <div className="flex items-center gap-2.5">
+                        {st.photoUrl ? (
+                          <img src={st.photoUrl} alt={st.fullName} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-amber-300 font-bold flex items-center justify-center shrink-0">
+                            {st.fullName.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white">{st.fullName}</div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {st.gender} · Status: <span className={st.status === 'Active' ? 'text-emerald-700 dark:text-emerald-400 font-semibold' : 'text-amber-700 font-semibold'}>{st.status}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-3.5">
+                      <span className="bg-blue-50 dark:bg-blue-950 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded-sm font-bold text-[10px]">
+                        {st.gradeCode} {st.stream ? `· Stream ${st.stream}` : ''}
                       </span>
                     </td>
-                    <td className="p-3.5 font-mono text-indigo-700 font-semibold">{st.studentUsername}</td>
-                    <td className="p-3.5 font-mono text-slate-600 bg-slate-50 rounded px-2">{st.studentPassword}</td>
-                    <td className="p-3.5 text-slate-600 font-mono">{st.parentEmail || '—'}</td>
-                    <td className="p-3.5 font-mono text-slate-600">{st.parentPhone}</td>
+                    <td className="p-3.5 font-mono text-[11px]">
+                      <div className="text-indigo-700 dark:text-indigo-300 font-semibold">{st.studentUsername}</div>
+                      <div className="text-slate-500 dark:text-slate-400">{st.studentPassword}</div>
+                    </td>
+                    <td className="p-3.5">
+                      <div className="font-semibold text-slate-800 dark:text-slate-200">{st.parentName}</div>
+                      <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                        {st.parentPhone} {st.parentEmail ? `· ${st.parentEmail}` : ''}
+                      </div>
+                    </td>
                     <td className="p-3.5 text-right">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDeleteTarget({
-                            type: 'student',
-                            id: st.id,
-                            name: `${st.fullName} (${st.regNumber})`,
-                          })
-                        }
-                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                        title="Delete Student from Enrollment Roster"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setInspectedStudent(st)}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-950 text-blue-900 dark:text-amber-300 border border-slate-200 dark:border-slate-700 rounded-lg inline-flex items-center gap-1 cursor-pointer"
+                          title="View Student Profile, History & Digital ID Card"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>ID / Profile</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingStudent(st);
+                            setStudentFormData({
+                              regNumber: st.regNumber,
+                              fullName: st.fullName,
+                              gender: st.gender,
+                              dob: st.dob,
+                              gradeCode: st.gradeCode,
+                              stream: st.stream || 'A',
+                              address: st.address || '',
+                              admissionDate: st.admissionDate || '',
+                              previousSchool: st.previousSchool || '',
+                              photoUrl: st.photoUrl || '',
+                              parentName: st.parentName,
+                              parentPhone: st.parentPhone,
+                              parentEmail: st.parentEmail || '',
+                              studentUsername: st.studentUsername,
+                              studentPassword: st.studentPassword,
+                              status: st.status,
+                            });
+                            setShowAddStudentModal(true);
+                          }}
+                          className="p-1.5 text-slate-500 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                          title="Edit Student Profile"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              type: 'student',
+                              id: st.id,
+                              name: `${st.fullName} (${st.regNumber})`,
+                            })
+                          }
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Delete Student from Enrollment Roster"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -2599,7 +3043,7 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 3: REGISTRATION CONFIRMATIONS, ADMISSION CHARTS & APPLICANT CHATS */}
       {/* ========================================================================= */}
-      {activeTab === 'confirmations' && (
+      {activeTab === 'confirmations' && canManageAdmissions && (
         <div className="space-y-6">
           {/* Header Banner */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -3202,28 +3646,22 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 4: STUDENT ATTENDANCE TRACKER & PARENT GMAIL ALERT */}
       {/* ========================================================================= */}
-      {activeTab === 'attendance' && (
+      {activeTab === 'attendance' && canMarkAttendance && (
         <AdminAttendanceTracker onRecordSaved={() => setStudentList(getEnrolledStudents())} />
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 4B: TEACHER & STAFF DAILY ATTENDANCE */}
-      {/* ========================================================================= */}
-      {activeTab === 'teacher_attendance' && (currentUser.role === 'Admin' || currentUser.role === 'DOS') && (
+      {activeTab === 'teacher_attendance' && canManageTeacherAtt && (
         <TeacherAttendanceTracker staffList={staffList} />
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 4C: DOD STUDENT DISCIPLINE & CONDUCT CONTROL */}
-      {/* ========================================================================= */}
-      {activeTab === 'discipline' && (currentUser.role === 'Admin' || currentUser.role === 'DOS' || currentUser.role === 'DOD') && (
+      {activeTab === 'discipline' && canManageDiscipline && (
         <DODDisciplinePortal students={studentList} />
       )}
 
       {/* ========================================================================= */}
       {/* TAB: REQUIRED REGISTRATION DOCUMENTATION (ADMIN & DOS SETTINGS) */}
       {/* ========================================================================= */}
-      {activeTab === 'documents' && (
+      {activeTab === 'documents' && canManageDocuments && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -3372,7 +3810,7 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 5: SCHOOL IMAGES & GALLERY MANAGER (UPLOAD & FIREBASE STORAGE) */}
       {/* ========================================================================= */}
-      {activeTab === 'gallery' && (
+      {activeTab === 'gallery' && canManageGallery && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -3518,7 +3956,7 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 6: NEWS & ANNOUNCEMENTS (FULL CRUD & EDIT) */}
       {/* ========================================================================= */}
-      {activeTab === 'news' && (
+      {activeTab === 'news' && canManageNews && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -3612,7 +4050,7 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 7: INCOMING INQUIRIES & CONTACT MESSAGES */}
       {/* ========================================================================= */}
-      {activeTab === 'inquiries' && (
+      {activeTab === 'inquiries' && canManageInquiries && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -3687,7 +4125,7 @@ END $$;`;
       {/* ========================================================================= */}
       {/* TAB 8: GMAIL & NODEMAILER CONFIGURATION */}
       {/* ========================================================================= */}
-      {activeTab === 'gmail' && (
+      {activeTab === 'gmail' && canManageGmail && (
         <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-6">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
             <Mail className="w-6 h-6 text-blue-700" />
@@ -3750,9 +4188,9 @@ END $$;`;
       )}
 
       {/* ========================================================================= */}
-      {/* TAB: UPDATE WEBSITE CONTENT & SCHOOL LOGO (ADMIN ONLY) */}
+      {/* TAB: UPDATE WEBSITE CONTENT & SCHOOL LOGO */}
       {/* ========================================================================= */}
-      {activeTab === 'settings' && currentUser.role === 'Admin' && (
+      {activeTab === 'settings' && canManageWebsite && (
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
@@ -5450,12 +5888,16 @@ END $$;`;
                     onChange={(e) => setStaffFormData({ ...staffFormData, role: e.target.value as StaffMember['role'] })}
                     className="w-full bg-slate-50 border p-2.5 rounded-xl font-semibold"
                   >
-                    <option value="Teacher">Teacher (Classroom & Portal)</option>
-                    <option value="Finance">Finance Officer (Accounting & Ledger)</option>
-                    <option value="Registrar">Registrar (Admissions & Enrollment)</option>
+                    <option value="Teacher">Teacher (Assigned Classes &amp; Marks)</option>
                     <option value="DOS">DOS (Director of Studies)</option>
                     <option value="DOD">DOD (Director of Discipline)</option>
-                    <option value="Admin">Admin (Headmaster / Principal)</option>
+                    <option value="Registrar">Registrar (Admissions &amp; Enrollment)</option>
+                    <option value="Accountant">Accountant / Bursar</option>
+                    <option value="Finance">Finance Officer (Accounting &amp; Ledger)</option>
+                    <option value="HeadTeacher">Head Teacher / Principal</option>
+                    <option value="SchoolAdmin">School Administrator</option>
+                    <option value="SuperAdmin">Super Administrator (Full Access)</option>
+                    <option value="Admin">Headmaster / Admin</option>
                   </select>
                 </div>
                 <div>
@@ -5555,42 +5997,47 @@ END $$;`;
         </div>
       )}
 
-      {/* Modal: Enroll Student by DOS */}
+      {/* Modal: Enroll / Edit Student */}
       {showAddStudentModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
-                <h3 className="font-bold text-slate-900">DOS Student Enrollment &amp; Credentials Creation</h3>
-                <p className="text-[11px] text-slate-500">Assign learner to class and create their chosen portal credentials</p>
+                <h3 className="font-bold text-slate-900">
+                  {editingStudent ? `Edit Student Profile — ${editingStudent.fullName}` : 'DOS Student Enrollment & Credentials Creation'}
+                </h3>
+                <p className="text-[11px] text-slate-500">Assign class, stream, demographic details, and student portal credentials</p>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   setShowAddStudentModal(false);
+                  setEditingStudent(null);
                   setStudentFormError(null);
                 }}
-                className="text-slate-400 hover:text-slate-700"
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setShowAddStudentModal(false);
-                setStudentFormError(null);
-                setShowBulkStudentModal(true);
-              }}
-              className="w-full min-h-[42px] px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 font-bold text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2 text-left">
-                <FileUp className="w-4 h-4 text-blue-700 shrink-0" />
-                <span>Have a Word (.docx) or PDF (.pdf) student list?</span>
-              </span>
-              <span className="text-blue-700 underline whitespace-nowrap shrink-0">Import Table →</span>
-            </button>
+            {!editingStudent && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddStudentModal(false);
+                  setStudentFormError(null);
+                  setShowBulkStudentModal(true);
+                }}
+                className="w-full min-h-[42px] px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 font-bold text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-2 text-left">
+                  <FileUp className="w-4 h-4 text-blue-700 shrink-0" />
+                  <span>Have a Word (.docx) or PDF (.pdf) student list?</span>
+                </span>
+                <span className="text-blue-700 underline whitespace-nowrap shrink-0">Import Table →</span>
+              </button>
+            )}
 
             <form onSubmit={handleSaveStudent} className="space-y-3 text-xs">
               {studentFormError && (
@@ -5599,7 +6046,52 @@ END $$;`;
                   <span>{studentFormError}</span>
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                {studentFormData.photoUrl ? (
+                  <img src={studentFormData.photoUrl} alt="Student portrait" className="w-12 h-12 rounded-xl object-cover border border-slate-300 shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-900 font-bold flex items-center justify-center shrink-0">
+                    Photo
+                  </div>
+                )}
+                <div className="flex-1 space-y-1">
+                  <label className="font-bold text-slate-700 block">Student Passport Photo</label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="cursor-pointer px-3 py-1 bg-blue-900 hover:bg-blue-950 text-white font-semibold rounded-lg">
+                      {isUploadingStudentPhoto ? 'Uploading...' : 'Upload Photo'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isUploadingStudentPhoto}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setIsUploadingStudentPhoto(true);
+                          try {
+                            const res = await uploadSchoolAsset(file, 'student_profile', 'students');
+                            setStudentFormData((prev) => ({ ...prev, photoUrl: res.url }));
+                          } finally {
+                            setIsUploadingStudentPhoto(false);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                    {studentFormData.photoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setStudentFormData((prev) => ({ ...prev, photoUrl: '' }))}
+                        className="text-rose-600 font-semibold cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="font-bold block mb-1">Registration ID *</label>
                   <input
@@ -5622,23 +6114,104 @@ END $$;`;
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="font-bold block mb-1">Stream</label>
+                  <input
+                    type="text"
+                    value={studentFormData.stream}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, stream: e.target.value })}
+                    placeholder="e.g. A, B, East"
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="font-bold block mb-1">Learner Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Keza Aline Manzi"
-                  value={studentFormData.fullName}
-                  onChange={(e) => setStudentFormData({ ...studentFormData, fullName: e.target.value })}
-                  className="w-full bg-slate-50 border p-2.5 rounded-xl"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-bold block mb-1">Learner Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Keza Aline Manzi"
+                    value={studentFormData.fullName}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, fullName: e.target.value })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Gender</label>
+                  <select
+                    value={studentFormData.gender}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, gender: e.target.value as 'Male' | 'Female' })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={studentFormData.dob}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, dob: e.target.value })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Admission Date</label>
+                  <input
+                    type="date"
+                    value={studentFormData.admissionDate}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, admissionDate: e.target.value })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Enrollment Status</label>
+                  <select
+                    value={studentFormData.status}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, status: e.target.value as EnrolledStudent['status'] })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Awaiting Approval">Awaiting Approval</option>
+                    <option value="Suspended">Suspended</option>
+                    <option value="Transferred">Transferred</option>
+                    <option value="Graduated">Graduated</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold block mb-1">Parent Name</label>
+                  <label className="font-bold block mb-1">Home Address / Sector</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mugina, Kamonyi"
+                    value={studentFormData.address}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, address: e.target.value })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Previous School (if transferring)</label>
+                  <input
+                    type="text"
+                    placeholder="Optional"
+                    value={studentFormData.previousSchool}
+                    onChange={(e) => setStudentFormData({ ...studentFormData, previousSchool: e.target.value })}
+                    className="w-full bg-slate-50 border p-2.5 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Parent / Guardian Name</label>
                   <input
                     type="text"
                     placeholder="Parent / Guardian"
@@ -5660,7 +6233,7 @@ END $$;`;
               </div>
 
               <div>
-                <label className="font-bold block mb-1">Parent Email (Receives Attendance &amp; Grade Notices)</label>
+                <label className="font-bold block mb-1">Parent Email (Links Parent Portal &amp; Alerts)</label>
                 <input
                   type="email"
                   placeholder="parent@gmail.com"
@@ -5696,8 +6269,10 @@ END $$;`;
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setShowAddStudentModal(false)} className="px-4 py-2 font-semibold text-slate-600">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl">Enroll & Issue Credentials</button>
+                <button type="button" onClick={() => { setShowAddStudentModal(false); setEditingStudent(null); }} className="px-4 py-2 font-semibold text-slate-600 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl cursor-pointer">
+                  {editingStudent ? 'Save Student Changes' : 'Enroll & Issue Credentials'}
+                </button>
               </div>
             </form>
           </div>
@@ -6281,6 +6856,14 @@ END $$;`;
           </button>
         </div>
       )}
+      {/* Student Profile, History & Digital ID Card Modal */}
+      <StudentIdAndProfileModal
+        student={inspectedStudent}
+        onClose={() => setInspectedStudent(null)}
+        onStudentUpdated={() => setStudentList(getEnrolledStudents())}
+        canTransfer={hasPermission(currentUser, 'promote_transfer_students')}
+      />
+
       {/* Bulk Student List Import Modal (.docx / .pdf) */}
       <BulkStudentImportModal
         isOpen={showBulkStudentModal}

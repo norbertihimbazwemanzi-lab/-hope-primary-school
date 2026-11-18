@@ -37,6 +37,7 @@ import {
   filterStudentsAgainstTombstones,
   isGalleryInitialized,
 } from './services/adminStore';
+import { syncAllSmsDomains } from './services/smsStore';
 import { initAuth, resolveStaffRoleForFirebaseUser } from './services/authService';
 import {
   fetchSchoolLogoFromFirebase,
@@ -86,8 +87,17 @@ export default function App() {
   const [, setSessionRevision] = useState(0);
   const ignoreScrollSpyUntilRef = useRef<number>(0);
 
-  // Sync user attributes from Firestore on session or Firebase Auth events
+  // Sync theme preference & user attributes from Firestore on session or Firebase Auth events
   useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('mugina_theme_mode');
+      if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } catch {}
+
     const sessionHandler = () => setSessionRevision((r) => r + 1);
     window.addEventListener('mugina-session-updated', sessionHandler);
 
@@ -229,6 +239,7 @@ export default function App() {
       .catch(() => null);
 
     syncAllStoresWithServerDatabase().catch((e) => console.warn('Global store sync notice:', e));
+    syncAllSmsDomains().catch((e) => console.warn('SMS domain sync notice:', e));
 
     // 1. School Logo Fallback Fetch & Real-time Subscription
     fetchSchoolLogoFromFirebase()
@@ -694,7 +705,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-amber-200 selection:text-amber-950">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-amber-200 selection:text-amber-950 transition-colors">
 
 
       {/* Global Header Navigation Bar */}
@@ -728,7 +739,7 @@ export default function App() {
             </section>
 
             {/* 2. About Us Section */}
-            <section id="about" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+            <section id="about" className="scroll-mt-20 border-t border-slate-200/80 dark:border-slate-800 pt-6">
               <AboutPage
                 onNavigate={handleNavigate}
                 onOpenApply={() => handleOpenApply()}
@@ -737,7 +748,7 @@ export default function App() {
             </section>
 
             {/* 3. Admissions Section */}
-            <section id="admissions" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+            <section id="admissions" className="scroll-mt-20 border-t border-slate-200/80 dark:border-slate-800 pt-6">
               <AdmissionsPage
                 onNavigate={handleNavigate}
                 onOpenApply={() => handleOpenApply()}
@@ -751,7 +762,7 @@ export default function App() {
             </section>
 
             {/* 5. School Fees Section */}
-            <section id="fees" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+            <section id="fees" className="scroll-mt-20 border-t border-slate-200/80 dark:border-slate-800 pt-6">
               <SchoolFeesPage
                 onNavigate={handleNavigate}
                 onOpenApply={() => handleOpenApply()}
@@ -760,7 +771,7 @@ export default function App() {
             </section>
 
             {/* 6. Campus Life Section */}
-            <section id="campus-life" className="scroll-mt-20 border-t border-slate-200/80 pt-6">
+            <section id="campus-life" className="scroll-mt-20 border-t border-slate-200/80 dark:border-slate-800 pt-6">
               <CampusLifePage
                 onNavigate={handleNavigate}
                 onOpenApply={() => handleOpenApply()}
@@ -769,7 +780,7 @@ export default function App() {
             </section>
 
             {/* 7. Contact Us Section */}
-            <section id="contact" className="scroll-mt-20 border-t border-slate-200/80 pt-6 pb-6">
+            <section id="contact" className="scroll-mt-20 border-t border-slate-200/80 dark:border-slate-800 pt-6 pb-6">
               <ContactPage
                 onNavigate={handleNavigate}
                 onOpenTour={() => setIsTourModalOpen(true)}
@@ -791,7 +802,7 @@ export default function App() {
         <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 print:hidden">
           <button
             onClick={scrollToTop}
-            className="p-2.5 sm:p-3 bg-white/95 hover:bg-white text-slate-700 hover:text-slate-950 rounded-full shadow-lg border border-slate-200 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer backdrop-blur-xs"
+            className="p-2.5 sm:p-3 bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 hover:text-slate-950 dark:hover:text-white rounded-full shadow-lg border border-slate-200 dark:border-slate-700 transition-all hover:-translate-y-0.5 active:translate-y-0 cursor-pointer backdrop-blur-xs"
             aria-label="Scroll to top"
           >
             <ArrowUp className="w-4 h-4" />

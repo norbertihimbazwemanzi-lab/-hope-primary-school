@@ -284,6 +284,12 @@ const mapStudentToRow = (st: any, includeExtended = true) => {
     base.enrolled_by = st.enrolledBy || '';
     base.enrolled_at = st.enrolledAt || '';
     base.feedback_notes = st.feedbackNotes || '';
+    base.photo_url = st.photoUrl || null;
+    base.stream = st.stream || 'Stream A';
+    base.address = st.address || '';
+    base.admission_date = st.admissionDate || st.enrolledAt || '';
+    base.previous_school = st.previousSchool || '';
+    base.academic_history = Array.isArray(st.academicHistory) ? st.academicHistory : [];
   }
   return base;
 };
@@ -295,6 +301,12 @@ const mapRowToStudent = (row: any) => ({
   gender: row.gender || 'Female',
   dob: row.dob || '',
   gradeCode: row.grade_code || row.gradeCode,
+  stream: row.stream || 'Stream A',
+  photoUrl: row.photo_url || row.photoUrl || undefined,
+  address: row.address || undefined,
+  admissionDate: row.admission_date || row.admissionDate || row.enrolled_at || undefined,
+  previousSchool: row.previous_school || row.previousSchool || undefined,
+  academicHistory: Array.isArray(row.academic_history) ? row.academic_history : undefined,
   parentName: row.parent_name || row.parentName || '',
   parentPhone: row.parent_phone || row.parentPhone || '',
   parentEmail: row.parent_email || row.parentEmail || '',

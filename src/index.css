@@ -1,9 +1,14 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-display: "Outfit", "Plus Jakarta Sans", system-ui, sans-serif;
   --breakpoint-xs: 375px;
+  --color-royal-900: #1e3a8a;
+  --color-royal-950: #172554;
+  --color-hope-green: #15803d;
+  --color-hope-gold: #f59e0b;
 }
 
 @layer base {
@@ -21,5 +26,27 @@
   button:active:not(:disabled), [role="button"]:active:not(:disabled) {
     transform: scale(0.98);
     transition: transform 0.05s ease-in-out;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
   }
 }

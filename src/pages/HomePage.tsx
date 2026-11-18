@@ -7,18 +7,18 @@ import {
   getWebsiteSettings,
   saveWebsiteSettings,
   getCurrentSessionUser,
+  getAnnouncements,
+  SchoolAnnouncement,
   WebsiteSettings,
 } from '../services/adminStore';
+import { isAdminOrExecutive } from '../services/rbac';
 import { uploadSchoolAsset } from '../services/storageService';
 import { ReadMoreText, ReadMorePanel } from '../components/ReadMoreBlock';
 import {
-  Calendar,
   GraduationCap,
   Users,
   ShieldCheck,
   CheckCircle2,
-  Mail,
-  MapPin,
   ArrowRight,
   BookOpen,
   Edit3,
@@ -28,6 +28,8 @@ import {
   Check,
   RefreshCw,
   Camera,
+  Search,
+  Bell,
 } from 'lucide-react';
 
 interface HomePageProps {
@@ -47,6 +49,11 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [managerImgError, setManagerImgError] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [announcements, setAnnouncements] = useState<SchoolAnnouncement[]>(() =>
+    getAnnouncements().filter((a) => a.isActive)
+  );
+  const [newsSearch, setNewsSearch] = useState('');
+  const [newsCategory, setNewsCategory] = useState<string>('All');
 
   // Form states for in-place leadership editing
   const [managerPhotoUrl, setManagerPhotoUrl] = useState(settings.schoolManagerPhotoUrl || '');
@@ -63,7 +70,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     settings.adminMessageParagraph2 ||
       'Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC), our dual nursery and primary curriculum prepares learners not only for national examination excellence (PLE) but also for responsible citizenship, creative problem-solving, and fluent trilingual communication.'
   );
-  const [messageMotto, setMessageMotto] = useState(settings.adminMessageMotto || 'Nurturing Minds, Building Character, Inspiring Hope.');
+  const [messageMotto, setMessageMotto] = useState(settings.adminMessageMotto || SCHOOL_INFO.motto);
   const [commitments, setCommitments] = useState<string[]>(
     settings.adminCommitments && settings.adminCommitments.length > 0
       ? settings.adminCommitments
@@ -91,15 +98,22 @@ export const HomePage: React.FC<HomePageProps> = ({
       if (updated.adminMessageMotto) setMessageMotto(updated.adminMessageMotto);
       if (updated.adminCommitments) setCommitments(updated.adminCommitments);
     };
+    const handleAnnUpdate = () => {
+      setAnnouncements(getAnnouncements().filter((a) => a.isActive));
+    };
     window.addEventListener('mugina-settings-updated', handleUpdate);
-    return () => window.removeEventListener('mugina-settings-updated', handleUpdate);
+    window.addEventListener('mugina-announcements-updated', handleAnnUpdate);
+    return () => {
+      window.removeEventListener('mugina-settings-updated', handleUpdate);
+      window.removeEventListener('mugina-announcements-updated', handleAnnUpdate);
+    };
   }, []);
 
   useEffect(() => {
     setSessionUser(getCurrentSessionUser());
   }, []);
 
-  const isAdmin = sessionUser?.role === 'Admin' || sessionUser?.role === 'DOS';
+  const isAdmin = isAdminOrExecutive(sessionUser?.role);
 
   const handleOpenEditModal = () => {
     const cur = getWebsiteSettings();
@@ -195,7 +209,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       {/* 2. Welcome from Leadership & Institutional Purpose */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-10 lg:p-12 shadow-xs relative">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 sm:p-10 lg:p-12 shadow-xs relative">
           {/* Admin In-Place Quick Edit Button */}
           {isAdmin && (
             <div className="mb-6 flex justify-end">
@@ -280,10 +294,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
 
               {/* School Motto Banner */}
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600">
-                <span className="font-semibold text-slate-800 block mb-0.5">Official School Motto:</span>
-                <span className="italic text-slate-700 font-serif">
-                  &ldquo;{settings.adminMessageMotto || 'Nurturing Minds, Building Character, Inspiring Hope.'}&rdquo;
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-lg border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-semibold text-slate-800 dark:text-white block mb-0.5">Official School Motto:</span>
+                <span className="italic text-slate-700 dark:text-amber-300 font-serif">
+                  &ldquo;{settings.adminMessageMotto || settings.motto || SCHOOL_INFO.motto}&rdquo;
                 </span>
               </div>
             </div>
@@ -291,10 +305,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Right Column: Editorial Message */}
             <div className="lg:col-span-7 space-y-5">
               <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
                   {settings.adminMessageKicker || 'Message from the Administration'}
                 </span>
-                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-snug">
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight leading-snug">
                   {settings.adminMessageHeading || 'Providing a Strong Foundation for Every Child in Kamonyi'}
                 </h2>
               </div>
@@ -307,7 +321,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                     'Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC), our dual nursery and primary curriculum prepares learners not only for national examination excellence (PLE) but also for responsible citizenship, creative problem-solving, and fluent trilingual communication.',
                 ]}
                 maxChars={190}
-                paragraphClassName="text-xs sm:text-sm text-slate-600 leading-relaxed"
+                paragraphClassName="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed"
                 readMoreLabel="Read More"
                 showLessLabel="Show Less"
               />
@@ -324,8 +338,8 @@ export const HomePage: React.FC<HomePageProps> = ({
                     ]
                 ).map((commitment, cIdx) => (
                   <div key={cIdx} className="flex items-start gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                    <span className="text-xs text-slate-700">{commitment}</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="text-xs text-slate-700 dark:text-slate-300">{commitment}</span>
                   </div>
                 ))}
               </div>
@@ -333,17 +347,17 @@ export const HomePage: React.FC<HomePageProps> = ({
               <div className="pt-2 flex flex-wrap gap-3">
                 <button
                   onClick={() => onNavigate('about')}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors cursor-pointer"
                 >
                   <span>Read About Our Heritage</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={onOpenApply}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-900 hover:text-blue-700 underline underline-offset-4 decoration-2 decoration-blue-900 hover:decoration-blue-700 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-900 dark:text-amber-400 hover:text-blue-700 dark:hover:text-amber-300 underline underline-offset-4 decoration-2 decoration-blue-900 dark:decoration-amber-400 hover:decoration-blue-700 transition-colors cursor-pointer"
                 >
                   <span>Apply for Admission</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-amber-600" />
+                  <ArrowRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                 </button>
               </div>
             </div>
@@ -605,92 +619,92 @@ export const HomePage: React.FC<HomePageProps> = ({
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Pillar 1 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2.5 flex flex-col justify-between">
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-slate-700">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Curriculum
                 </span>
-                <BookOpen className="w-4 h-4 text-blue-900" />
+                <BookOpen className="w-4 h-4 text-blue-900 dark:text-blue-400" />
               </div>
-              <div className="text-xl font-bold text-slate-900">
+              <div className="text-xl font-bold text-slate-900 dark:text-white">
                 MINEDUC CBC
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 Standard Rwanda national educational syllabus focusing on critical thinking, literacy, and numeracy.
               </p>
             </div>
             <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
-              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pt-2 border-t border-slate-100 dark:border-slate-800">
                 Instruction is delivered in English alongside structured French and Kinyarwanda mastery, equipping learners for Primary Leaving Examinations (PLE) and practical problem solving.
               </p>
             </ReadMorePanel>
           </div>
 
           {/* Pillar 2 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2.5 flex flex-col justify-between">
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-slate-700">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Campus Safety
                 </span>
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <ShieldCheck className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
               </div>
-              <div className="text-xl font-bold text-slate-900">
+              <div className="text-xl font-bold text-slate-900 dark:text-white">
                 Guarded Perimeter
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 Adjacent to Mugina Police Station with perimeter walls and strictly verified family dismissal protocols.
               </p>
             </div>
             <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
-              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pt-2 border-t border-slate-100 dark:border-slate-800">
                 Trained security personnel monitor every entry gate 24/7, logging all visitors and verifying authorized guardian credentials before any pupil departs campus.
               </p>
             </ReadMorePanel>
           </div>
 
           {/* Pillar 3 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2.5 flex flex-col justify-between">
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-slate-700">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Grade Scope
                 </span>
-                <GraduationCap className="w-4 h-4 text-blue-900" />
+                <GraduationCap className="w-4 h-4 text-blue-900 dark:text-blue-400" />
               </div>
-              <div className="text-xl font-bold text-slate-900">
+              <div className="text-xl font-bold text-slate-900 dark:text-white">
                 Nursery to P6
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 Comprehensive educational continuity from Baby Class (3y) through Primary 6 graduation examinations.
               </p>
             </div>
             <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
-              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pt-2 border-t border-slate-100 dark:border-slate-800">
                 Learners progress seamlessly across Baby, Middle, and Top Nursery classes into Lower Primary (P1–P3) and Upper Primary (P4–P6) under one supportive roof.
               </p>
             </ReadMorePanel>
           </div>
 
           {/* Pillar 4 */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 space-y-2.5 flex flex-col justify-between">
+          <div className="bg-white dark:bg-slate-900 p-5 rounded-lg border border-slate-200 dark:border-slate-800 space-y-2.5 flex flex-col justify-between">
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-slate-700">
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Mentorship
                 </span>
-                <Users className="w-4 h-4 text-slate-700" />
+                <Users className="w-4 h-4 text-slate-700 dark:text-amber-400" />
               </div>
-              <div className="text-xl font-bold text-slate-900">
+              <div className="text-xl font-bold text-slate-900 dark:text-white tabular-nums">
                 18 : 1 Pupil Ratio
               </div>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                 Carefully managed class cohorts ensuring individualized attention and regular teacher-parent feedback.
               </p>
             </div>
             <ReadMorePanel readMoreLabel="Read More" showLessLabel="Show Less">
-              <p className="text-xs text-slate-600 leading-relaxed pt-2 border-t border-slate-100">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pt-2 border-t border-slate-100 dark:border-slate-800">
                 Small class sizes allow educators to spot learning strengths early, offer daily remedial guidance, and share timely academic and attendance updates with families.
               </p>
             </ReadMorePanel>
@@ -698,7 +712,101 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 4. Academic Pathways */}
+      {/* 4. News & Official Announcements (Searchable & Filterable) */}
+      {announcements.length > 0 && (() => {
+        const categories = ['All', ...Array.from(new Set(announcements.map((a) => a.badge || 'Notice')))];
+        const filteredNews = announcements.filter((item) => {
+          const matchesCat = newsCategory === 'All' || (item.badge || 'Notice') === newsCategory;
+          const q = newsSearch.trim().toLowerCase();
+          const matchesSearch =
+            !q ||
+            item.title.toLowerCase().includes(q) ||
+            item.content.toLowerCase().includes(q);
+          return matchesCat && matchesSearch;
+        });
+
+        return (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 sm:p-8 space-y-6 shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-900 dark:text-amber-400">
+                    <Bell className="w-4 h-4" />
+                    <span>School Noticeboard &amp; Updates</span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                    Latest News &amp; Official Announcements
+                  </h2>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={newsSearch}
+                      onChange={(e) => setNewsSearch(e.target.value)}
+                      placeholder="Search notices..."
+                      aria-label="Search school announcements"
+                      className="w-full sm:w-52 pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-900"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {categories.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setNewsCategory(cat)}
+                        className={`px-2.5 py-1.5 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          newsCategory === cat
+                            ? 'bg-blue-900 text-white'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {filteredNews.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">
+                  No announcements match your filter.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredNews.slice(0, 6).map((item) => (
+                    <article
+                      key={item.id}
+                      className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                            {item.badge || 'Notice'}
+                          </span>
+                          <span className="font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                            {item.publishedAt}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
+                          {item.title}
+                        </h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {item.content}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        );
+      })()}
+
+      {/* 5. Academic Pathways */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <DualPathGateway
           onNavigate={onNavigate}
