@@ -55,6 +55,55 @@ export const initAuth = (
   });
 };
 
+export const warmUpFirebaseAuth = async (): Promise<void> => {
+  try {
+    if (typeof (auth as any).authStateReady === 'function') {
+      await (auth as any).authStateReady();
+    }
+  } catch {
+    // non-fatal
+  }
+};
+
+const GOOGLE_OAUTH_HANDOFF_KEY = 'mugina_google_oauth_handoff_v1';
+
+export const publishGoogleOAuthHandoff = (
+  session: CurrentSessionUser,
+  staffToken?: string | null
+) => {
+  try {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(
+      GOOGLE_OAUTH_HANDOFF_KEY,
+      JSON.stringify({
+        session,
+        staffToken: staffToken || getStaffAuthToken() || null,
+        ts: Date.now(),
+      })
+    );
+  } catch {
+    // non-fatal
+  }
+};
+
+export const consumeGoogleOAuthHandoff = (): CurrentSessionUser | null => {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = localStorage.getItem(GOOGLE_OAUTH_HANDOFF_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    localStorage.removeItem(GOOGLE_OAUTH_HANDOFF_KEY);
+    if (!parsed || !parsed.session || !parsed.ts) return null;
+    if (Date.now() - Number(parsed.ts) > 120_000) return null;
+    if (parsed.staffToken) {
+      setStaffAuthToken(String(parsed.staffToken));
+    }
+    return parsed.session as CurrentSessionUser;
+  } catch {
+    return null;
+  }
+};
+
 const formatFirebaseGoogleError = (error: any): Error => {
   const code = String(error?.code || '');
   const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
@@ -68,7 +117,7 @@ const formatFirebaseGoogleError = (error: any): Error => {
   }
   if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
     return new Error(
-      'Your browser blocked the Google sign-in popup. Please allow popups for this site and try again.'
+      'Your browser blocked the Google sign-in popup. Please allow popups for this site or open the portal in a full browser tab.'
     );
   }
   if (code === 'auth/operation-not-allowed') {
@@ -94,19 +143,21 @@ export const consumeGoogleRedirectResult = async (): Promise<{
     cachedAccessToken = credential?.accessToken || (await result.user.getIdToken());
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.warn('Firebase Google redirect result notice:', error);
+    console.warn('Firebase Google redirect result notice:', error?.code || error?.message);
     throw formatFirebaseGoogleError(error);
   }
 };
 
 /**
- * Firebase Google Sign-In with popup and automatic redirect fallback when popups are blocked
- * Securely verifies user identity against Google & Firebase Authentication
+ * Firebase Google Sign-In with popup, automatic top-level redirect fallback,
+ * and graceful embedded-iframe handling when popups are blocked.
  */
 export const googleSignIn = async (): Promise<{
   user: User | null;
   accessToken: string;
   redirected?: boolean;
+  popupBlockedInIframe?: boolean;
+  cancelled?: boolean;
 }> => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
@@ -116,14 +167,26 @@ export const googleSignIn = async (): Promise<{
   } catch (error: any) {
     const code = String(error?.code || '');
     const inIframe = typeof window !== 'undefined' && window.self !== window.top;
-    if (
-      !inIframe &&
-      (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment')
-    ) {
-      await signInWithRedirect(auth, googleProvider);
-      return { user: null, accessToken: '', redirected: true };
+
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      return { user: null, accessToken: '', cancelled: true };
     }
-    console.error('Firebase Google Sign-In Error:', error);
+
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+      if (!inIframe) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return { user: null, accessToken: '', redirected: true };
+        } catch (redirectError: any) {
+          console.warn('Firebase Google redirect fallback notice:', redirectError?.code || redirectError?.message);
+          throw formatFirebaseGoogleError(redirectError);
+        }
+      }
+      console.warn('Firebase Google Sign-In popup blocked inside embedded frame; offering full-tab sign-in.');
+      return { user: null, accessToken: '', popupBlockedInIframe: true };
+    }
+
+    console.warn('Firebase Google Sign-In notice:', code || error?.message);
     throw formatFirebaseGoogleError(error);
   }
 };

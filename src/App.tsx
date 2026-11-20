@@ -566,8 +566,7 @@ export default function App() {
     document.title = pageTitles[page] || pageTitles.home;
     const basePath = page === 'home' ? '/' : `/${page}`;
     const keepQuery =
-      (page === 'verify-admission' || page === 'reset-password') &&
-      window.location.pathname === basePath
+      isStandalonePage(page) && window.location.pathname === basePath
         ? window.location.search
         : '';
     const nextPath = `${basePath}${keepQuery}`;

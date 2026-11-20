@@ -86,6 +86,9 @@ import {
   getStaffAuthToken,
   setStaffAuthToken,
   requestPasswordReset,
+  warmUpFirebaseAuth,
+  publishGoogleOAuthHandoff,
+  consumeGoogleOAuthHandoff,
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
@@ -284,6 +287,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   });
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [googlePopupBlocked, setGooglePopupBlocked] = useState(false);
+  const [googleFullTabNotice, setGoogleFullTabNotice] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
 
@@ -750,10 +755,45 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setAttendanceSuccessMsg(null);
   }, [attendanceDate, attendanceGrade, studentList]);
 
-  // Handle returning from a Firebase Google redirect sign-in (mobile/blocked-popup fallback)
+  // Warm up Firebase Auth, support cross-tab Google OAuth handoff, and consume redirect sign-in results
   useEffect(() => {
     if (currentUser) return;
     let cancelled = false;
+    warmUpFirebaseAuth();
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('google_auth') === '1' && window.self === window.top) {
+        setGoogleFullTabNotice(true);
+        params.delete('google_auth');
+        const nextSearch = params.toString();
+        const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', nextUrl);
+      }
+    } catch {
+      // ignore URL parsing errors
+    }
+
+    const applyCrossTabHandoff = () => {
+      const handedOff = consumeGoogleOAuthHandoff();
+      if (!handedOff || cancelled) return;
+      setGooglePopupBlocked(false);
+      setGoogleFullTabNotice(false);
+      setLoginError('');
+      setCurrentSessionUser(handedOff);
+      setCurrentUser(handedOff);
+      setActiveTab(resolveDefaultTabForUser(handedOff));
+    };
+
+    applyCrossTabHandoff();
+
+    const handleStorageHandoff = (ev: StorageEvent) => {
+      if (ev.key === 'mugina_google_oauth_handoff_v1' && ev.newValue) {
+        applyCrossTabHandoff();
+      }
+    };
+    window.addEventListener('storage', handleStorageHandoff);
+
     consumeGoogleRedirectResult()
       .then(async (res) => {
         if (cancelled || !res || !res.user) return;
@@ -770,6 +810,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
           if (resolution.session.role !== 'Parent') {
             await exchangeFirebaseTokenForStaffSession(res.user).catch(() => {});
           }
+          publishGoogleOAuthHandoff(resolution.session, getStaffAuthToken());
+          setGooglePopupBlocked(false);
+          setGoogleFullTabNotice(false);
           setCurrentSessionUser(resolution.session);
           setCurrentUser(resolution.session);
           setActiveTab(resolveDefaultTabForUser(resolution.session));
@@ -796,6 +839,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       });
     return () => {
       cancelled = true;
+      window.removeEventListener('storage', handleStorageHandoff);
     };
   }, [currentUser]);
 
@@ -803,6 +847,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setGooglePopupBlocked(false);
+    setGoogleFullTabNotice(false);
     setIsVerifyingLogin(true);
     ensureAdminFirebaseAuth().catch((err) => console.warn('Admin firebase auth init notice:', err));
 
@@ -915,9 +961,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const handleGoogleConnect = async () => {
     setIsGoogleLoading(true);
     setLoginError('');
+    setGooglePopupBlocked(false);
     try {
       const res = await googleSignIn();
       if (res?.redirected) {
+        return;
+      }
+      if (res?.popupBlockedInIframe) {
+        setGooglePopupBlocked(true);
+        setLoginError(
+          'Your browser blocked the Google sign-in popup inside this embedded window. Open Google Sign-In in a full browser tab below or sign in using your Username & Password.'
+        );
+        return;
+      }
+      if (res?.cancelled) {
+        setLoginError('Google sign-in was closed before completing. Please try again.');
         return;
       }
       if (res && res.user) {
@@ -934,6 +992,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
           if (resolution.session.role !== 'Parent') {
             await exchangeFirebaseTokenForStaffSession(res.user).catch(() => {});
           }
+          publishGoogleOAuthHandoff(resolution.session, getStaffAuthToken());
+          setGooglePopupBlocked(false);
+          setGoogleFullTabNotice(false);
           setCurrentSessionUser(resolution.session);
           setCurrentUser(resolution.session);
           setActiveTab(resolveDefaultTabForUser(resolution.session));
@@ -2133,10 +2194,32 @@ END $$;`;
           </div>
 
           <div className="p-5 sm:p-8 space-y-5">
+            {googleFullTabNotice && !loginError && (
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-xl text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-blue-700 dark:text-amber-400" />
+                <span>
+                  Full browser tab ready. Click <strong>Sign in with Google Account</strong> below to sign in without frame popup restrictions.
+                </span>
+              </div>
+            )}
+
             {loginError && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{loginError}</span>
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{loginError}</span>
+                </div>
+                {googlePopupBlocked && (
+                  <a
+                    href="/admin?google_auth=1"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 bg-blue-950 hover:bg-blue-900 text-white font-bold text-xs rounded-lg transition-colors"
+                  >
+                    <span>Continue with Google in New Tab</span>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-amber-400" />
+                  </a>
+                )}
               </div>
             )}
 
