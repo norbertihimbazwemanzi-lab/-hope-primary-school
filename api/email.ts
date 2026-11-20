@@ -1,8 +1,8 @@
 import nodemailer from 'nodemailer';
 
-const GMAIL_USER = process.env.GMAIL_USER || process.env.SMTP_USER || '';
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '';
-const SCHOOL_OFFICIAL_EMAIL = process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com';
+const GMAIL_USER = (process.env.GMAIL_USER || process.env.SMTP_USER || '').trim();
+const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '').replace(/\s+/g, '');
+const EMAIL_FROM_ENV = (process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com').trim();
 
 interface ApiRequest {
   method?: string;
@@ -58,9 +58,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       });
     }
 
-    const fromHeader = SCHOOL_OFFICIAL_EMAIL.includes('<')
-      ? SCHOOL_OFFICIAL_EMAIL
-      : `"Mugina Hope Primary School" <${SCHOOL_OFFICIAL_EMAIL}>`;
+    const fromHeader = EMAIL_FROM_ENV.includes('<')
+      ? EMAIL_FROM_ENV
+      : `"Mugina Hope Primary School" <${EMAIL_FROM_ENV}>`;
 
     const info = await transporter.sendMail({
       from: fromHeader,
@@ -77,8 +77,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     });
   } catch (error: any) {
     console.error('[Vercel Serverless Email] Error:', error);
+    const rawMsg = String(error?.message || 'Failed to dispatch email via serverless function');
+    const friendlyMsg =
+      /535|BadCredentials|Username and Password not accepted/i.test(rawMsg)
+        ? `${rawMsg} — Google Gmail rejected GMAIL_USER/GMAIL_APP_PASSWORD. Enable 2-Step Verification on your Gmail account, generate a new 16-character App Password, and update GMAIL_USER and GMAIL_APP_PASSWORD (no spaces) in environment variables.`
+        : rawMsg;
     return res.status(500).json({
-      error: error.message || 'Failed to dispatch email via serverless function',
+      error: friendlyMsg,
     });
   }
 }

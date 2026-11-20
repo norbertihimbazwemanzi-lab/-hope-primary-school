@@ -70,6 +70,13 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
   const [retryingLogId, setRetryingLogId] = useState<string | null>(null);
   const [resendingRef, setResendingRef] = useState<string | null>(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [smtpStatus, setSmtpStatus] = useState<{
+    configured: boolean;
+    gmailUser?: string;
+    appPasswordLength?: number;
+    mode?: string;
+  } | null>(null);
   const [feedbackBanner, setFeedbackBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const showFeedback = (type: 'success' | 'error', text: string) => {
@@ -82,9 +89,10 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     setLoadingLogs(true);
     try {
-      const [logsRes, tplRes] = await Promise.all([
+      const [logsRes, tplRes, statusRes] = await Promise.all([
         fetch('/api/admin/email-logs', { headers }),
         fetch('/api/admin/email-templates', { headers }),
+        fetch('/api/admin/email-status', { headers }),
       ]);
       if (logsRes.ok) {
         const data = await logsRes.json();
@@ -99,10 +107,38 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
           }
         }
       }
+      if (statusRes.ok) {
+        const sData = await statusRes.json();
+        if (sData.success) setSmtpStatus(sData);
+      }
     } catch {
       // non-fatal
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const handleTestSmtpConnection = async () => {
+    const token = getStaffAuthToken();
+    setTestingSmtp(true);
+    try {
+      const res = await fetch('/api/admin/email-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        showFeedback('success', data.message || 'Gmail SMTP credentials verified cleanly.');
+      } else {
+        showFeedback('error', data.error || 'Gmail SMTP verification failed.');
+      }
+    } catch {
+      showFeedback('error', 'Network error while verifying Gmail SMTP connection.');
+    } finally {
+      setTestingSmtp(false);
     }
   };
 
@@ -283,6 +319,36 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
           </div>
         )}
 
+        {(logs.some((l) => l.status === 'Failed' && /535|BadCredentials|Username and Password not accepted/i.test(l.errorMessage || '')) ||
+          (smtpStatus && (!smtpStatus.configured || (smtpStatus.appPasswordLength || 0) !== 16))) && (
+          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-950 dark:text-amber-200 space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                <span>Gmail SMTP Authentication Notice (535-5.7.8 BadCredentials)</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleTestSmtpConnection}
+                disabled={testingSmtp}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] cursor-pointer disabled:opacity-60"
+              >
+                {testingSmtp ? 'Testing SMTP...' : 'Test Gmail SMTP Connection'}
+              </button>
+            </div>
+            <p className="text-[11px] leading-relaxed">
+              {smtpStatus?.configured && smtpStatus.appPasswordLength !== 16 && (
+                <>
+                  <strong>Detected issue:</strong> The configured <code>GMAIL_APP_PASSWORD</code> is{' '}
+                  <strong>{smtpStatus.appPasswordLength}</strong> characters (a valid Google App Password is{' '}
+                  <strong>16 characters</strong>).{' '}
+                </>
+              )}
+              Google rejects regular Gmail login passwords and revokes old App Passwords whenever your Gmail password changes. To restore live email sending: open your Google Account → <strong>Security</strong> → enable <strong>2-Step Verification</strong> → open <strong>App passwords</strong> → create a 16-character password and update <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> (and <code>SMTP_USER</code>/<code>SMTP_PASS</code> on Vercel) in Environment Variables / Secrets.
+            </p>
+          </div>
+        )}
+
         {/* Sub-Navigation */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
@@ -321,14 +387,25 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={fetchLogsAndTemplates}
-            className="px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} />
-            <span>Refresh Logs</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleTestSmtpConnection}
+              disabled={testingSmtp}
+              className="px-3 py-2 text-xs font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/70 text-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-800 rounded-xl inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>{testingSmtp ? 'Verifying...' : 'Test Gmail SMTP'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchLogsAndTemplates}
+              className="px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingLogs ? 'animate-spin' : ''}`} />
+              <span>Refresh Logs</span>
+            </button>
+          </div>
         </div>
 
         {/* SUB-TAB 1: SENT EMAIL HISTORY */}

@@ -16,6 +16,8 @@ import {
   enrollStudentByDOS,
   updateEnrolledStudent,
   deleteEnrolledStudent,
+  deleteEnrolledStudentsBatch,
+  detectImportedStudentBatches,
   getAttendanceRecords,
   saveAttendanceBatch,
   getGalleryItems,
@@ -418,9 +420,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
   // Deletion Modal State (Reliable in-app confirmation avoiding blocked window.confirm)
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: 'staff' | 'student' | 'doc' | 'gallery' | 'news' | 'application';
+    type: 'staff' | 'student' | 'student-batch' | 'doc' | 'gallery' | 'news' | 'application';
     id: string;
     name: string;
+    ids?: string[];
+    batchScope?: 'all' | 'imported' | 'selected' | 'file' | 'grade';
+    selectedImportFile?: string;
+    selectedGradeFilter?: string;
+    allIds?: string[];
+    importedIds?: string[];
+    importedFiles?: Array<{ fileName: string; ids: string[] }>;
   } | null>(null);
   const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
 
@@ -2068,7 +2077,21 @@ END $$;`;
       } else if (type === 'student') {
         const updated = deleteEnrolledStudent(id);
         setStudentList(updated);
+        setSelectedStudentIds((prev) => prev.filter((sid) => sid !== id));
         setDeleteSuccessMsg(`Student ${name} removed from enrollment roster.`);
+      } else if (type === 'student-batch') {
+        const targetIds = deleteTarget.ids || [];
+        const idSet = new Set(targetIds);
+        const updated = deleteEnrolledStudentsBatch(targetIds);
+        setStudentList(updated);
+        setSelectedStudentIds((prev) => prev.filter((sid) => !idSet.has(sid)));
+        logAuditEvent(
+          'BULK_DELETE',
+          'Student',
+          'batch',
+          `Deleted ${targetIds.length} learner(s) (${name})`
+        );
+        setDeleteSuccessMsg(`Removed ${targetIds.length} learner(s) (${name}) from enrollment roster.`);
       } else if (type === 'doc') {
         const updated = deleteRequiredDocument(id);
         setDocList(updated);
@@ -3095,6 +3118,29 @@ END $$;`;
                 </button>
               )}
 
+              {selectedStudentIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { importedIds, importedFiles } = detectImportedStudentBatches(studentList);
+                    setDeleteTarget({
+                      type: 'student-batch',
+                      id: 'selected-students',
+                      name: `${selectedStudentIds.length} Selected Learner(s)`,
+                      ids: selectedStudentIds,
+                      batchScope: 'selected',
+                      allIds: studentList.map((s) => s.id),
+                      importedIds,
+                      importedFiles,
+                    });
+                  }}
+                  className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="tabular-nums">Delete Selected ({selectedStudentIds.length})</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -3134,6 +3180,64 @@ END $$;`;
                 <FileUp className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Import Word / PDF</span>
               </button>
+
+              {(() => {
+                const { importedIds, importedFiles } = detectImportedStudentBatches(studentList);
+
+                return (
+                  <>
+                    {importedIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeleteTarget({
+                            type: 'student-batch',
+                            id: 'imported-word-pdf',
+                            name: `${importedIds.length} Imported Word/PDF Learner(s)`,
+                            ids: importedIds,
+                            batchScope: 'imported',
+                            allIds: studentList.map((s) => s.id),
+                            importedIds,
+                            importedFiles,
+                            selectedImportFile: importedFiles[0]?.fileName || '',
+                            selectedGradeFilter: '',
+                          })
+                        }
+                        className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        title="Delete learners imported from Word (.docx) or PDF (.pdf) lists"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="tabular-nums">Delete Imported Word/PDF ({importedIds.length})</span>
+                      </button>
+                    )}
+
+                    {studentList.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeleteTarget({
+                            type: 'student-batch',
+                            id: 'all-learners',
+                            name: `All ${studentList.length} Enrolled Learner(s)`,
+                            ids: studentList.map((s) => s.id),
+                            batchScope: 'all',
+                            allIds: studentList.map((s) => s.id),
+                            importedIds,
+                            importedFiles,
+                            selectedImportFile: importedFiles[0]?.fileName || '',
+                            selectedGradeFilter: '',
+                          })
+                        }
+                        className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-rose-50 dark:bg-slate-900 dark:hover:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        title="Delete all learners or clear imported Word/PDF lists"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="tabular-nums">Delete All Learners ({studentList.length})</span>
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
 
               <button
                 type="button"
@@ -7331,6 +7435,8 @@ END $$;`;
                     ? 'Staff Member'
                     : deleteTarget.type === 'student'
                     ? 'Enrolled Student'
+                    : deleteTarget.type === 'student-batch'
+                    ? 'Bulk Learner Deletion'
                     : deleteTarget.type === 'doc'
                     ? 'Registration Requirement'
                     : deleteTarget.type === 'gallery'
@@ -7341,6 +7447,139 @@ END $$;`;
                 </span>
               </div>
             </div>
+
+            {deleteTarget.type === 'student-batch' && deleteTarget.batchScope !== 'selected' && (
+              <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2.5 text-xs">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 block">
+                  Choose What to Delete:
+                </span>
+                <div className="space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeleteTarget((prev) =>
+                        prev && prev.allIds
+                          ? {
+                              ...prev,
+                              batchScope: 'all',
+                              selectedGradeFilter: '',
+                              ids: prev.allIds,
+                              name: `All ${prev.allIds.length} Enrolled Learner(s)`,
+                            }
+                          : prev
+                      )
+                    }
+                    className={`w-full text-left px-3 py-2 rounded-xl border font-semibold transition-colors cursor-pointer ${
+                      deleteTarget.batchScope === 'all'
+                        ? 'bg-rose-600 text-white border-rose-700'
+                        : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Delete All Learners ({deleteTarget.allIds?.length || 0})
+                  </button>
+                  {(deleteTarget.importedIds?.length || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDeleteTarget((prev) =>
+                          prev && prev.importedIds
+                            ? {
+                                ...prev,
+                                batchScope: 'imported',
+                                selectedGradeFilter: '',
+                                ids: prev.importedIds,
+                                name: `${prev.importedIds.length} Imported Word/PDF Learner(s) (keeps manual enrollments)`,
+                              }
+                            : prev
+                        )
+                      }
+                      className={`w-full text-left px-3 py-2 rounded-xl border font-semibold transition-colors cursor-pointer ${
+                        deleteTarget.batchScope === 'imported'
+                          ? 'bg-rose-600 text-white border-rose-700'
+                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Delete Only Imported Word / PDF Learners ({deleteTarget.importedIds?.length || 0})
+                    </button>
+                  )}
+                  {(deleteTarget.importedFiles?.length || 0) > 0 && (
+                    <div className="pt-1 space-y-1">
+                      <label className="block text-[11px] font-bold text-slate-700">
+                        Or Delete a Specific Imported Word / PDF File / Batch:
+                      </label>
+                      <select
+                        value={deleteTarget.batchScope === 'file' ? deleteTarget.selectedImportFile || '' : ''}
+                        onChange={(e) => {
+                          const fileName = e.target.value;
+                          if (!fileName) return;
+                          const matched = deleteTarget.importedFiles?.find((f) => f.fileName === fileName);
+                          if (matched) {
+                            setDeleteTarget((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    batchScope: 'file',
+                                    selectedImportFile: fileName,
+                                    selectedGradeFilter: '',
+                                    ids: matched.ids,
+                                    name: `${matched.ids.length} Learner(s) from "${fileName}"`,
+                                  }
+                                : prev
+                            );
+                          }
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800"
+                      >
+                        <option value="">-- Select imported .docx / .pdf file --</option>
+                        {deleteTarget.importedFiles?.map((f) => (
+                          <option key={f.fileName} value={f.fileName}>
+                            {f.fileName} ({f.ids.length} learners)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="pt-1 space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-700">
+                      Or Delete All Learners in a Specific Class:
+                    </label>
+                    <select
+                      value={deleteTarget.batchScope === 'grade' ? deleteTarget.selectedGradeFilter || '' : ''}
+                      onChange={(e) => {
+                        const grade = e.target.value;
+                        if (!grade) return;
+                        const classStudents = studentList.filter((s) => s.gradeCode === grade);
+                        if (classStudents.length > 0) {
+                          setDeleteTarget((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  batchScope: 'grade',
+                                  selectedGradeFilter: grade,
+                                  ids: classStudents.map((s) => s.id),
+                                  name: `${classStudents.length} Learner(s) in Class ${grade}`,
+                                }
+                              : prev
+                          );
+                        }
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800"
+                    >
+                      <option value="">-- Select a class roster to delete --</option>
+                      {ACADEMIC_GRADES.map((g) => {
+                        const count = studentList.filter((s) => s.gradeCode === g.code).length;
+                        if (count === 0) return null;
+                        return (
+                          <option key={g.code} value={g.code}>
+                            {g.code} — {g.name} ({count} learners)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1 text-xs text-slate-600">
               <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block">

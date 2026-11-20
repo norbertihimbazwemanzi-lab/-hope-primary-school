@@ -778,17 +778,18 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
                 </span>
               </div>
 
-              {rows.length > 0 && (
+              {(rows.length > 0 || selectedFileName) && (
                 <button
                   type="button"
                   onClick={() => {
                     setRows([]);
                     setSelectedFileName('');
+                    setErrorMsg(null);
                   }}
-                  className="px-2.5 py-1.5 text-rose-700 hover:bg-rose-50 rounded-lg font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="px-2.5 py-1.5 text-rose-700 hover:bg-rose-50 rounded-lg font-semibold inline-flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear Table</span>
+                  <span>{selectedFileName ? 'Remove File & Clear List' : 'Clear Table'}</span>
                 </button>
               )}
             </div>

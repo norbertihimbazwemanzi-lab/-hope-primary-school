@@ -1347,6 +1347,14 @@ export const mergeStudentRecords = (
             : older.studentAccountActive,
         photoUrl: newer.photoUrl || older.photoUrl,
         stream: newer.stream || older.stream || 'Stream A',
+        feedbackNotes: newer.feedbackNotes || older.feedbackNotes || undefined,
+        address: newer.address || older.address || undefined,
+        admissionDate: newer.admissionDate || older.admissionDate || undefined,
+        previousSchool: newer.previousSchool || older.previousSchool || undefined,
+        academicHistory:
+          Array.isArray(newer.academicHistory) && newer.academicHistory.length > 0
+            ? newer.academicHistory
+            : older.academicHistory,
         updatedAt: newer.updatedAt || older.updatedAt,
       });
     }
@@ -1490,24 +1498,38 @@ export const deleteStaffMember = (id: string): StaffMember[] => {
   return updated;
 };
 
+const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    promise
+      .then((val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(fallback);
+        }
+      });
+  });
+
 /**
  * Cross-Device Synchronization for Staff Accounts from Supabase, Firebase Firestore & Server
  */
 export const syncServerStaff = async (): Promise<StaffMember[]> => {
   try {
-    const [sbStaff, fbStaff, serverData] = await Promise.all([
-      fetchStaffMembersFromSupabase(),
-      fetchStaffMembersFromFirebase(),
-      fetchServerJsonSafely('/api/staff'),
-    ]);
-
-    const serverStaff: StaffMember[] = Array.isArray(serverData?.items) ? serverData.items : [];
-    const hasRemote =
-      (Array.isArray(sbStaff) && sbStaff.length > 0) ||
-      (Array.isArray(fbStaff) && fbStaff.length > 0) ||
-      serverStaff.length > 0;
-
-    if (hasRemote) {
+    const applyStaffMerge = (incoming: Array<StaffMember[] | null | undefined>): StaffMember[] => {
       let localStaff: StaffMember[] = [];
       try {
         const rawLocal = localStorage.getItem(STORAGE_KEYS.STAFF);
@@ -1515,15 +1537,39 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
       } catch {
         localStaff = [];
       }
-      const synced = mergeStaffRecords([
-        localStaff,
-        serverStaff,
-        fbStaff as StaffMember[],
-        sbStaff,
-      ]);
+      const synced = mergeStaffRecords([localStaff, ...incoming]);
       localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(synced));
       dispatchStoreEvent('mugina-staff-updated', synced);
       return synced;
+    };
+
+    const serverPromise = fetchServerJsonSafely('/api/staff').then((serverData) => {
+      const items = Array.isArray(serverData?.items) ? (serverData.items as StaffMember[]) : [];
+      if (items.length > 0) applyStaffMerge([items]);
+      return items;
+    });
+    const sbPromise = fetchStaffMembersFromSupabase().then((items) => {
+      if (Array.isArray(items) && items.length > 0) applyStaffMerge([items]);
+      return items;
+    });
+    const fbPromise = withTimeout(fetchStaffMembersFromFirebase(), 3500, []).then((items) => {
+      if (Array.isArray(items) && items.length > 0) applyStaffMerge([items as StaffMember[]]);
+      return items;
+    });
+
+    const [serverStaff, sbStaff, fbStaff] = await Promise.all([
+      serverPromise,
+      sbPromise,
+      fbPromise,
+    ]);
+
+    const hasRemote =
+      (Array.isArray(sbStaff) && sbStaff.length > 0) ||
+      (Array.isArray(fbStaff) && fbStaff.length > 0) ||
+      serverStaff.length > 0;
+
+    if (hasRemote) {
+      return applyStaffMerge([serverStaff, fbStaff as StaffMember[], sbStaff]);
     }
 
     // Seed remote stores only if both remote databases are uninitialized
@@ -1542,19 +1588,9 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
  */
 export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
   try {
-    const [sbStudents, fbStudents, serverData] = await Promise.all([
-      fetchEnrolledStudentsFromSupabase(),
-      fetchEnrolledStudentsFromFirebase(),
-      fetchServerJsonSafely('/api/students'),
-    ]);
-
-    const serverStudents: EnrolledStudent[] = Array.isArray(serverData?.items) ? serverData.items : [];
-    const hasRemote =
-      (Array.isArray(sbStudents) && sbStudents.length > 0) ||
-      (Array.isArray(fbStudents) && fbStudents.length > 0) ||
-      serverStudents.length > 0;
-
-    if (hasRemote) {
+    const applyStudentMerge = (
+      incoming: Array<EnrolledStudent[] | null | undefined>
+    ): EnrolledStudent[] => {
       let localStudents: EnrolledStudent[] = [];
       try {
         const rawLocal = localStorage.getItem(STORAGE_KEYS.STUDENTS);
@@ -1562,15 +1598,39 @@ export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
       } catch {
         localStudents = [];
       }
-      const merged = mergeStudentRecords([
-        localStudents,
-        serverStudents,
-        fbStudents as EnrolledStudent[],
-        sbStudents,
-      ]);
+      const merged = mergeStudentRecords([localStudents, ...incoming]);
       localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(merged));
       dispatchStoreEvent('mugina-students-updated', merged);
       return merged;
+    };
+
+    const serverPromise = fetchServerJsonSafely('/api/students').then((serverData) => {
+      const items = Array.isArray(serverData?.items) ? (serverData.items as EnrolledStudent[]) : [];
+      if (items.length > 0) applyStudentMerge([items]);
+      return items;
+    });
+    const sbPromise = fetchEnrolledStudentsFromSupabase().then((items) => {
+      if (Array.isArray(items) && items.length > 0) applyStudentMerge([items]);
+      return items;
+    });
+    const fbPromise = withTimeout(fetchEnrolledStudentsFromFirebase(), 3500, []).then((items) => {
+      if (Array.isArray(items) && items.length > 0) applyStudentMerge([items as EnrolledStudent[]]);
+      return items;
+    });
+
+    const [serverStudents, sbStudents, fbStudents] = await Promise.all([
+      serverPromise,
+      sbPromise,
+      fbPromise,
+    ]);
+
+    const hasRemote =
+      (Array.isArray(sbStudents) && sbStudents.length > 0) ||
+      (Array.isArray(fbStudents) && fbStudents.length > 0) ||
+      serverStudents.length > 0;
+
+    if (hasRemote) {
+      return applyStudentMerge([serverStudents, fbStudents as EnrolledStudent[], sbStudents]);
     }
 
     return getEnrolledStudents();
@@ -1706,6 +1766,92 @@ export const deleteEnrolledStudent = (id: string): EnrolledStudent[] => {
   );
   dispatchStoreEvent('mugina-students-updated', updated);
   return updated;
+};
+
+export const deleteEnrolledStudentsBatch = (ids: string[]): EnrolledStudent[] => {
+  const cleanIds = Array.from(new Set(ids.filter(Boolean)));
+  if (cleanIds.length === 0) return getEnrolledStudents();
+
+  const tracker = updateDeletedTracker((cur) => ({
+    ...cur,
+    students: [...cur.students, ...cleanIds],
+  }));
+  const currentSettings = getWebsiteSettings();
+  saveWebsiteSettings({
+    ...currentSettings,
+    deletedStudentIds: Array.from(
+      new Set([...(currentSettings.deletedStudentIds || []), ...tracker.students, ...cleanIds])
+    ),
+  });
+
+  const idSet = new Set(cleanIds);
+  const list = getEnrolledStudents();
+  const updated = list.filter((s) => !idSet.has(s.id));
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
+  persistToServer('/api/students', { items: updated });
+  cleanIds.forEach((id) => {
+    deleteEnrolledStudentFromFirebase(id).catch((e) =>
+      console.warn('Firebase batch student delete notice:', e)
+    );
+    deleteEnrolledStudentFromSupabase(id).catch((e) =>
+      console.warn('Supabase batch student delete notice:', e)
+    );
+  });
+  dispatchStoreEvent('mugina-students-updated', updated);
+  return updated;
+};
+
+/**
+ * Detects learners enrolled via Word (.docx) / PDF (.pdf) bulk imports, using both explicit
+ * `feedbackNotes` import tags and shared batch-timestamp IDs (`stu-<ts>-<idx>`).
+ */
+export const detectImportedStudentBatches = (
+  students: EnrolledStudent[]
+): {
+  importedIds: string[];
+  importedFiles: Array<{ fileName: string; ids: string[] }>;
+} => {
+  const tsCounts = new Map<string, number>();
+  students.forEach((st) => {
+    const match = /^stu-(\d+)-(\d+)$/.exec(String(st.id || ''));
+    if (match) {
+      tsCounts.set(match[1], (tsCounts.get(match[1]) || 0) + 1);
+    }
+  });
+
+  const fileMap = new Map<string, { ids: string[]; grades: Set<string> }>();
+  const importedIds: string[] = [];
+
+  students.forEach((st) => {
+    const note = String(st.feedbackNotes || '').trim();
+    const isTaggedImport = /^(imported via|batch class import|imported from)/i.test(note);
+    const idMatch = /^stu-(\d+)-(\d+)$/.exec(String(st.id || ''));
+    const batchTs = idMatch ? idMatch[1] : '';
+    const isBatchTimestamp = Boolean(batchTs && (tsCounts.get(batchTs) || 0) >= 2);
+
+    if (!isTaggedImport && !isBatchTimestamp) return;
+    importedIds.push(st.id);
+
+    let key: string;
+    if (isTaggedImport) {
+      key = note.replace(/^imported via\s+/i, '').trim() || 'Word / PDF Import';
+    } else {
+      const gradeLabel = st.gradeCode || 'Class';
+      key = `Word/PDF Batch (${gradeLabel} • #${batchTs.slice(-5)})`;
+    }
+
+    const entry = fileMap.get(key) || { ids: [], grades: new Set<string>() };
+    entry.ids.push(st.id);
+    if (st.gradeCode) entry.grades.add(st.gradeCode);
+    fileMap.set(key, entry);
+  });
+
+  const importedFiles = Array.from(fileMap.entries()).map(([fileName, data]) => ({
+    fileName,
+    ids: data.ids,
+  }));
+
+  return { importedIds, importedFiles };
 };
 
 const GRADE_PROGRESSION_ORDER = ['N-BABY', 'N-MID', 'N-TOP', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6'];

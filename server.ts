@@ -485,11 +485,20 @@ function saveServerChats(threads: ChatThread[]) {
 // =========================================================================
 // GMAIL SMTP EMAIL ENGINE, TOKEN STORES, EMAIL LOGS & TEMPLATES
 // =========================================================================
-const GMAIL_USER = process.env.GMAIL_USER || process.env.SMTP_USER || '';
-const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '';
-const EMAIL_FROM_ADDRESS =
-  process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com';
-const SCHOOL_OFFICIAL_EMAIL = process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com';
+const GMAIL_USER = (process.env.GMAIL_USER || process.env.SMTP_USER || '').trim();
+const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '').replace(/\s+/g, '');
+const EMAIL_FROM_ADDRESS = (
+  process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com'
+).trim();
+const SCHOOL_OFFICIAL_EMAIL = (process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com').trim();
+
+function formatSmtpError(err: any): string {
+  const raw = String(err?.message || 'SMTP delivery failed');
+  if (/535|BadCredentials|Username and Password not accepted/i.test(raw)) {
+    return `${raw} — Google rejected Gmail SMTP login. Use a 16-character Google App Password (with 2-Step Verification enabled on ${GMAIL_USER || 'your Gmail'}) in GMAIL_APP_PASSWORD/SMTP_PASS (not your regular Gmail login password).`;
+  }
+  return raw;
+}
 
 const getPublicAppUrl = (req?: express.Request): string => {
   if (process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL') {
@@ -762,7 +771,7 @@ async function sendSchoolEmail(params: {
     return { success: true, log: logEntry };
   } catch (err: any) {
     logEntry.status = 'Failed';
-    logEntry.errorMessage = err?.message || 'SMTP delivery failed';
+    logEntry.errorMessage = formatSmtpError(err);
     logs.unshift(logEntry);
     saveEmailLogs(logs);
     return { success: false, log: logEntry, error: logEntry.errorMessage };
@@ -3324,7 +3333,49 @@ app.post('/api/admin/email-logs/:id/retry', async (req, res) => {
 
     return res.json({ success: true, log: logs[idx] });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Failed to retry email delivery' });
+    return res.status(500).json({ error: formatSmtpError(err) });
+  }
+});
+
+app.get('/api/admin/email-status', (req, res) => {
+  const staffToken = verifyStaffToken(req.headers.authorization);
+  if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  return res.json({
+    success: true,
+    configured: Boolean(GMAIL_USER && GMAIL_APP_PASSWORD),
+    gmailUser: GMAIL_USER ? `${GMAIL_USER.slice(0, 3)}***@${GMAIL_USER.split('@')[1] || ''}` : '',
+    appPasswordLength: GMAIL_APP_PASSWORD.length,
+    mode: GMAIL_USER && GMAIL_APP_PASSWORD ? 'gmail-smtp' : 'local-preview-json',
+  });
+});
+
+app.post('/api/admin/email-test', async (req, res) => {
+  try {
+    const staffToken = verifyStaffToken(req.headers.authorization);
+    if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      return res.json({
+        success: false,
+        configured: false,
+        error: 'GMAIL_USER or GMAIL_APP_PASSWORD is not set in server environment variables. Preview mode logs emails locally without sending to Gmail.',
+      });
+    }
+    await transporter.verify();
+    return res.json({
+      success: true,
+      configured: true,
+      message: `Gmail SMTP connection verified cleanly for ${GMAIL_USER}.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      configured: true,
+      error: formatSmtpError(err),
+    });
   }
 });
 
