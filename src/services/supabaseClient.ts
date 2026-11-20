@@ -55,6 +55,49 @@ const isMissingColumnError = (error: any): boolean => {
   return code === '42703' || code === 'PGRST204' || /could not find the .* column|column .* does not exist/i.test(msg);
 };
 
+const extractMissingColumnName = (error: any): string | null => {
+  const msg = String(error?.message || error?.details || '');
+  const pgrst = msg.match(/could not find the ['"]([^'"]+)['"] column/i);
+  if (pgrst?.[1]) return pgrst[1];
+  const pg = msg.match(/column\s+["']?([a-zA-Z0-9_]+)["']?\s+(?:of relation\s+["']?[^"']+["']?\s+)?does not exist/i);
+  if (pg?.[1]) return pg[1];
+  return null;
+};
+
+const stripColumnFromPayload = <T extends Record<string, any>>(
+  payload: T | T[],
+  col: string
+): T | T[] => {
+  if (Array.isArray(payload)) {
+    return payload.map((row) => {
+      const copy = { ...row };
+      delete copy[col];
+      return copy;
+    });
+  }
+  const copy = { ...payload };
+  delete copy[col];
+  return copy;
+};
+
+const upsertWithColumnPruning = async (
+  client: SupabaseClient,
+  table: string,
+  payload: Record<string, any> | Record<string, any>[],
+  onConflict = 'id'
+): Promise<{ error: any | null }> => {
+  let current: any = payload;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const { error } = await client.from(table).upsert(current, { onConflict });
+    if (!error) return { error: null };
+    if (!isMissingColumnError(error)) return { error };
+    const missingCol = extractMissingColumnName(error);
+    if (!missingCol) return { error };
+    current = stripColumnFromPayload(current, missingCol);
+  }
+  return client.from(table).upsert(current, { onConflict });
+};
+
 /**
  * Safely read cached website settings from localStorage without importing adminStore (avoids circular deps)
  */
@@ -239,13 +282,16 @@ const mapStaffToRow = (s: any, includeExtended = true) => {
     email: s.email || '',
     phone: s.phone || '',
     username: s.username,
+    enrolled_at: s.enrolledAt || '',
     assigned_subject_or_grade: s.assignedSubjectOrGrade || '',
     status: s.status || 'Active',
-    updated_at: new Date().toISOString(),
+    updated_at: s.updatedAt || new Date().toISOString(),
   };
+  const cleanPw = String(s.password || '').trim();
+  if (cleanPw && cleanPw !== '••••••') {
+    base.password = cleanPw;
+  }
   if (includeExtended) {
-    base.password = s.password || '';
-    base.enrolled_at = s.enrolledAt || '';
     if (s.photoUrl) base.photo_url = s.photoUrl;
     if (s.bio) base.bio = s.bio;
   }
@@ -273,21 +319,27 @@ const mapStudentToRow = (st: any, includeExtended = true) => {
     id: st.id,
     full_name: st.fullName,
     reg_number: st.regNumber,
+    gender: st.gender || 'Female',
+    dob: st.dob || '',
     grade_code: st.gradeCode,
     status: st.status || 'Active',
     parent_name: st.parentName || '',
     parent_phone: st.parentPhone || '',
     parent_email: st.parentEmail || '',
-    updated_at: new Date().toISOString(),
+    enrolled_by: st.enrolledBy || '',
+    enrolled_at: st.enrolledAt || '',
+    feedback_notes: st.feedbackNotes || '',
+    updated_at: st.updatedAt || new Date().toISOString(),
   };
+  const cleanStudentUser = String(st.studentUsername || '').trim();
+  if (cleanStudentUser) {
+    base.student_username = cleanStudentUser;
+  }
+  const cleanStudentPw = String(st.studentPassword || '').trim();
+  if (cleanStudentPw && cleanStudentPw !== '••••••') {
+    base.student_password = cleanStudentPw;
+  }
   if (includeExtended) {
-    base.gender = st.gender || 'Female';
-    base.dob = st.dob || '';
-    base.student_username = st.studentUsername || '';
-    base.student_password = st.studentPassword || '';
-    base.enrolled_by = st.enrolledBy || '';
-    base.enrolled_at = st.enrolledAt || '';
-    base.feedback_notes = st.feedbackNotes || '';
     base.photo_url = st.photoUrl || null;
     base.stream = st.stream || 'Stream A';
     base.address = st.address || '';
@@ -317,7 +369,12 @@ const mapRowToStudent = (row: any) => ({
   parentEmail: row.parent_email || row.parentEmail || '',
   studentUsername: row.student_username || row.studentUsername || '',
   studentPassword: row.student_password || row.studentPassword || '',
-  studentAccountActive: row.student_account_active !== false && row.studentAccountActive !== false,
+  studentAccountActive:
+    row.student_account_active === false || row.studentAccountActive === false
+      ? false
+      : row.student_account_active === true || row.studentAccountActive === true
+      ? true
+      : undefined,
   enrolledBy: row.enrolled_by || row.enrolledBy || 'DOS',
   enrolledAt: row.enrolled_at || row.enrolledAt || (row.updated_at ? String(row.updated_at).split('T')[0] : ''),
   status: row.status || 'Active',
@@ -939,14 +996,9 @@ export const saveStaffMemberToSupabase = async (staff: any): Promise<boolean> =>
   const client = getSupabaseClient();
   if (!client || !staff) return false;
   try {
-    const { error } = await client.from('staff_members').upsert(mapStaffToRow(staff, true), { onConflict: 'id' });
+    const { error } = await upsertWithColumnPruning(client, 'staff_members', mapStaffToRow(staff, true), 'id');
     if (!error) return true;
-    if (isMissingColumnError(error)) {
-      const { error: fallbackErr } = await client
-        .from('staff_members')
-        .upsert(mapStaffToRow(staff, false), { onConflict: 'id' });
-      return !fallbackErr;
-    }
+    console.warn('[Supabase Store] Staff upsert error:', error);
   } catch (err) {
     console.warn('[Supabase Store] Staff write notice:', err);
   }
@@ -960,17 +1012,16 @@ export const saveStaffMembersBatchToSupabase = async (
   const client = customClient || getSupabaseClient();
   if (!client || list.length === 0) return false;
   try {
-    const { error } = await client
-      .from('staff_members')
-      .upsert(list.map((s) => mapStaffToRow(s, true)), { onConflict: 'id' });
+    const { error } = await upsertWithColumnPruning(
+      client,
+      'staff_members',
+      list.map((s) => mapStaffToRow(s, true)),
+      'id'
+    );
     if (!error) return true;
-    if (isMissingColumnError(error)) {
-      const { error: fallbackErr } = await client
-        .from('staff_members')
-        .upsert(list.map((s) => mapStaffToRow(s, false)), { onConflict: 'id' });
-      return !fallbackErr;
-    }
-  } catch {
+    console.warn('[Supabase Store] Staff batch upsert error:', error);
+  } catch (err) {
+    console.warn('[Supabase Store] Staff batch write notice:', err);
     return false;
   }
   return false;
@@ -1015,16 +1066,14 @@ export const saveEnrolledStudentToSupabase = async (student: any): Promise<boole
   const client = getSupabaseClient();
   if (!client || !student) return false;
   try {
-    const { error } = await client
-      .from('enrolled_students')
-      .upsert(mapStudentToRow(student, true), { onConflict: 'id' });
+    const { error } = await upsertWithColumnPruning(
+      client,
+      'enrolled_students',
+      mapStudentToRow(student, true),
+      'id'
+    );
     if (!error) return true;
-    if (isMissingColumnError(error)) {
-      const { error: fallbackErr } = await client
-        .from('enrolled_students')
-        .upsert(mapStudentToRow(student, false), { onConflict: 'id' });
-      return !fallbackErr;
-    }
+    console.warn('[Supabase Store] Student upsert error:', error);
   } catch (err) {
     console.warn('[Supabase Store] Student write notice:', err);
   }
@@ -1038,17 +1087,16 @@ export const saveEnrolledStudentsBatchToSupabase = async (
   const client = customClient || getSupabaseClient();
   if (!client || students.length === 0) return false;
   try {
-    const { error } = await client
-      .from('enrolled_students')
-      .upsert(students.map((st) => mapStudentToRow(st, true)), { onConflict: 'id' });
+    const { error } = await upsertWithColumnPruning(
+      client,
+      'enrolled_students',
+      students.map((st) => mapStudentToRow(st, true)),
+      'id'
+    );
     if (!error) return true;
-    if (isMissingColumnError(error)) {
-      const { error: fallbackErr } = await client
-        .from('enrolled_students')
-        .upsert(students.map((st) => mapStudentToRow(st, false)), { onConflict: 'id' });
-      return !fallbackErr;
-    }
-  } catch {
+    console.warn('[Supabase Store] Student batch upsert error:', error);
+  } catch (err) {
+    console.warn('[Supabase Store] Student batch write notice:', err);
     return false;
   }
   return false;

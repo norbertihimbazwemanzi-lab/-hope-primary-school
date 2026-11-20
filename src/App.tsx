@@ -38,6 +38,8 @@ import {
   filterStaffAgainstTombstones,
   filterStudentsAgainstTombstones,
   isGalleryInitialized,
+  mergeStaffRecords,
+  mergeStudentRecords,
 } from './services/adminStore';
 import { syncAllSmsDomains } from './services/smsStore';
 import { initAuth, resolveStaffRoleForFirebaseUser } from './services/authService';
@@ -100,6 +102,37 @@ export default function App() {
       }
     } catch {}
 
+    const applyDocumentFavicon = (customUrl?: string) => {
+      try {
+        const cleanUrl = String(customUrl || '').trim();
+        const iconLinks = document.querySelectorAll<HTMLLinkElement>(
+          'link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'
+        );
+        if (cleanUrl) {
+          iconLinks.forEach((linkEl) => {
+            if (!linkEl.dataset.defaultHref) {
+              linkEl.dataset.defaultHref = linkEl.getAttribute('href') || '/images/school-logo.png';
+            }
+            linkEl.setAttribute('href', cleanUrl);
+          });
+        } else {
+          iconLinks.forEach((linkEl) => {
+            if (linkEl.dataset.defaultHref) {
+              linkEl.setAttribute('href', linkEl.dataset.defaultHref);
+            }
+          });
+        }
+      } catch {}
+    };
+
+    applyDocumentFavicon(getWebsiteSettings().schoolLogoUrl);
+
+    const settingsFaviconHandler = (e: any) => {
+      const nextLogo = e?.detail?.schoolLogoUrl ?? getWebsiteSettings().schoolLogoUrl;
+      applyDocumentFavicon(nextLogo);
+    };
+    window.addEventListener('mugina-settings-updated', settingsFaviconHandler);
+
     const sessionHandler = () => setSessionRevision((r) => r + 1);
     window.addEventListener('mugina-session-updated', sessionHandler);
 
@@ -111,6 +144,7 @@ export default function App() {
             await syncCurrentSessionUserFromFirestore(firebaseUser.email);
           }
           if (!getCurrentSessionUser()) {
+            await Promise.all([syncServerStaff(), syncServerStudents()]).catch(() => {});
             const res = resolveStaffRoleForFirebaseUser(firebaseUser);
             if (res.authorized) {
               setCurrentSessionUser(res.session);
@@ -124,6 +158,7 @@ export default function App() {
     );
 
     return () => {
+      window.removeEventListener('mugina-settings-updated', settingsFaviconHandler);
       window.removeEventListener('mugina-session-updated', sessionHandler);
       unsubAuth();
     };
@@ -207,29 +242,14 @@ export default function App() {
 
     const applyLiveStaff = (liveStaff: any[]) => {
       if (!Array.isArray(liveStaff) || liveStaff.length === 0) return;
-      const filteredLive = filterStaffAgainstTombstones(liveStaff);
-      const map = new Map<string, any>();
-      filteredLive.forEach((s) => {
-        if (s && s.username) map.set(String(s.username).toLowerCase(), s);
-      });
-      // Always preserve primary master admin logins even if omitted remotely
-      const currentStaff = getStaffMembers();
-      ['norbertihimbazwemanzi@gmail.com', 'hopeprimaryschool'].forEach((coreUser) => {
-        if (!map.has(coreUser)) {
-          const match = currentStaff.find((s) => s.username.toLowerCase() === coreUser);
-          if (match) map.set(coreUser, match);
-        }
-      });
-      applyLocalMirror('mugina_staff_members_v3', 'mugina-staff-updated', Array.from(map.values()));
+      const merged = mergeStaffRecords([getStaffMembers(), liveStaff]);
+      applyLocalMirror('mugina_staff_members_v3', 'mugina-staff-updated', merged);
     };
 
     const applyLiveStudents = (liveStudents: any[]) => {
       if (!Array.isArray(liveStudents)) return;
-      applyLocalMirror(
-        'mugina_enrolled_students_v3',
-        'mugina-students-updated',
-        filterStudentsAgainstTombstones(liveStudents)
-      );
+      const merged = mergeStudentRecords([getEnrolledStudents(), liveStudents]);
+      applyLocalMirror('mugina_enrolled_students_v3', 'mugina-students-updated', merged);
     };
 
     // Sync settings (and deletion tombstones) first, then sync all stores

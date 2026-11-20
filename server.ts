@@ -816,6 +816,30 @@ function ensureAuthoritativeStaffList(): any[] {
     return st;
   });
 
+  const hasNorbert = upgraded.some(
+    (s: any) =>
+      s &&
+      (String(s.username || '').toLowerCase() === 'norbertihimbazwemanzi@gmail.com' ||
+        s.id === 'staff-admin-norbert')
+  );
+  if (!hasNorbert) {
+    upgraded.unshift(seeds[0]);
+    mutated = true;
+  } else {
+    for (let i = 0; i < upgraded.length; i++) {
+      const s = upgraded[i];
+      if (
+        s &&
+        (String(s.username || '').toLowerCase() === 'norbertihimbazwemanzi@gmail.com' ||
+          s.id === 'staff-admin-norbert') &&
+        !s.passwordHash
+      ) {
+        upgraded[i] = { ...s, username: 'norbertihimbazwemanzi@gmail.com', passwordHash: hashPassword('@0798744704') };
+        mutated = true;
+      }
+    }
+  }
+
   if (mutated) saveServerStaff(upgraded);
   return upgraded;
 }
@@ -1591,12 +1615,15 @@ app.post('/api/staff', (req, res) => {
     const incoming = Array.isArray(req.body?.items) ? req.body.items : Array.isArray(req.body) ? req.body : [];
     const existing = ensureAuthoritativeStaffList();
     const existingById = new Map<string, any>();
+    const existingByUsername = new Map<string, any>();
     existing.forEach((st: any) => {
       if (st?.id) existingById.set(st.id, st);
+      if (st?.username) existingByUsername.set(String(st.username).trim().toLowerCase(), st);
     });
 
     const merged = incoming.map((item: any) => {
-      const prev = existingById.get(item.id);
+      const unameKey = String(item.username || '').trim().toLowerCase();
+      const prev = existingById.get(item.id) || (unameKey ? existingByUsername.get(unameKey) : undefined);
       const rawPw = String(item.password || '').trim();
       const { password: _discardPlain, ...rest } = item;
       let nextHash = prev?.passwordHash || item.passwordHash;
@@ -1707,21 +1734,34 @@ app.post('/api/students', (req, res) => {
     const incoming = req.body.items || req.body;
     const existing = loadServerStudents() || [];
     const existingById = new Map<string, any>();
+    const existingByReg = new Map<string, any>();
     existing.forEach((st: any) => {
       if (st?.id) existingById.set(st.id, st);
+      if (st?.regNumber) existingByReg.set(String(st.regNumber).trim().toLowerCase(), st);
     });
 
     const normalized = Array.isArray(incoming)
       ? incoming.map((st: any) => {
-          const prev = existingById.get(st.id);
+          const regKey = String(st.regNumber || '').trim().toLowerCase();
+          const prev = existingById.get(st.id) || (regKey ? existingByReg.get(regKey) : undefined);
           const rawPw = String(st.studentPassword || '').trim();
+          const incomingUser = String(st.studentUsername || '').trim();
           let nextHash = prev?.passwordHash || st.passwordHash;
           if (rawPw && rawPw !== '••••••') {
             nextHash = hashPassword(rawPw);
+          } else if (!nextHash && prev?.studentPassword) {
+            nextHash = hashPassword(prev.studentPassword);
           }
           // Avoid storing plain passwords on disk once passwordHash exists
           return {
             ...st,
+            studentUsername: incomingUser || prev?.studentUsername || '',
+            studentAccountActive:
+              st.studentAccountActive !== undefined
+                ? st.studentAccountActive
+                : prev?.studentAccountActive !== undefined
+                ? prev.studentAccountActive
+                : true,
             studentPassword: '',
             ...(nextHash ? { passwordHash: nextHash } : {}),
           };
@@ -1729,7 +1769,13 @@ app.post('/api/students', (req, res) => {
       : incoming;
 
     saveServerStudents(normalized);
-    res.json({ success: true, items: incoming });
+    const sanitized = Array.isArray(normalized)
+      ? normalized.map(({ passwordHash: _ph, ...rest }: any) => ({
+          ...rest,
+          hasPasswordHash: Boolean(_ph),
+        }))
+      : normalized;
+    res.json({ success: true, items: sanitized });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to save students database' });
   }
@@ -2253,7 +2299,7 @@ app.get('/api/auth/verify-reset-token', (req, res) => {
   });
 });
 
-app.post('/api/auth/reset-password', (req, res) => {
+app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const rawToken = String(req.body?.token || '').trim();
     const newPassword = String(req.body?.newPassword || '').trim();
@@ -2285,6 +2331,7 @@ app.post('/api/auth/reset-password', (req, res) => {
     }
 
     const newHash = hashPassword(newPassword);
+    const nowIso = new Date().toISOString();
 
     if (tokenRec.accountType === 'staff') {
       const staff = ensureAuthoritativeStaffList();
@@ -2293,7 +2340,7 @@ app.post('/api/auth/reset-password', (req, res) => {
         return res.status(404).json({ error: 'Associated staff account not found.' });
       }
       const { password: _discardPlain, ...rest } = staff[sIdx];
-      staff[sIdx] = { ...rest, passwordHash: newHash, updatedAt: new Date().toISOString() };
+      staff[sIdx] = { ...rest, passwordHash: newHash, updatedAt: nowIso };
       saveServerStaff(staff);
     } else {
       const students = loadServerStudents() || [];
@@ -2305,12 +2352,35 @@ app.post('/api/auth/reset-password', (req, res) => {
         ...students[stIdx],
         studentPassword: '',
         passwordHash: newHash,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
       };
       saveServerStudents(students);
     }
 
-    tokens[tokenIdx] = { ...tokenRec, used: true, usedAt: new Date().toISOString() };
+    // Best-effort sync to Supabase so password resets also work across browsers/deployments
+    try {
+      const sbUrl = (process.env.VITE_SUPABASE_URL || 'https://egwzhnzpsgwkhvhesode.supabase.co').replace(/\/$/, '');
+      const sbKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_982vUUyz9dc8qOU1eCWhAg_TkWcGJj_';
+      const table = tokenRec.accountType === 'staff' ? 'staff_members' : 'enrolled_students';
+      const patchBody =
+        tokenRec.accountType === 'staff'
+          ? { password: newPassword, updated_at: nowIso }
+          : { student_password: newPassword, updated_at: nowIso };
+      await fetch(`${sbUrl}/rest/v1/${table}?id=eq.${encodeURIComponent(tokenRec.accountId)}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: sbKey,
+          Authorization: `Bearer ${sbKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(patchBody),
+        signal: AbortSignal.timeout(3000),
+      });
+    } catch {
+      // non-fatal if Supabase unreachable in offline environment
+    }
+
+    tokens[tokenIdx] = { ...tokenRec, used: true, usedAt: nowIso };
     saveResetTokens(tokens);
 
     return res.json({

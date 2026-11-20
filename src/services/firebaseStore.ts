@@ -569,16 +569,22 @@ export const saveEnrolledStudentToFirebase = async (student: any): Promise<boole
   try {
     const stuId = student.id || `stu-${Date.now()}`;
     const docRef = doc(db, 'enrolled_students', stuId);
-    await setDoc(
-      docRef,
-      {
-        ...student,
-        id: stuId,
-        updatedAt: new Date().toISOString(),
-        serverTimestamp: Timestamp.now(),
-      },
-      { merge: true }
-    );
+    const payload: Record<string, any> = {
+      ...student,
+      id: stuId,
+      updatedAt: student.updatedAt || new Date().toISOString(),
+      serverTimestamp: Timestamp.now(),
+    };
+    if (!String(payload.studentPassword || '').trim() || payload.studentPassword === '••••••') {
+      delete payload.studentPassword;
+    }
+    if (!String(payload.studentUsername || '').trim()) {
+      delete payload.studentUsername;
+    }
+    Object.keys(payload).forEach((k) => {
+      if (payload[k] === undefined) delete payload[k];
+    });
+    await setDoc(docRef, payload, { merge: true });
     console.log('[Firebase Store] Enrolled student synced to Firestore:', stuId);
     return true;
   } catch (err) {
@@ -626,16 +632,19 @@ export const saveStaffMemberToFirebase = async (staff: any): Promise<boolean> =>
   try {
     const staffId = staff.id || `staff-${Date.now()}`;
     const docRef = doc(db, 'staff_members', staffId);
-    await setDoc(
-      docRef,
-      {
-        ...staff,
-        id: staffId,
-        updatedAt: new Date().toISOString(),
-        serverTimestamp: Timestamp.now(),
-      },
-      { merge: true }
-    );
+    const payload: Record<string, any> = {
+      ...staff,
+      id: staffId,
+      updatedAt: staff.updatedAt || new Date().toISOString(),
+      serverTimestamp: Timestamp.now(),
+    };
+    if (!String(payload.password || '').trim() || payload.password === '••••••') {
+      delete payload.password;
+    }
+    Object.keys(payload).forEach((k) => {
+      if (payload[k] === undefined) delete payload[k];
+    });
+    await setDoc(docRef, payload, { merge: true });
     console.log('[Firebase Store] Staff account permanently saved to database:', staffId, staff.username);
     return true;
   } catch (err) {

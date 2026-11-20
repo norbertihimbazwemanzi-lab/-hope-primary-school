@@ -72,11 +72,11 @@ import { ACADEMIC_GRADES } from '../data/schoolData';
 import {
   initAuth,
   googleSignIn,
+  consumeGoogleRedirectResult,
   logoutGoogle,
   resolveStaffRoleForFirebaseUser,
   ensureAdminFirebaseAuth,
   authenticateParentAccount,
-  authenticateStudentAccount,
   authenticateStudentWithBackend,
   setStudentAuthToken,
   authenticateStaffWithBackend,
@@ -228,7 +228,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [currentUser, setCurrentUser] = useState(getCurrentSessionUser());
   const [activeTab, setActiveTab] = useState<AdminTab>(() => resolveDefaultTabForUser(getCurrentSessionUser()));
   const [attendancePreselectGrade, setAttendancePreselectGrade] = useState<string | undefined>(undefined);
-  const [loginPortalMode, setLoginPortalMode] = useState<'staff' | 'parent' | 'student'>('staff');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     try {
       return document.documentElement.classList.contains('dark');
@@ -742,7 +741,56 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setAttendanceSuccessMsg(null);
   }, [attendanceDate, attendanceGrade, studentList]);
 
-  // Secure Password-Protected Gate Handler across Staff, Parent & Student Portals
+  // Handle returning from a Firebase Google redirect sign-in (mobile/blocked-popup fallback)
+  useEffect(() => {
+    if (currentUser) return;
+    let cancelled = false;
+    consumeGoogleRedirectResult()
+      .then(async (res) => {
+        if (cancelled || !res || !res.user) return;
+        setIsGoogleLoading(true);
+        setGoogleUser(res.user);
+        setAccessToken(res.accessToken);
+        await Promise.all([syncServerStaff(), syncServerStudents()]).catch(() => {});
+        if (cancelled) return;
+        setStaffList(getStaffMembers());
+        setStudentList(getEnrolledStudents());
+
+        const resolution = resolveStaffRoleForFirebaseUser(res.user);
+        if (resolution.authorized) {
+          if (resolution.session.role !== 'Parent') {
+            await exchangeFirebaseTokenForStaffSession(res.user).catch(() => {});
+          }
+          setCurrentSessionUser(resolution.session);
+          setCurrentUser(resolution.session);
+          setActiveTab(resolveDefaultTabForUser(resolution.session));
+          logAuditEvent(
+            'LOGIN',
+            'Auth',
+            resolution.session.id,
+            `Google OAuth redirect sign-in by ${resolution.session.name} (${resolution.session.role})`
+          );
+        } else {
+          await logoutGoogle();
+          setGoogleUser(null);
+          setAccessToken(null);
+          setLoginError(
+            `Access Denied: Google identity (${resolution.email}) is not registered in the Mugina Hope Academy staff or parent directory.`
+          );
+        }
+      })
+      .catch((err: any) => {
+        if (!cancelled && err?.message) setLoginError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsGoogleLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
+  // Unified Username & Password Gate Handler (Automatically verifies Staff, Students, and Parents)
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -752,47 +800,24 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     const cleanUser = loginUsername.trim();
     const cleanPass = loginPassword.trim();
 
+    if (!cleanUser || !cleanPass) {
+      setLoginError('Please enter both your username and password.');
+      setIsVerifyingLogin(false);
+      return;
+    }
+
     try {
-      // A. Parent Portal Authentication
-      if (loginPortalMode === 'parent') {
-        let parentSession = authenticateParentAccount(cleanUser, cleanPass);
-        if (!parentSession) {
-          await syncServerStudents();
-          setStudentList(getEnrolledStudents());
-          parentSession = authenticateParentAccount(cleanUser, cleanPass);
-        }
-        if (parentSession) {
-          persistCredentialsIfEnabled(cleanUser, cleanPass);
-          setCurrentSessionUser(parentSession);
-          setCurrentUser(parentSession);
-          logAuditEvent('LOGIN', 'Auth', parentSession.id, `${parentSession.name} signed into Parent Portal`);
-          return;
-        }
-        setLoginError('No linked child matched that parent email/phone and verification code (Child Reg ID or parent2026).');
-        return;
+      // 1. Staff & Admin Authentication (Backend + Synced Cloud Directory)
+      let staffRes = await authenticateStaffWithBackend(cleanUser, cleanPass);
+      if (
+        !staffRes.authorized &&
+        !staffRes.reason.toLowerCase().includes('deactivated')
+      ) {
+        const syncedStaff = await syncServerStaff();
+        setStaffList(syncedStaff);
+        staffRes = await authenticateStaffWithBackend(cleanUser, cleanPass);
       }
 
-      // B. Student Portal Authentication
-      if (loginPortalMode === 'student') {
-        let authRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
-        if (!authRes.authorized) {
-          await syncServerStudents();
-          setStudentList(getEnrolledStudents());
-          authRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
-        }
-        if (authRes.authorized) {
-          persistCredentialsIfEnabled(cleanUser, cleanPass);
-          setCurrentSessionUser(authRes.session);
-          setCurrentUser(authRes.session);
-          logAuditEvent('LOGIN', 'Auth', authRes.session.id, `${authRes.session.name} signed into Student Portal`);
-          return;
-        }
-        setLoginError(authRes.reason);
-        return;
-      }
-
-      // C. Staff & Admin Authentication (Server-verified hashed credentials + Active status check)
-      const staffRes = await authenticateStaffWithBackend(cleanUser, cleanPass);
       if (staffRes.authorized) {
         persistCredentialsIfEnabled(cleanUser || staffRes.session.username, cleanPass);
         setCurrentSessionUser(staffRes.session);
@@ -807,44 +832,52 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         return;
       }
 
-      if (!staffRes.networkError) {
+      if (staffRes.reason.toLowerCase().includes('deactivated')) {
         setLoginError(staffRes.reason);
         return;
       }
 
-      // Offline fallback: sync from Supabase/Firebase if backend was unreachable
-      const mergedList = await syncServerStaff();
-      setStaffList(mergedList);
-      const remoteMatch = mergedList.find(
-        (s) =>
-          (s.username.toLowerCase() === cleanUser.toLowerCase() ||
-            s.email.toLowerCase() === cleanUser.toLowerCase()) &&
-          s.password &&
-          s.password === cleanPass
-      );
+      // 2. Student Portal Authentication (Backend + Synced Cloud Directory)
+      let studentRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
+      if (
+        !studentRes.authorized &&
+        !studentRes.reason.toLowerCase().includes('deactivated') &&
+        !studentRes.reason.toLowerCase().includes('suspended') &&
+        !studentRes.reason.toLowerCase().includes('transferred')
+      ) {
+        const syncedStudents = await syncServerStudents();
+        setStudentList(syncedStudents);
+        studentRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
+      }
 
-      if (remoteMatch) {
-        if (remoteMatch.status !== 'Active') {
-          setLoginError('This staff account is currently deactivated. Contact School Administration.');
-          return;
-        }
+      if (studentRes.authorized) {
         persistCredentialsIfEnabled(cleanUser, cleanPass);
-        const session = {
-          id: remoteMatch.id,
-          name: remoteMatch.name,
-          role: remoteMatch.role,
-          username: remoteMatch.username,
-          email: remoteMatch.email,
-          assignedSubjectOrGrade: remoteMatch.assignedSubjectOrGrade,
-        };
-        setCurrentSessionUser(session);
-        setCurrentUser(session);
-        setActiveTab(resolveDefaultTabForUser(session));
-        logAuditEvent('LOGIN', 'Auth', session.id, `${session.name} (${session.role}) signed in`);
+        setCurrentSessionUser(studentRes.session);
+        setCurrentUser(studentRes.session);
+        logAuditEvent('LOGIN', 'Auth', studentRes.session.id, `${studentRes.session.name} signed into Student Portal`);
         return;
       }
 
-      setLoginError(staffRes.reason || 'Invalid username, email, or password.');
+      if (
+        studentRes.reason.toLowerCase().includes('deactivated') ||
+        studentRes.reason.toLowerCase().includes('suspended') ||
+        studentRes.reason.toLowerCase().includes('transferred')
+      ) {
+        setLoginError(studentRes.reason);
+        return;
+      }
+
+      // 3. Parent / Guardian Authentication against synced student records
+      const parentSession = authenticateParentAccount(cleanUser, cleanPass);
+      if (parentSession) {
+        persistCredentialsIfEnabled(cleanUser, cleanPass);
+        setCurrentSessionUser(parentSession);
+        setCurrentUser(parentSession);
+        logAuditEvent('LOGIN', 'Auth', parentSession.id, `${parentSession.name} signed into Parent Portal`);
+        return;
+      }
+
+      setLoginError('Invalid username, email, or password. Please verify your credentials or click Forgot Password.');
     } catch (err: any) {
       console.warn('Login verification notice:', err);
       setLoginError('Could not verify credentials across database. Please check your connection and try again.');
@@ -875,9 +908,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     setLoginError('');
     try {
       const res = await googleSignIn();
+      if (res?.redirected) {
+        return;
+      }
       if (res && res.user) {
         setGoogleUser(res.user);
         setAccessToken(res.accessToken);
+
+        // Ensure staff and student/parent directories from Supabase/Firebase are fresh before authorizing
+        await Promise.all([syncServerStaff(), syncServerStudents()]).catch(() => {});
+        setStaffList(getStaffMembers());
+        setStudentList(getEnrolledStudents());
 
         const resolution = resolveStaffRoleForFirebaseUser(res.user);
         if (resolution.authorized) {
@@ -898,12 +939,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
           setGoogleUser(null);
           setAccessToken(null);
           setLoginError(
-            `Access Denied: Google identity (${resolution.email}) is not registered in the Mugina Hope Academy staff or parent directory.`
+            resolution.reason ||
+              `Access Denied: Google identity (${resolution.email}) is not registered in the Mugina Hope Academy staff or parent directory.`
           );
         }
       }
     } catch (err: any) {
-      setLoginError(err.message || 'Failed to authenticate with Google & Firebase');
+      setLoginError(err?.message || 'Failed to authenticate with Google & Firebase.');
     } finally {
       setIsGoogleLoading(false);
     }
@@ -1017,7 +1059,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     const username = studentFormData.studentUsername.trim() || cleanSlug || studentFormData.regNumber.toLowerCase();
 
     if (editingStudent) {
-      updateEnrolledStudent(editingStudent.id, {
+      const updates: Partial<EnrolledStudent> = {
         regNumber: studentFormData.regNumber,
         fullName: studentFormData.fullName,
         gender: studentFormData.gender,
@@ -1032,10 +1074,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         parentPhone: studentFormData.parentPhone,
         parentEmail: studentFormData.parentEmail,
         studentUsername: username,
-        studentPassword: studentFormData.studentPassword,
         studentAccountActive: studentFormData.studentAccountActive,
         status: studentFormData.status,
-      });
+      };
+      if (studentFormData.studentPassword.trim() && studentFormData.studentPassword.trim() !== '••••••') {
+        updates.studentPassword = studentFormData.studentPassword.trim();
+      }
+      updateEnrolledStudent(editingStudent.id, updates);
       logAuditEvent('UPDATE', 'Student', editingStudent.id, `Updated student record ${studentFormData.fullName}`);
       setEditingStudent(null);
     } else {
@@ -2052,7 +2097,7 @@ END $$;`;
     setTimeout(() => setDeleteSuccessMsg(null), 4000);
   };
 
-  // If not logged in, render Unified Portal Gate (Staff/Admin, Parent Portal, Student Portal)
+  // If not logged in, render Unified Portal Login Gate (Username + Password + Google Sign-In)
   if (!currentUser) {
     return (
       <div className="w-full max-w-md mx-auto px-3.5 sm:px-4 py-6 sm:py-12">
@@ -2062,62 +2107,9 @@ END $$;`;
             <h1 className="text-lg sm:text-xl font-black font-display tracking-tight text-white mt-1">
               Mugina Hope School Management Portal
             </h1>
-            <p className="text-xs text-amber-300">
-              {loginPortalMode === 'parent'
-                ? 'Parent Portal — Results, Fees, Attendance & Teacher Messaging'
-                : loginPortalMode === 'student'
-                ? 'Student Portal — Timetable, Assignments, Grades & Digital ID'
-                : 'Role-Based Access for Administration, DOS, DOD, Registrar, Finance & Teachers'}
-            </p>
           </div>
 
           <div className="p-5 sm:p-8 space-y-5">
-            {/* Portal Mode Switcher */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginPortalMode('staff');
-                  setLoginError('');
-                }}
-                className={`py-2 px-2 rounded-lg transition-colors cursor-pointer ${
-                  loginPortalMode === 'staff'
-                    ? 'bg-blue-900 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Staff
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginPortalMode('parent');
-                  setLoginError('');
-                }}
-                className={`py-2 px-2 rounded-lg transition-colors cursor-pointer ${
-                  loginPortalMode === 'parent'
-                    ? 'bg-emerald-700 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Parent Portal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginPortalMode('student');
-                  setLoginError('');
-                }}
-                className={`py-2 px-2 rounded-lg transition-colors cursor-pointer ${
-                  loginPortalMode === 'student'
-                    ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Student Portal
-              </button>
-            </div>
-
             {loginError && (
               <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -2199,173 +2191,145 @@ END $$;`;
               </form>
             ) : (
               <>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
-                  {loginPortalMode === 'parent'
-                    ? 'Parent Email or Phone Number'
-                    : loginPortalMode === 'student'
-                    ? 'Student Username or Reg ID'
-                    : 'Username or Official Email'}
-                </label>
-                <input
-                  type="text"
-                  required={loginPortalMode !== 'staff'}
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder={
-                    loginPortalMode === 'parent'
-                      ? 'parent@gmail.com or +250 78...'
-                      : loginPortalMode === 'student'
-                      ? 'e.g. MHA-2026-101 or stu.keza'
-                      : 'e.g. norbertihimbazwemanzi@gmail.com'
-                  }
-                  autoComplete="username"
-                  className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
-                />
-              </div>
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={loginUsername}
+                      onChange={(e) => setLoginUsername(e.target.value)}
+                      placeholder="Enter your username or email"
+                      autoComplete="username"
+                      className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                    />
+                  </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                    {loginPortalMode === 'parent'
-                      ? 'Child Reg ID or Parent Code'
-                      : loginPortalMode === 'student'
-                      ? 'Student Portal Password'
-                      : 'Password or Shared Access Code'}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="text-xs text-blue-700 dark:text-amber-400 hover:text-blue-900 font-semibold inline-flex items-center gap-1 focus:outline-hidden cursor-pointer"
-                  >
-                    {showLoginPassword ? (
-                      <>
-                        <EyeOff className="w-3.5 h-3.5" />
-                        <span>Hide</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Reveal</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div className="relative">
-                  <input
-                    type={showLoginPassword ? 'text' : 'password'}
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder={
-                      loginPortalMode === 'parent'
-                        ? 'Child Reg ID (e.g. MHA-2026-101)'
-                        : loginPortalMode === 'student'
-                        ? 'Enter your student password'
-                        : 'Enter your password or code'
-                    }
-                    autoComplete="current-password"
-                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 pr-11 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-hidden font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-hidden cursor-pointer"
-                    aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
-                    title={showLoginPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showLoginPassword ? (
-                      <EyeOff className="w-4 h-4 text-blue-700 dark:text-amber-400" />
-                    ) : (
-                      <Eye className="w-4 h-4 text-slate-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
-                <label htmlFor="remember-password-check" className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    id="remember-password-check"
-                    checked={rememberPassword}
-                    onChange={(e) => {
-                      setRememberPassword(e.target.checked);
-                      if (!e.target.checked) {
-                        try {
-                          localStorage.setItem('mha_remember_password', 'false');
-                          localStorage.removeItem('mha_saved_credentials_v1');
-                          setHasSavedCredentials(false);
-                        } catch {}
-                      }
-                    }}
-                    className="w-4 h-4 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
-                  />
-                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Remember login
-                  </span>
-                </label>
-
-                <div className="flex items-center gap-3">
-                  {hasSavedCredentials && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-emerald-600 font-bold inline-flex items-center gap-1">
-                        <Check className="w-3 h-3 text-emerald-600" />
-                        Saved
-                      </span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                        Password
+                      </label>
                       <button
                         type="button"
-                        onClick={handleForgetSavedCredentials}
-                        className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
-                        title="Clear saved login from device"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="text-xs text-blue-700 dark:text-amber-400 hover:text-blue-900 font-semibold inline-flex items-center gap-1 focus:outline-hidden cursor-pointer"
                       >
-                        Forget
+                        {showLoginPassword ? (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Hide</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Reveal</span>
+                          </>
+                        )}
                       </button>
                     </div>
-                  )}
+                    <div className="relative">
+                      <input
+                        type={showLoginPassword ? 'text' : 'password'}
+                        required
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 pr-11 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-600 focus:outline-hidden font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-hidden cursor-pointer"
+                        aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                        title={showLoginPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showLoginPassword ? (
+                          <EyeOff className="w-4 h-4 text-blue-700 dark:text-amber-400" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-slate-400" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 flex flex-wrap items-center justify-between gap-2">
+                    <label htmlFor="remember-password-check" className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        id="remember-password-check"
+                        checked={rememberPassword}
+                        onChange={(e) => {
+                          setRememberPassword(e.target.checked);
+                          if (!e.target.checked) {
+                            try {
+                              localStorage.setItem('mha_remember_password', 'false');
+                              localStorage.removeItem('mha_saved_credentials_v1');
+                              setHasSavedCredentials(false);
+                            } catch {}
+                          }
+                        }}
+                        className="w-4 h-4 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Remember login
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-3">
+                      {hasSavedCredentials && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-emerald-600 font-bold inline-flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            Saved
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleForgetSavedCredentials}
+                            className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                            title="Clear saved login from device"
+                          >
+                            Forget
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowForgotPassword(true);
+                          setForgotFeedback(null);
+                          if (loginUsername.includes('@')) setForgotEmail(loginUsername.trim());
+                        }}
+                        className="text-xs font-bold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+                  </div>
 
                   <button
-                    type="button"
-                    onClick={() => {
-                      setShowForgotPassword(true);
-                      setForgotFeedback(null);
-                      if (loginUsername.includes('@')) setForgotEmail(loginUsername.trim());
-                    }}
-                    className="text-xs font-bold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
+                    type="submit"
+                    disabled={isVerifyingLogin}
+                    className="w-full py-3 px-4 bg-blue-950 hover:bg-blue-900 active:bg-slate-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-75 disabled:cursor-not-allowed"
                   >
-                    Forgot Password?
+                    {isVerifyingLogin ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                        <span>Verifying Account...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-4 h-4 text-amber-400" />
+                        <span>Sign In</span>
+                      </>
+                    )}
                   </button>
-                </div>
-              </div>
+                </form>
 
-              <button
-                type="submit"
-                disabled={isVerifyingLogin}
-                className="w-full py-3 px-4 bg-blue-950 hover:bg-blue-900 active:bg-slate-950 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-75 disabled:cursor-not-allowed"
-              >
-                {isVerifyingLogin ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
-                    <span>Verifying Account...</span>
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-4 h-4 text-amber-400" />
-                    <span>
-                      {loginPortalMode === 'parent'
-                        ? 'Sign In to Parent Portal'
-                        : loginPortalMode === 'student'
-                        ? 'Sign In to Student Portal'
-                        : 'Verify Access & Unlock Console'}
-                    </span>
-                  </>
-                )}
-              </button>
-            </form>
-
-            {loginPortalMode !== 'student' && (
-              <>
                 <div className="relative flex items-center justify-center">
                   <div className="border-t border-slate-200 dark:border-slate-700 w-full" />
                   <span className="bg-white dark:bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-400 font-semibold absolute">
@@ -2377,7 +2341,7 @@ END $$;`;
                   type="button"
                   onClick={handleGoogleConnect}
                   disabled={isGoogleLoading}
-                  className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100 font-semibold text-xs rounded-xl border border-slate-300 dark:border-slate-700 shadow-2xs transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-center gap-3 py-2.5 px-4 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-100 font-semibold text-xs rounded-xl border border-slate-300 dark:border-slate-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-75"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
                     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -2387,8 +2351,6 @@ END $$;`;
                   </svg>
                   <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
                 </button>
-              </>
-            )}
               </>
             )}
           </div>

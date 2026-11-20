@@ -191,31 +191,31 @@ export const SchoolLogo: React.FC<SchoolLogoProps> = ({
           {/* Central Main Ribbon (Navy with Gold borders) */}
           <g>
             <path
-              d="M 25 250 L 375 250 L 390 295 L 360 285 L 340 315 L 340 295 L 60 295 L 60 315 L 40 285 L 10 295 Z"
+              d="M 25 246 L 375 246 L 390 296 L 360 286 L 340 314 L 340 298 L 60 298 L 60 314 L 40 286 L 10 296 Z"
               fill="#0f2b5c"
               stroke="url(#goldBorder)"
-              strokeWidth="5"
+              strokeWidth="4.5"
             />
 
             {/* School Name on Ribbon */}
             <text
               x="200"
-              y="256"
+              y="272"
               fill="#ffffff"
-              fontSize="28"
+              fontSize="24"
               fontWeight="900"
               fontFamily="system-ui, sans-serif"
               textAnchor="middle"
-              letterSpacing="2"
+              letterSpacing="1.5"
             >
-              MUGINAPHOPE
+              MUGINA HOPE
             </text>
 
             <text
               x="200"
-              y="282"
+              y="290"
               fill="#facc15"
-              fontSize="14"
+              fontSize="11.5"
               fontWeight="800"
               fontFamily="system-ui, sans-serif"
               textAnchor="middle"
@@ -228,16 +228,16 @@ export const SchoolLogo: React.FC<SchoolLogoProps> = ({
           {/* Lower Motto Plaque: "We learn for our better future" */}
           <g>
             <path
-              d="M 95 305 Q 200 325 305 305 Q 200 355 95 305 Z"
+              d="M 94 304 Q 200 314 306 304 L 284 339 Q 200 364 116 339 Z"
               fill="#ffffff"
               stroke="#facc15"
               strokeWidth="2.5"
             />
             <text
               x="200"
-              y="323"
+              y="324"
               fill="#0f2b5c"
-              fontSize="14"
+              fontSize="13"
               fontStyle="italic"
               fontWeight="700"
               fontFamily="Georgia, serif"
@@ -249,7 +249,7 @@ export const SchoolLogo: React.FC<SchoolLogoProps> = ({
               x="200"
               y="341"
               fill="#0f2b5c"
-              fontSize="16"
+              fontSize="14.5"
               fontStyle="italic"
               fontWeight="800"
               fontFamily="Georgia, serif"

@@ -132,6 +132,7 @@ export interface StaffMember {
   bio?: string;
   enrolledAt: string;
   status: 'Active' | 'Inactive';
+  updatedAt?: string;
 }
 
 export interface StudentAcademicHistoryEntry {
@@ -168,6 +169,7 @@ export interface EnrolledStudent {
   enrolledAt: string;
   status: 'Active' | 'Awaiting Approval' | 'Suspended' | 'Transferred' | 'Graduated';
   feedbackNotes?: string;
+  updatedAt?: string;
 }
 
 export interface AttendanceRecord {
@@ -1181,17 +1183,175 @@ const dispatchStoreEvent = (eventName: string, detail?: any) => {
   }
 };
 
+const getItemTimestampMs = (item: any): number => {
+  const raw = item?.updatedAt || item?.updated_at || item?.recordedAt;
+  if (!raw) return 0;
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? 0 : ms;
+};
+
 const getMaxTimestampMs = (items: any[] | null | undefined): number => {
   if (!Array.isArray(items) || items.length === 0) return 0;
   let maxMs = 0;
   for (const item of items) {
-    const raw = item?.updatedAt || item?.updated_at || item?.recordedAt;
-    if (raw) {
-      const ms = Date.parse(raw);
-      if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
-    }
+    const ms = getItemTimestampMs(item);
+    if (ms > maxMs) maxMs = ms;
   }
   return maxMs;
+};
+
+const fetchServerJsonSafely = async (endpoint: string): Promise<any | null> => {
+  try {
+    const res = await fetch(endpoint);
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Union-merges staff lists across localStorage, Express, Firebase & Supabase without ever
+ * clobbering a real staff password with an empty string from a sanitized backend/fallback response.
+ */
+export const mergeStaffRecords = (sources: Array<StaffMember[] | null | undefined>): StaffMember[] => {
+  const byKey = new Map<string, StaffMember>();
+  for (const list of sources) {
+    if (!Array.isArray(list)) continue;
+    for (const rawItem of list) {
+      if (!rawItem) continue;
+      const key = String(rawItem.id || rawItem.username || '').trim().toLowerCase();
+      if (!key) continue;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, {
+          ...rawItem,
+          password: String(rawItem.password || '').trim() === '••••••' ? '' : rawItem.password || '',
+        });
+        continue;
+      }
+      const existingMs = getItemTimestampMs(existing);
+      const incomingMs = getItemTimestampMs(rawItem);
+      const incomingWins = incomingMs >= existingMs;
+      const newer = incomingWins ? rawItem : existing;
+      const older = incomingWins ? existing : rawItem;
+      const newerPw = String(newer.password || '').trim();
+      const olderPw = String(older.password || '').trim();
+      const bestPw =
+        newerPw && newerPw !== '••••••'
+          ? newerPw
+          : olderPw && olderPw !== '••••••'
+          ? olderPw
+          : '';
+      byKey.set(key, {
+        ...older,
+        ...newer,
+        password: bestPw,
+        photoUrl: newer.photoUrl || older.photoUrl || '',
+        bio: newer.bio || older.bio || '',
+        email: newer.email || older.email || '',
+        phone: newer.phone || older.phone || '',
+        assignedSubjectOrGrade: newer.assignedSubjectOrGrade || older.assignedSubjectOrGrade || '',
+        status: newer.status || older.status || 'Active',
+        updatedAt: newer.updatedAt || older.updatedAt,
+      });
+    }
+  }
+
+  const filtered = filterStaffAgainstTombstones(Array.from(byKey.values()));
+  const byUsername = new Map<string, StaffMember>();
+  for (const s of filtered) {
+    const uname = String(s.username || '').trim().toLowerCase();
+    if (!uname) continue;
+    const prev = byUsername.get(uname);
+    if (!prev || getItemTimestampMs(s) >= getItemTimestampMs(prev)) {
+      byUsername.set(uname, {
+        ...(prev || {}),
+        ...s,
+        password:
+          String(s.password || '').trim() && s.password !== '••••••'
+            ? s.password
+            : prev?.password || '',
+      });
+    }
+  }
+
+  // Guarantee core master administrator accounts stay present and never locked out by sanitized empty passwords
+  for (const coreAdmin of defaultStaff.slice(0, 2)) {
+    const uname = coreAdmin.username.toLowerCase();
+    const existingCore = byUsername.get(uname);
+    if (!existingCore) {
+      byUsername.set(uname, coreAdmin);
+    } else if (!String(existingCore.password || '').trim()) {
+      byUsername.set(uname, {
+        ...existingCore,
+        password: coreAdmin.password,
+      });
+    }
+  }
+
+  return Array.from(byUsername.values());
+};
+
+/**
+ * Union-merges student rosters across localStorage, Express, Firebase & Supabase while preserving
+ * non-empty studentUsername, studentPassword, and explicit deactivation flags.
+ */
+export const mergeStudentRecords = (
+  sources: Array<EnrolledStudent[] | null | undefined>
+): EnrolledStudent[] => {
+  const byKey = new Map<string, EnrolledStudent>();
+  for (const list of sources) {
+    if (!Array.isArray(list)) continue;
+    for (const rawItem of list) {
+      if (!rawItem) continue;
+      const key = String(rawItem.id || rawItem.regNumber || '').trim().toLowerCase();
+      if (!key) continue;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, {
+          ...rawItem,
+          studentPassword:
+            String(rawItem.studentPassword || '').trim() === '••••••'
+              ? ''
+              : rawItem.studentPassword || '',
+        });
+        continue;
+      }
+      const existingMs = getItemTimestampMs(existing);
+      const incomingMs = getItemTimestampMs(rawItem);
+      const incomingWins = incomingMs >= existingMs;
+      const newer = incomingWins ? rawItem : existing;
+      const older = incomingWins ? existing : rawItem;
+
+      const newerUser = String(newer.studentUsername || '').trim();
+      const olderUser = String(older.studentUsername || '').trim();
+      const newerPw = String(newer.studentPassword || '').trim();
+      const olderPw = String(older.studentPassword || '').trim();
+
+      byKey.set(key, {
+        ...older,
+        ...newer,
+        studentUsername: newerUser || olderUser || '',
+        studentPassword:
+          newerPw && newerPw !== '••••••'
+            ? newerPw
+            : olderPw && olderPw !== '••••••'
+            ? olderPw
+            : '',
+        studentAccountActive:
+          newer.studentAccountActive !== undefined
+            ? newer.studentAccountActive
+            : older.studentAccountActive,
+        photoUrl: newer.photoUrl || older.photoUrl,
+        stream: newer.stream || older.stream || 'Stream A',
+        updatedAt: newer.updatedAt || older.updatedAt,
+      });
+    }
+  }
+  return filterStudentsAgainstTombstones(Array.from(byKey.values()));
 };
 
 /**
@@ -1268,6 +1428,7 @@ export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' |
     id: `staff-${Date.now()}`,
     enrolledAt: new Date().toISOString().split('T')[0],
     status: 'Active',
+    updatedAt: new Date().toISOString(),
   };
   const updated = [newStaff, ...list];
   localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
@@ -1284,7 +1445,8 @@ export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' |
 
 export const updateStaffMember = (id: string, updates: Partial<StaffMember>): StaffMember[] => {
   const list = getStaffMembers();
-  const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
+  const nowIso = new Date().toISOString();
+  const updated = list.map((s) => (s.id === id ? { ...s, ...updates, updatedAt: nowIso } : s));
   localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
   persistToServer('/api/staff', { items: updated });
   const target = updated.find((s) => s.id === id);
@@ -1333,30 +1495,32 @@ export const deleteStaffMember = (id: string): StaffMember[] => {
  */
 export const syncServerStaff = async (): Promise<StaffMember[]> => {
   try {
-    const [sbStaff, fbStaff, serverStaff] = await Promise.all([
+    const [sbStaff, fbStaff, serverData] = await Promise.all([
       fetchStaffMembersFromSupabase(),
       fetchStaffMembersFromFirebase(),
-      fetch('/api/staff')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/staff'),
     ]);
 
-    const authoritative = resolveAuthoritativeCloudArray<StaffMember>(sbStaff, fbStaff as StaffMember[], serverStaff);
+    const serverStaff: StaffMember[] = Array.isArray(serverData?.items) ? serverData.items : [];
+    const hasRemote =
+      (Array.isArray(sbStaff) && sbStaff.length > 0) ||
+      (Array.isArray(fbStaff) && fbStaff.length > 0) ||
+      serverStaff.length > 0;
 
-    if (authoritative && authoritative.length > 0) {
-      const filteredAuth = filterStaffAgainstTombstones(authoritative);
-      // Always guarantee primary master admin logins stay accessible even if pruned remotely
-      const map = new Map<string, StaffMember>();
-      filteredAuth.forEach((s) => {
-        if (s && s.username) map.set(s.username.toLowerCase(), s);
-      });
-      defaultStaff.slice(0, 2).forEach((coreAdmin) => {
-        const key = coreAdmin.username.toLowerCase();
-        if (!map.has(key)) {
-          map.set(key, coreAdmin);
-        }
-      });
-      const synced = Array.from(map.values());
+    if (hasRemote) {
+      let localStaff: StaffMember[] = [];
+      try {
+        const rawLocal = localStorage.getItem(STORAGE_KEYS.STAFF);
+        if (rawLocal) localStaff = JSON.parse(rawLocal);
+      } catch {
+        localStaff = [];
+      }
+      const synced = mergeStaffRecords([
+        localStaff,
+        serverStaff,
+        fbStaff as StaffMember[],
+        sbStaff,
+      ]);
       localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(synced));
       dispatchStoreEvent('mugina-staff-updated', synced);
       return synced;
@@ -1378,25 +1542,35 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
  */
 export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
   try {
-    const [sbStudents, fbStudents, serverStudents] = await Promise.all([
+    const [sbStudents, fbStudents, serverData] = await Promise.all([
       fetchEnrolledStudentsFromSupabase(),
       fetchEnrolledStudentsFromFirebase(),
-      fetch('/api/students')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/students'),
     ]);
 
-    const authoritative = resolveAuthoritativeCloudArray<EnrolledStudent>(
-      sbStudents,
-      fbStudents as EnrolledStudent[],
-      serverStudents
-    );
+    const serverStudents: EnrolledStudent[] = Array.isArray(serverData?.items) ? serverData.items : [];
+    const hasRemote =
+      (Array.isArray(sbStudents) && sbStudents.length > 0) ||
+      (Array.isArray(fbStudents) && fbStudents.length > 0) ||
+      serverStudents.length > 0;
 
-    if (authoritative && authoritative.length > 0) {
-      const filtered = filterStudentsAgainstTombstones(authoritative);
-      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
-      dispatchStoreEvent('mugina-students-updated', filtered);
-      return filtered;
+    if (hasRemote) {
+      let localStudents: EnrolledStudent[] = [];
+      try {
+        const rawLocal = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+        if (rawLocal) localStudents = JSON.parse(rawLocal);
+      } catch {
+        localStudents = [];
+      }
+      const merged = mergeStudentRecords([
+        localStudents,
+        serverStudents,
+        fbStudents as EnrolledStudent[],
+        sbStudents,
+      ]);
+      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(merged));
+      dispatchStoreEvent('mugina-students-updated', merged);
+      return merged;
     }
 
     return getEnrolledStudents();
@@ -1437,6 +1611,7 @@ export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enroll
     ...student,
     id: `stu-${Date.now()}`,
     enrolledAt: new Date().toISOString().split('T')[0],
+    updatedAt: new Date().toISOString(),
   };
   const updated = [newStudent, ...list];
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
@@ -1457,11 +1632,13 @@ export const enrollStudentsBatchByDOS = (
   const list = getEnrolledStudents();
   const baseTs = Date.now();
   const today = new Date().toISOString().split('T')[0];
+  const nowIso = new Date().toISOString();
 
   const created: EnrolledStudent[] = studentsInput.map((st, idx) => ({
     ...st,
     id: `stu-${baseTs}-${idx}`,
     enrolledAt: today,
+    updatedAt: nowIso,
   }));
 
   const updated = [...created, ...list];
@@ -1479,7 +1656,18 @@ export const enrollStudentsBatchByDOS = (
 
 export const updateEnrolledStudent = (id: string, updates: Partial<EnrolledStudent>): EnrolledStudent[] => {
   const list = getEnrolledStudents();
-  const updated = list.map((s) => (s.id === id ? { ...s, ...updates } : s));
+  const nowIso = new Date().toISOString();
+  const sanitizedUpdates: Partial<EnrolledStudent> = { ...updates };
+  if (
+    sanitizedUpdates.studentPassword !== undefined &&
+    (!String(sanitizedUpdates.studentPassword || '').trim() ||
+      sanitizedUpdates.studentPassword === '••••••')
+  ) {
+    delete sanitizedUpdates.studentPassword;
+  }
+  const updated = list.map((s) =>
+    s.id === id ? { ...s, ...sanitizedUpdates, updatedAt: nowIso } : s
+  );
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
   persistToServer('/api/students', { items: updated });
   const target = updated.find((s) => s.id === id);
@@ -1561,6 +1749,7 @@ export const promoteStudentsBatch = (
       stream: targetStream || s.stream || 'Stream A',
       status: nextStatus,
       academicHistory: [historyEntry, ...(s.academicHistory || [])],
+      updatedAt: new Date().toISOString(),
     };
   });
 
@@ -1592,6 +1781,7 @@ export const transferStudentRecord = (
       status: 'Transferred' as const,
       feedbackNotes: `Transferred to ${destinationSchool} on ${today}. ${transferNotes}`.trim(),
       academicHistory: [historyEntry, ...(s.academicHistory || [])],
+      updatedAt: new Date().toISOString(),
     };
   });
   saveEnrolledStudents(updated);
@@ -1786,13 +1976,12 @@ export const saveWebsiteSettings = (settings: WebsiteSettings) => {
 
 export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | null> => {
   try {
-    const [sbSettings, fbSettings, serverSettings] = await Promise.all([
+    const [sbSettings, fbSettings, serverSettingsData] = await Promise.all([
       fetchWebsiteSettingsFromSupabase(),
       fetchWebsiteSettingsFromFirebase(),
-      fetch('/api/settings')
-        .then(async (res) => (res.ok ? (await res.json()).settings : null))
-        .catch(() => null),
+      fetchServerJsonSafely('/api/settings'),
     ]);
+    const serverSettings = serverSettingsData?.settings || null;
 
     const localSettings = getWebsiteSettings();
     const localMs = localSettings?.updatedAt ? Date.parse(localSettings.updatedAt) : 0;
@@ -1885,13 +2074,12 @@ export const saveGalleryItems = (items: FacilityItem[], syncRemote = false) => {
 
 export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
   try {
-    const [sbItems, fbItems, serverItems] = await Promise.all([
+    const [sbItems, fbItems, serverGalleryData] = await Promise.all([
       fetchSchoolGalleryFromSupabase(),
       fetchSchoolGalleryFromFirebase(),
-      fetch('/api/gallery')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/gallery'),
     ]);
+    const serverItems = Array.isArray(serverGalleryData?.items) ? serverGalleryData.items : [];
 
     const authoritative = resolveAuthoritativeCloudArray<FacilityItem>(sbItems, fbItems, serverItems);
     if (authoritative && authoritative.length > 0) {
@@ -2313,13 +2501,12 @@ export const deleteApplication = (id: string): AdminApplication[] => {
 
 export const syncServerApplications = async (): Promise<AdminApplication[]> => {
   try {
-    const [sbApps, fbApps, serverApps] = await Promise.all([
+    const [sbApps, fbApps, serverAppsData] = await Promise.all([
       fetchApplicationsFromSupabase(),
       fetchApplicationsFromFirebase(),
-      fetch('/api/applications')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/applications'),
     ]);
+    const serverApps = Array.isArray(serverAppsData?.items) ? serverAppsData.items : [];
     const authoritative = resolveAuthoritativeCloudArray<AdminApplication>(
       sbApps,
       fbApps as AdminApplication[],
@@ -2648,13 +2835,12 @@ export const saveRequiredDocuments = (docs: RegistrationDocument[]) => {
 
 export const syncServerDocuments = async (): Promise<RegistrationDocument[]> => {
   try {
-    const [sbDocs, fbDocs, serverDocs] = await Promise.all([
+    const [sbDocs, fbDocs, serverDocsData] = await Promise.all([
       fetchDocumentsFromSupabase(),
       fetchSchoolDocumentsFromFirebase(),
-      fetch('/api/documents')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/documents'),
     ]);
+    const serverDocs = Array.isArray(serverDocsData?.items) ? serverDocsData.items : [];
 
     const authoritative = resolveAuthoritativeCloudArray<RegistrationDocument>(
       sbDocs,
@@ -2912,13 +3098,12 @@ export const reviewRefundRequest = (
 
 export const syncServerPayments = async (): Promise<PaymentTransaction[]> => {
   try {
-    const [sbTx, fbTx, serverTx] = await Promise.all([
+    const [sbTx, fbTx, serverTxData] = await Promise.all([
       fetchPaymentTransactionsFromSupabase(),
       fetchPaymentTransactionsFromFirebase(),
-      fetch('/api/payments')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/payments'),
     ]);
+    const serverTx = Array.isArray(serverTxData?.items) ? serverTxData.items : [];
     const authoritative = resolveAuthoritativeCloudArray<PaymentTransaction>(
       sbTx,
       fbTx as PaymentTransaction[],
@@ -2937,13 +3122,12 @@ export const syncServerPayments = async (): Promise<PaymentTransaction[]> => {
 
 export const syncServerAttendance = async (): Promise<AttendanceRecord[]> => {
   try {
-    const [sbAtt, fbAtt, serverAtt] = await Promise.all([
+    const [sbAtt, fbAtt, serverAttData] = await Promise.all([
       fetchAttendanceRecordsFromSupabase(),
       fetchAttendanceRecordsFromFirebase(),
-      fetch('/api/attendance')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/attendance'),
     ]);
+    const serverAtt = Array.isArray(serverAttData?.items) ? serverAttData.items : [];
     const authoritative = resolveAuthoritativeCloudArray<AttendanceRecord>(
       sbAtt,
       fbAtt as AttendanceRecord[],
@@ -2962,13 +3146,12 @@ export const syncServerAttendance = async (): Promise<AttendanceRecord[]> => {
 
 export const syncServerTeacherAttendance = async (): Promise<TeacherAttendanceRecord[]> => {
   try {
-    const [sbAtt, fbAtt, serverAtt] = await Promise.all([
+    const [sbAtt, fbAtt, serverAttData] = await Promise.all([
       fetchTeacherAttendanceFromSupabase(),
       fetchTeacherAttendanceFromFirebase(),
-      fetch('/api/teacher-attendance')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/teacher-attendance'),
     ]);
+    const serverAtt = Array.isArray(serverAttData?.items) ? serverAttData.items : [];
     const authoritative = resolveAuthoritativeCloudArray<TeacherAttendanceRecord>(
       sbAtt,
       fbAtt as TeacherAttendanceRecord[],
@@ -2987,13 +3170,12 @@ export const syncServerTeacherAttendance = async (): Promise<TeacherAttendanceRe
 
 export const syncServerDiscipline = async (): Promise<DisciplineRecord[]> => {
   try {
-    const [sbDisc, fbDisc, serverDisc] = await Promise.all([
+    const [sbDisc, fbDisc, serverDiscData] = await Promise.all([
       fetchDisciplineRecordsFromSupabase(),
       fetchDisciplineRecordsFromFirebase(),
-      fetch('/api/discipline')
-        .then(async (res) => (res.ok ? (await res.json()).items : []))
-        .catch(() => []),
+      fetchServerJsonSafely('/api/discipline'),
     ]);
+    const serverDisc = Array.isArray(serverDiscData?.items) ? serverDiscData.items : [];
     const authoritative = resolveAuthoritativeCloudArray<DisciplineRecord>(
       sbDisc,
       fbDisc as DisciplineRecord[],
