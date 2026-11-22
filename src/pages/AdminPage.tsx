@@ -68,6 +68,7 @@ import {
   syncServerStudents,
   syncServerApplications,
   promoteStudentsBatch,
+  waitForCredentialSync,
 } from '../services/adminStore';
 import { FacilityItem, PageId } from '../types';
 import { ACADEMIC_GRADES } from '../data/schoolData';
@@ -244,7 +245,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   useEffect(() => {
     const onSessionUpdated = (e: Event) => {
       const detail = (e as CustomEvent<ReturnType<typeof getCurrentSessionUser>>).detail;
-      if (detail !== undefined) setCurrentUser(detail);
+      if (detail !== undefined) {
+        setCurrentUser(detail);
+        if (detail) {
+          setActiveTab(resolveDefaultTabForUser(detail));
+        }
+      }
     };
     window.addEventListener('mugina-session-updated', onSessionUpdated);
     return () => window.removeEventListener('mugina-session-updated', onSessionUpdated);
@@ -443,6 +449,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
   const [staffRoleFilter, setStaffRoleFilter] = useState<string>('ALL');
   const [staffActionNotice, setStaffActionNotice] = useState<string | null>(null);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [staffFormData, setStaffFormData] = useState({
     name: '',
     role: 'Teacher' as StaffMember['role'],
@@ -1035,72 +1043,86 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   };
 
   // 1. Staff Enrollment & Edit (Admin only)
-  const handleSaveStaff = (e: React.FormEvent) => {
+  const handleSaveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
     setStaffFormError(null);
-    if (!staffFormData.name.trim() || !staffFormData.username.trim()) {
+    const cleanName = staffFormData.name.trim();
+    const cleanUsername = staffFormData.username.trim();
+    const cleanPassword = staffFormData.password.trim();
+    if (!cleanName || !cleanUsername) {
       setStaffFormError('Please fill out full name and username.');
       return;
     }
-    if (!editingStaffMember && staffFormData.password.trim().length < 6) {
+    if (!editingStaffMember && cleanPassword.length < 6) {
       setStaffFormError('Initial password for a new staff member must be at least 6 characters.');
       return;
     }
 
-    const cleanEmail =
-      staffFormData.email.trim() || `${staffFormData.username.trim()}@muginahopeschool.com`;
-
-    if (editingStaffMember) {
-      const updates: Partial<StaffMember> = {
-        name: staffFormData.name.trim(),
-        role: staffFormData.role,
-        email: cleanEmail,
-        phone: staffFormData.phone.trim(),
-        username: staffFormData.username.trim(),
-        assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade.trim(),
-        status: staffFormData.status,
-      };
-      if (staffFormData.password.trim()) {
-        updates.password = staffFormData.password.trim();
+    const cleanEmail = staffFormData.email.trim() || `${cleanUsername}@muginahopeschool.com`;
+    setIsSavingStaff(true);
+    try {
+      if (editingStaffMember) {
+        const updates: Partial<StaffMember> = {
+          name: cleanName,
+          role: staffFormData.role,
+          email: cleanEmail,
+          phone: staffFormData.phone.trim(),
+          username: cleanUsername,
+          assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade.trim(),
+          status: staffFormData.status,
+        };
+        if (cleanPassword) {
+          updates.password = cleanPassword;
+        }
+        updateStaffMember(editingStaffMember.id, updates);
+        await waitForCredentialSync();
+        setEditingStaffMember(null);
+        setStaffActionNotice(
+          `Updated staff account for ${cleanName} (${staffFormData.role}) — Sign-in Username: "${cleanUsername}".`
+        );
+      } else {
+        const created = enrollStaffMember({
+          name: cleanName,
+          role: staffFormData.role,
+          email: cleanEmail,
+          phone: staffFormData.phone.trim(),
+          username: cleanUsername,
+          password: cleanPassword,
+          assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade.trim(),
+        });
+        if (staffFormData.status === 'Inactive') {
+          updateStaffMember(created.id, { status: 'Inactive' });
+        }
+        await waitForCredentialSync();
+        setStaffActionNotice(
+          `Enrolled ${cleanName} (${staffFormData.role}) — Sign-in Username: "${cleanUsername}" or Email: "${cleanEmail}".`
+        );
       }
-      updateStaffMember(editingStaffMember.id, updates);
-      setEditingStaffMember(null);
-      setStaffActionNotice(`Updated staff account for ${staffFormData.name.trim()}.`);
-    } else {
-      const created = enrollStaffMember({
-        name: staffFormData.name.trim(),
-        role: staffFormData.role,
-        email: cleanEmail,
-        phone: staffFormData.phone.trim(),
-        username: staffFormData.username.trim(),
-        password: staffFormData.password.trim(),
-        assignedSubjectOrGrade: staffFormData.assignedSubjectOrGrade.trim(),
+      setTimeout(() => setStaffActionNotice(null), 6000);
+
+      setStaffList(getStaffMembers());
+      setShowAddStaffModal(false);
+      setStaffFormData({
+        name: '',
+        role: 'Teacher',
+        email: '',
+        phone: '+250 78',
+        username: '',
+        password: '',
+        assignedSubjectOrGrade: '',
+        status: 'Active',
       });
-      if (staffFormData.status === 'Inactive') {
-        updateStaffMember(created.id, { status: 'Inactive' });
-      }
-      setStaffActionNotice(`Enrolled ${staffFormData.name.trim()} (${staffFormData.role}).`);
+    } finally {
+      setIsSavingStaff(false);
     }
-    setTimeout(() => setStaffActionNotice(null), 5000);
-
-    setStaffList(getStaffMembers());
-    setShowAddStaffModal(false);
-    setStaffFormData({
-      name: '',
-      role: 'Teacher',
-      email: '',
-      phone: '+250 78',
-      username: '',
-      password: '',
-      assignedSubjectOrGrade: '',
-      status: 'Active',
-    });
   };
 
-  const handleToggleStaffStatus = (st: StaffMember) => {
+  const handleToggleStaffStatus = async (st: StaffMember) => {
     const nextStatus: StaffMember['status'] = st.status === 'Active' ? 'Inactive' : 'Active';
     const updated = updateStaffMember(st.id, { status: nextStatus });
     setStaffList(updated);
+    await waitForCredentialSync();
+    setStaffList(getStaffMembers());
     setStaffActionNotice(`${st.name} status set to ${nextStatus}.`);
     setTimeout(() => setStaffActionNotice(null), 4000);
   };
@@ -1117,7 +1139,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   };
 
   // 2. Student Enrollment & Edit (DOS primary objective & Admin)
-  const handleSaveStudent = (e: React.FormEvent) => {
+  const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setStudentFormError(null);
     if (!studentFormData.fullName.trim() || !studentFormData.gradeCode) {
@@ -1127,77 +1149,93 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
 
     const cleanSlug = studentFormData.fullName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
     const username = studentFormData.studentUsername.trim() || cleanSlug || studentFormData.regNumber.toLowerCase();
+    const cleanNewPw = studentFormData.studentPassword.trim();
 
-    if (editingStudent) {
-      const updates: Partial<EnrolledStudent> = {
-        regNumber: studentFormData.regNumber,
-        fullName: studentFormData.fullName,
-        gender: studentFormData.gender,
-        dob: studentFormData.dob,
-        gradeCode: studentFormData.gradeCode,
-        stream: studentFormData.stream || 'A',
-        address: studentFormData.address,
-        admissionDate: studentFormData.admissionDate,
-        previousSchool: studentFormData.previousSchool,
-        photoUrl: studentFormData.photoUrl,
-        parentName: studentFormData.parentName,
-        parentPhone: studentFormData.parentPhone,
-        parentEmail: studentFormData.parentEmail,
-        studentUsername: username,
-        studentAccountActive: studentFormData.studentAccountActive,
-        status: studentFormData.status,
-      };
-      if (studentFormData.studentPassword.trim() && studentFormData.studentPassword.trim() !== '••••••') {
-        updates.studentPassword = studentFormData.studentPassword.trim();
+    setIsSavingStudent(true);
+    try {
+      if (editingStudent) {
+        const updates: Partial<EnrolledStudent> = {
+          regNumber: studentFormData.regNumber.trim(),
+          fullName: studentFormData.fullName.trim(),
+          gender: studentFormData.gender,
+          dob: studentFormData.dob,
+          gradeCode: studentFormData.gradeCode,
+          stream: studentFormData.stream || 'A',
+          address: studentFormData.address,
+          admissionDate: studentFormData.admissionDate,
+          previousSchool: studentFormData.previousSchool,
+          photoUrl: studentFormData.photoUrl,
+          parentName: studentFormData.parentName,
+          parentPhone: studentFormData.parentPhone,
+          parentEmail: studentFormData.parentEmail,
+          studentUsername: username,
+          studentAccountActive: studentFormData.studentAccountActive,
+          status: studentFormData.status,
+        };
+        if (cleanNewPw && cleanNewPw !== '••••••') {
+          updates.studentPassword = cleanNewPw;
+        }
+        updateEnrolledStudent(editingStudent.id, updates);
+        await waitForCredentialSync();
+        logAuditEvent('UPDATE', 'Student', editingStudent.id, `Updated student record ${studentFormData.fullName.trim()}`);
+        setDeleteSuccessMsg(
+          `Saved changes for ${studentFormData.fullName.trim()} — Student Username: "${username}" (Reg ID: ${studentFormData.regNumber.trim()}).`
+        );
+        setEditingStudent(null);
+      } else {
+        const initialPw = cleanNewPw && cleanNewPw !== '••••••' ? cleanNewPw : 'student@2026';
+        const created = enrollStudentByDOS({
+          regNumber: studentFormData.regNumber.trim(),
+          fullName: studentFormData.fullName.trim(),
+          gender: studentFormData.gender,
+          dob: studentFormData.dob,
+          gradeCode: studentFormData.gradeCode,
+          stream: studentFormData.stream || 'A',
+          address: studentFormData.address,
+          admissionDate: studentFormData.admissionDate,
+          previousSchool: studentFormData.previousSchool,
+          photoUrl: studentFormData.photoUrl,
+          parentName: studentFormData.parentName,
+          parentPhone: studentFormData.parentPhone,
+          parentEmail: studentFormData.parentEmail,
+          studentUsername: username,
+          studentPassword: initialPw,
+          studentAccountActive: studentFormData.studentAccountActive,
+          enrolledBy: currentUser?.name || 'DOS',
+          status: studentFormData.status,
+        });
+        await waitForCredentialSync();
+        logAuditEvent('CREATE', 'Student', created.id, `Enrolled student ${created.fullName} into ${created.gradeCode}`);
+        setDeleteSuccessMsg(
+          `Enrolled ${created.fullName} (${created.regNumber}) — Portal Username: "${username}".`
+        );
       }
-      updateEnrolledStudent(editingStudent.id, updates);
-      logAuditEvent('UPDATE', 'Student', editingStudent.id, `Updated student record ${studentFormData.fullName}`);
-      setEditingStudent(null);
-    } else {
-      const created = enrollStudentByDOS({
-        regNumber: studentFormData.regNumber,
-        fullName: studentFormData.fullName,
-        gender: studentFormData.gender,
-        dob: studentFormData.dob,
-        gradeCode: studentFormData.gradeCode,
-        stream: studentFormData.stream || 'A',
-        address: studentFormData.address,
-        admissionDate: studentFormData.admissionDate,
-        previousSchool: studentFormData.previousSchool,
-        photoUrl: studentFormData.photoUrl,
-        parentName: studentFormData.parentName,
-        parentPhone: studentFormData.parentPhone,
-        parentEmail: studentFormData.parentEmail,
-        studentUsername: username,
-        studentPassword: studentFormData.studentPassword || 'student@2026',
-        studentAccountActive: studentFormData.studentAccountActive,
-        enrolledBy: currentUser?.name || 'DOS',
-        status: studentFormData.status,
-      });
-      logAuditEvent('CREATE', 'Student', created.id, `Enrolled student ${created.fullName} into ${created.gradeCode}`);
-    }
+      setTimeout(() => setDeleteSuccessMsg(null), 6000);
 
-    setStudentList(getEnrolledStudents());
-    setShowAddStudentModal(false);
-    setStudentFormData({
-      regNumber: `MHA-2026-${Math.floor(100 + Math.random() * 900)}`,
-      fullName: '',
-      gender: 'Female',
-      dob: '2017-05-10',
-      gradeCode: 'P4',
-      stream: 'A',
-      address: 'Mugina Sector, Kamonyi District',
-      admissionDate: new Date().toISOString().split('T')[0],
-      previousSchool: '',
-      photoUrl: '',
-      parentName: '',
-      parentPhone: '+250 78',
-      parentEmail: '',
-      studentUsername: '',
-      studentPassword: 'student@2026',
-      studentAccountActive: true,
-      status: 'Active',
-    });
+      setStudentList(getEnrolledStudents());
+      setShowAddStudentModal(false);
+      setStudentFormData({
+        regNumber: `MHA-2026-${Math.floor(100 + Math.random() * 900)}`,
+        fullName: '',
+        gender: 'Female',
+        dob: '2017-05-10',
+        gradeCode: 'P4',
+        stream: 'A',
+        address: 'Mugina Sector, Kamonyi District',
+        admissionDate: new Date().toISOString().split('T')[0],
+        previousSchool: '',
+        photoUrl: '',
+        parentName: '',
+        parentPhone: '+250 78',
+        parentEmail: '',
+        studentUsername: '',
+        studentPassword: 'student@2026',
+        studentAccountActive: true,
+        status: 'Active',
+      });
+    } finally {
+      setIsSavingStudent(false);
+    }
   };
 
   // Website Settings Save Handler (Admin & Headteacher can edit everything)
@@ -3076,6 +3114,15 @@ END $$;`;
                     <td className="p-3.5">
                       <span className="font-mono text-blue-700 dark:text-sky-400 font-semibold block">{st.username}</span>
                       <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400 block">{st.email}</span>
+                      {st.password || st.hasPassword || st.clientPasswordHash ? (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                          Password Active
+                        </span>
+                      ) : (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                          No Password Set — Click Edit
+                        </span>
+                      )}
                     </td>
                     <td className="p-3.5 text-slate-600 dark:text-slate-300">{st.assignedSubjectOrGrade || 'General School Duties'}</td>
                     <td className="p-3.5">
@@ -3226,19 +3273,33 @@ END $$;`;
 
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   let provisioned = 0;
-                  studentList.forEach((st) => {
-                    if (!st.studentUsername || !st.studentPassword || st.studentAccountActive === undefined) {
+                  for (const st of studentList) {
+                    const needsUsername = !String(st.studentUsername || '').trim();
+                    const hasAnyPw = Boolean(
+                      String(st.studentPassword || '').trim() ||
+                        st.hasPasswordHash ||
+                        st.clientPasswordHash
+                    );
+                    const needsActive = st.studentAccountActive === undefined;
+                    if (needsUsername || !hasAnyPw || needsActive) {
                       const slug = st.fullName.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
-                      updateEnrolledStudent(st.id, {
-                        studentUsername: st.studentUsername || slug || st.regNumber.toLowerCase(),
-                        studentPassword: st.studentPassword || 'student@2026',
-                        studentAccountActive: st.studentAccountActive !== false,
-                      });
+                      const patch: Partial<EnrolledStudent> = {};
+                      if (needsUsername) {
+                        patch.studentUsername = slug || st.regNumber.toLowerCase();
+                      }
+                      if (!hasAnyPw) {
+                        patch.studentPassword = 'student@2026';
+                      }
+                      if (needsActive) {
+                        patch.studentAccountActive = true;
+                      }
+                      updateEnrolledStudent(st.id, patch);
                       provisioned++;
                     }
-                  });
+                  }
+                  await waitForCredentialSync();
                   setStudentList(getEnrolledStudents());
                   logAuditEvent('PROVISION', 'StudentAccount', 'batch', `Provisioned/verified ${provisioned} student login accounts`);
                   setDeleteSuccessMsg(
@@ -3423,8 +3484,16 @@ END $$;`;
                       </span>
                     </td>
                     <td className="p-3.5 font-mono text-[11px]">
-                      <div className="text-indigo-700 dark:text-indigo-300 font-semibold">{st.studentUsername}</div>
-                      <div className="text-slate-500 dark:text-slate-400">{st.studentPassword}</div>
+                      <div className="text-indigo-700 dark:text-indigo-300 font-semibold">
+                        {st.studentUsername || st.regNumber}
+                      </div>
+                      <div className="text-slate-500 dark:text-slate-400">
+                        {st.studentPassword
+                          ? st.studentPassword
+                          : st.hasPasswordHash || st.clientPasswordHash
+                          ? '•••••• (Password Active)'
+                          : 'No password set'}
+                      </div>
                       <div className={`text-[10px] font-sans font-bold mt-0.5 ${st.studentAccountActive !== false ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                         Login: {st.studentAccountActive !== false ? 'Active' : 'Deactivated'}
                       </div>
@@ -3448,9 +3517,10 @@ END $$;`;
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             const nextActive = st.studentAccountActive === false;
                             updateEnrolledStudent(st.id, { studentAccountActive: nextActive });
+                            await waitForCredentialSync();
                             setStudentList(getEnrolledStudents());
                             logAuditEvent('UPDATE_ACCOUNT', 'Student', st.id, `${nextActive ? 'Activated' : 'Deactivated'} student portal account for ${st.fullName}`);
                           }}
@@ -3467,7 +3537,7 @@ END $$;`;
                           type="button"
                           onClick={() => {
                             setResetPasswordStudent(st);
-                            setResetPasswordInput(st.studentPassword || 'student@2026');
+                            setResetPasswordInput(st.studentPassword || '');
                           }}
                           className="p-1.5 text-slate-500 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
                           title="Reset Student Portal Password"
@@ -4194,7 +4264,7 @@ END $$;`;
                     .map((a) => a.gradeCode);
                   const fromProfile = extractGradesFromAssignment(currentUser?.assignedSubjectOrGrade);
                   const combined = Array.from(new Set([...matrix, ...fromProfile]));
-                  return combined.length > 0 ? combined : ['P1'];
+                  return combined.length > 0 ? combined : ['P1', 'P4'];
                 })()
               : undefined
           }
@@ -6517,9 +6587,10 @@ END $$;`;
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-blue-800 hover:bg-blue-900 text-white font-bold rounded-xl shadow-xs cursor-pointer transition-colors"
+                  disabled={isSavingStaff}
+                  className="px-5 py-2 bg-blue-800 hover:bg-blue-900 disabled:opacity-70 text-white font-bold rounded-xl shadow-xs cursor-pointer transition-colors"
                 >
-                  {editingStaffMember ? 'Save Changes' : 'Enroll Staff Member'}
+                  {isSavingStaff ? 'Saving Credentials...' : editingStaffMember ? 'Save Changes' : 'Enroll Staff Member'}
                 </button>
               </div>
             </form>
@@ -6832,8 +6903,8 @@ END $$;`;
 
               <div className="pt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => { setShowAddStudentModal(false); setEditingStudent(null); }} className="px-4 py-2 font-semibold text-slate-600 cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl cursor-pointer">
-                  {editingStudent ? 'Save Student Changes' : 'Enroll & Issue Credentials'}
+                <button type="submit" disabled={isSavingStudent} className="px-5 py-2 bg-amber-500 disabled:opacity-70 text-slate-950 font-bold rounded-xl cursor-pointer">
+                  {isSavingStudent ? 'Saving Credentials...' : editingStudent ? 'Save Student Changes' : 'Enroll & Issue Credentials'}
                 </button>
               </div>
             </form>
@@ -6861,11 +6932,12 @@ END $$;`;
               </button>
             </div>
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
                 const clean = resetPasswordInput.trim();
                 if (clean.length < 4) return;
                 updateEnrolledStudent(resetPasswordStudent.id, { studentPassword: clean });
+                await waitForCredentialSync();
                 setStudentList(getEnrolledStudents());
                 logAuditEvent('RESET_PASSWORD', 'Student', resetPasswordStudent.id, `Admin reset portal password for ${resetPasswordStudent.fullName}`);
                 setDeleteSuccessMsg(`Updated portal password for ${resetPasswordStudent.fullName}.`);
@@ -6893,6 +6965,7 @@ END $$;`;
                   type="text"
                   required
                   minLength={4}
+                  placeholder="Enter new password (min 4 chars)"
                   value={resetPasswordInput}
                   onChange={(e) => setResetPasswordInput(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 p-2.5 rounded-xl font-mono text-slate-900 dark:text-white"

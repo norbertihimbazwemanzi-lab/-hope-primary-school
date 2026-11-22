@@ -16,7 +16,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-18",
     "status": "Active",
-    "updatedAt": "2026-11-18T09:11:20.556+00:00"
+    "updatedAt": "2026-11-18T09:11:20.556+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794991552132",
@@ -33,9 +34,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-18",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-18T08:45:52.666+00:00",
+    "updatedAt": "2026-11-20T15:20:32.628+00:00",
+    "hasPasswordHash": true,
     "passwordHash": "scrypt$922692aa4eb15a91fbd0f02a426ef893$b2ee167b56e8fc02cd880b8cca4cac708453d7657a1f2ac1455684251377ce7e22f954e33fad145c934754be87ddd3fce07cf707e401ba326f35c4dfd42ed0f0"
   },
   {
@@ -55,7 +57,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-18",
     "status": "Active",
-    "updatedAt": "2026-11-18T08:30:04.341+00:00"
+    "updatedAt": "2026-11-18T08:30:04.341+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-424",
@@ -74,7 +77,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-433",
@@ -93,7 +97,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-432",
@@ -113,6 +118,7 @@
     "enrolledAt": "2026-11-11",
     "status": "Active",
     "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": true,
     "passwordHash": "scrypt$9afe4b35cd441005241d9837481beabd$d1221e8beabb3b0c3cdc62ea1795456456367f39209906adb8b582bd19a2be106bcb287e2ad3aec8c7e3b0adea56017e77666fe6a4eb2d527e2b56de016ecc84"
   },
   {
@@ -132,7 +138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-427",
@@ -151,7 +158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-425",
@@ -170,7 +178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-442",
@@ -189,7 +198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-441",
@@ -208,7 +218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-335",
@@ -227,7 +238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-336",
@@ -246,7 +258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-337",
@@ -265,7 +278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-338",
@@ -284,7 +298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-339",
@@ -303,7 +318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-340",
@@ -322,7 +338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-341",
@@ -341,7 +358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-342",
@@ -360,7 +378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-343",
@@ -379,7 +398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-344",
@@ -398,7 +418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-345",
@@ -417,7 +438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-346",
@@ -436,7 +458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-347",
@@ -455,7 +478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-348",
@@ -474,7 +498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-349",
@@ -493,7 +518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-350",
@@ -512,7 +538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-351",
@@ -531,7 +558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-352",
@@ -550,7 +578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-353",
@@ -569,7 +598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-354",
@@ -588,7 +618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-355",
@@ -607,7 +638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-356",
@@ -626,7 +658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-357",
@@ -645,7 +678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-358",
@@ -664,7 +698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-359",
@@ -683,7 +718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-360",
@@ -702,7 +738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-361",
@@ -721,7 +758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-362",
@@ -740,7 +778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-363",
@@ -759,7 +798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-364",
@@ -778,7 +818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-365",
@@ -797,7 +838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-366",
@@ -816,7 +858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-367",
@@ -835,7 +878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-368",
@@ -854,7 +898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-369",
@@ -873,7 +918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-370",
@@ -892,7 +938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-371",
@@ -911,7 +958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-372",
@@ -930,7 +978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-373",
@@ -949,7 +998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-374",
@@ -968,7 +1018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-375",
@@ -987,7 +1038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-376",
@@ -1006,7 +1058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-377",
@@ -1025,7 +1078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-378",
@@ -1044,7 +1098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-379",
@@ -1063,7 +1118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-380",
@@ -1082,7 +1138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-381",
@@ -1101,7 +1158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-382",
@@ -1120,7 +1178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-383",
@@ -1139,7 +1198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-384",
@@ -1158,7 +1218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-385",
@@ -1177,7 +1238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-386",
@@ -1196,7 +1258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-387",
@@ -1215,7 +1278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-388",
@@ -1234,7 +1298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-389",
@@ -1253,7 +1318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-390",
@@ -1272,7 +1338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-391",
@@ -1291,7 +1358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-392",
@@ -1310,7 +1378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-393",
@@ -1329,7 +1398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-394",
@@ -1348,7 +1418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-395",
@@ -1367,7 +1438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-396",
@@ -1386,7 +1458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-397",
@@ -1405,7 +1478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-398",
@@ -1424,7 +1498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-399",
@@ -1443,7 +1518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-400",
@@ -1462,7 +1538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-401",
@@ -1481,7 +1558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-402",
@@ -1500,7 +1578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-403",
@@ -1519,7 +1598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-404",
@@ -1538,7 +1618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-405",
@@ -1557,7 +1638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-406",
@@ -1576,7 +1658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-407",
@@ -1595,7 +1678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-408",
@@ -1614,7 +1698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-409",
@@ -1633,7 +1718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-410",
@@ -1652,7 +1738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-411",
@@ -1671,7 +1758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-412",
@@ -1690,7 +1778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-413",
@@ -1709,7 +1798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-414",
@@ -1728,7 +1818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-415",
@@ -1747,7 +1838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-416",
@@ -1766,7 +1858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-417",
@@ -1785,7 +1878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-418",
@@ -1804,7 +1898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-419",
@@ -1823,7 +1918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-420",
@@ -1842,7 +1938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-421",
@@ -1861,7 +1958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-422",
@@ -1880,7 +1978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-440",
@@ -1899,7 +1998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-423",
@@ -1918,7 +2018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-435",
@@ -1937,7 +2038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-434",
@@ -1956,7 +2058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.224+00:00"
+    "updatedAt": "2026-11-11T17:17:08.224+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-102",
@@ -1975,7 +2078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-103",
@@ -1994,7 +2098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-104",
@@ -2013,7 +2118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-105",
@@ -2032,7 +2138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-106",
@@ -2051,7 +2158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-107",
@@ -2070,7 +2178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-108",
@@ -2089,7 +2198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-109",
@@ -2108,7 +2218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-110",
@@ -2127,7 +2238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-111",
@@ -2146,7 +2258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-112",
@@ -2165,7 +2278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-113",
@@ -2184,7 +2298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-114",
@@ -2203,7 +2318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-115",
@@ -2222,7 +2338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-116",
@@ -2241,7 +2358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-117",
@@ -2260,7 +2378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-118",
@@ -2279,7 +2398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-119",
@@ -2298,7 +2418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-120",
@@ -2317,7 +2438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-121",
@@ -2336,7 +2458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-122",
@@ -2355,7 +2478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-123",
@@ -2374,7 +2498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-124",
@@ -2393,7 +2518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-125",
@@ -2412,7 +2538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-126",
@@ -2431,7 +2558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-127",
@@ -2450,7 +2578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-128",
@@ -2469,7 +2598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-129",
@@ -2488,7 +2618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-130",
@@ -2507,7 +2638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-131",
@@ -2526,7 +2658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-132",
@@ -2545,7 +2678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-133",
@@ -2564,7 +2698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-134",
@@ -2583,7 +2718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-135",
@@ -2602,7 +2738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-136",
@@ -2621,7 +2758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-137",
@@ -2640,7 +2778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-138",
@@ -2659,7 +2798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-139",
@@ -2678,7 +2818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-140",
@@ -2697,7 +2838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-141",
@@ -2716,7 +2858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-142",
@@ -2735,7 +2878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-143",
@@ -2754,7 +2898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-144",
@@ -2773,7 +2918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-145",
@@ -2792,7 +2938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-146",
@@ -2811,7 +2958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-147",
@@ -2830,7 +2978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-148",
@@ -2849,7 +2998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-149",
@@ -2868,7 +3018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-150",
@@ -2887,7 +3038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-151",
@@ -2906,7 +3058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-152",
@@ -2925,7 +3078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-153",
@@ -2944,7 +3098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-154",
@@ -2963,7 +3118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-155",
@@ -2982,7 +3138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-156",
@@ -3001,7 +3158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-157",
@@ -3020,7 +3178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-158",
@@ -3039,7 +3198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-159",
@@ -3058,7 +3218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-160",
@@ -3077,7 +3238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-161",
@@ -3096,7 +3258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-162",
@@ -3115,7 +3278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-163",
@@ -3134,7 +3298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-164",
@@ -3153,7 +3318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-165",
@@ -3172,7 +3338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-166",
@@ -3191,7 +3358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-167",
@@ -3210,7 +3378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-168",
@@ -3229,7 +3398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-169",
@@ -3248,7 +3418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-170",
@@ -3267,7 +3438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-171",
@@ -3286,7 +3458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-172",
@@ -3305,7 +3478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-173",
@@ -3324,7 +3498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-174",
@@ -3343,7 +3518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-175",
@@ -3362,7 +3538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-176",
@@ -3381,7 +3558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-177",
@@ -3400,7 +3578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-178",
@@ -3419,7 +3598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-179",
@@ -3438,7 +3618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-180",
@@ -3457,7 +3638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-181",
@@ -3476,7 +3658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-182",
@@ -3495,7 +3678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-183",
@@ -3514,7 +3698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-184",
@@ -3533,7 +3718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-185",
@@ -3552,7 +3738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-186",
@@ -3571,7 +3758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-187",
@@ -3590,7 +3778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-188",
@@ -3609,7 +3798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-189",
@@ -3628,7 +3818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-190",
@@ -3647,7 +3838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-191",
@@ -3666,7 +3858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-192",
@@ -3685,7 +3878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-193",
@@ -3704,7 +3898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-194",
@@ -3723,7 +3918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-195",
@@ -3742,7 +3938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-196",
@@ -3761,7 +3958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-197",
@@ -3780,7 +3978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-198",
@@ -3799,7 +3998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-199",
@@ -3818,7 +4018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-200",
@@ -3837,7 +4038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-201",
@@ -3856,7 +4058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-202",
@@ -3875,7 +4078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-203",
@@ -3894,7 +4098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-204",
@@ -3913,7 +4118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-205",
@@ -3932,7 +4138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-206",
@@ -3951,7 +4158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-207",
@@ -3970,7 +4178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-208",
@@ -3989,7 +4198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-209",
@@ -4008,7 +4218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-210",
@@ -4027,7 +4238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-211",
@@ -4046,7 +4258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-212",
@@ -4065,7 +4278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-213",
@@ -4084,7 +4298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-214",
@@ -4103,7 +4318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-215",
@@ -4122,7 +4338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-216",
@@ -4141,7 +4358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-217",
@@ -4160,7 +4378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-218",
@@ -4179,7 +4398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-219",
@@ -4198,7 +4418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-220",
@@ -4217,7 +4438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-221",
@@ -4236,7 +4458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-222",
@@ -4255,7 +4478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-223",
@@ -4274,7 +4498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-224",
@@ -4293,7 +4518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-225",
@@ -4312,7 +4538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-226",
@@ -4331,7 +4558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-227",
@@ -4350,7 +4578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-228",
@@ -4369,7 +4598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-229",
@@ -4388,7 +4618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-230",
@@ -4407,7 +4638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-231",
@@ -4426,7 +4658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-232",
@@ -4445,7 +4678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-233",
@@ -4464,7 +4698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-234",
@@ -4483,7 +4718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-235",
@@ -4502,7 +4738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-236",
@@ -4521,7 +4758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-237",
@@ -4540,7 +4778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-238",
@@ -4559,7 +4798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-239",
@@ -4578,7 +4818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-240",
@@ -4597,7 +4838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-241",
@@ -4616,7 +4858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-242",
@@ -4635,7 +4878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-243",
@@ -4654,7 +4898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-244",
@@ -4673,7 +4918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-245",
@@ -4692,7 +4938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-246",
@@ -4711,7 +4958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-247",
@@ -4730,7 +4978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-248",
@@ -4749,7 +4998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-249",
@@ -4768,7 +5018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-250",
@@ -4787,7 +5038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-251",
@@ -4806,7 +5058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-252",
@@ -4825,7 +5078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-253",
@@ -4844,7 +5098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-254",
@@ -4863,7 +5118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-255",
@@ -4882,7 +5138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-256",
@@ -4901,7 +5158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-257",
@@ -4920,7 +5178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-258",
@@ -4939,7 +5198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-259",
@@ -4958,7 +5218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-260",
@@ -4977,7 +5238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-261",
@@ -4996,7 +5258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-262",
@@ -5015,7 +5278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-263",
@@ -5034,7 +5298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-264",
@@ -5053,7 +5318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-265",
@@ -5072,7 +5338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-266",
@@ -5091,7 +5358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-267",
@@ -5110,7 +5378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-269",
@@ -5129,7 +5398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-270",
@@ -5148,7 +5418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-271",
@@ -5167,7 +5438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-272",
@@ -5186,7 +5458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-273",
@@ -5205,7 +5478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-274",
@@ -5224,7 +5498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-275",
@@ -5243,7 +5518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-276",
@@ -5262,7 +5538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-277",
@@ -5281,7 +5558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-278",
@@ -5300,7 +5578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-279",
@@ -5319,7 +5598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-280",
@@ -5338,7 +5618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-281",
@@ -5357,7 +5638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-282",
@@ -5376,7 +5658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-283",
@@ -5395,7 +5678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-284",
@@ -5414,7 +5698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-285",
@@ -5433,7 +5718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-286",
@@ -5452,7 +5738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-287",
@@ -5471,7 +5758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-288",
@@ -5490,7 +5778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-289",
@@ -5509,7 +5798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-290",
@@ -5528,7 +5818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-291",
@@ -5547,7 +5838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-292",
@@ -5566,7 +5858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-293",
@@ -5585,7 +5878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-294",
@@ -5604,7 +5898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-295",
@@ -5623,7 +5918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-296",
@@ -5642,7 +5938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-297",
@@ -5661,7 +5958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-298",
@@ -5680,7 +5978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-299",
@@ -5699,7 +5998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-300",
@@ -5718,7 +6018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-301",
@@ -5737,7 +6038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-302",
@@ -5756,7 +6058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-303",
@@ -5775,7 +6078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-304",
@@ -5794,7 +6098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-305",
@@ -5813,7 +6118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-306",
@@ -5832,7 +6138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-307",
@@ -5851,7 +6158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-308",
@@ -5870,7 +6178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-309",
@@ -5889,7 +6198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-310",
@@ -5908,7 +6218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-311",
@@ -5927,7 +6238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-312",
@@ -5946,7 +6258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-313",
@@ -5965,7 +6278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-314",
@@ -5984,7 +6298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-315",
@@ -6003,7 +6318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-316",
@@ -6022,7 +6338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-317",
@@ -6041,7 +6358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-318",
@@ -6060,7 +6378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-319",
@@ -6079,7 +6398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-320",
@@ -6098,7 +6418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-321",
@@ -6117,7 +6438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-322",
@@ -6136,7 +6458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-323",
@@ -6155,7 +6478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-324",
@@ -6174,7 +6498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-325",
@@ -6193,7 +6518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-326",
@@ -6212,7 +6538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-327",
@@ -6231,7 +6558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-328",
@@ -6250,7 +6578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-329",
@@ -6269,7 +6598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-330",
@@ -6288,7 +6618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-331",
@@ -6307,7 +6638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-332",
@@ -6326,7 +6658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-333",
@@ -6345,7 +6678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-334",
@@ -6364,7 +6698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-268",
@@ -6383,7 +6718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-0",
@@ -6402,7 +6738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-1",
@@ -6421,7 +6758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-2",
@@ -6440,7 +6778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-3",
@@ -6459,7 +6798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-4",
@@ -6478,7 +6818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-5",
@@ -6497,7 +6838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-6",
@@ -6516,7 +6858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-7",
@@ -6535,7 +6878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-8",
@@ -6554,7 +6898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-9",
@@ -6573,7 +6918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-10",
@@ -6592,7 +6938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-11",
@@ -6611,7 +6958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-12",
@@ -6630,7 +6978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-13",
@@ -6649,7 +6998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-14",
@@ -6668,7 +7018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-15",
@@ -6687,7 +7038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-16",
@@ -6706,7 +7058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-17",
@@ -6725,7 +7078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-18",
@@ -6744,7 +7098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-19",
@@ -6763,7 +7118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-20",
@@ -6782,7 +7138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-21",
@@ -6801,7 +7158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-22",
@@ -6820,7 +7178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-23",
@@ -6839,7 +7198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-24",
@@ -6858,7 +7218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-25",
@@ -6877,7 +7238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-26",
@@ -6896,7 +7258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-27",
@@ -6915,7 +7278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-28",
@@ -6934,7 +7298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-29",
@@ -6953,7 +7318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-30",
@@ -6972,7 +7338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-31",
@@ -6991,7 +7358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-32",
@@ -7010,7 +7378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-33",
@@ -7029,7 +7398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-34",
@@ -7048,7 +7418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-35",
@@ -7067,7 +7438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-36",
@@ -7086,7 +7458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-37",
@@ -7105,7 +7478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-38",
@@ -7124,7 +7498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-39",
@@ -7143,7 +7518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-40",
@@ -7162,7 +7538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-41",
@@ -7181,7 +7558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-42",
@@ -7200,7 +7578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-43",
@@ -7219,7 +7598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-44",
@@ -7238,7 +7618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-45",
@@ -7257,7 +7638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-46",
@@ -7276,7 +7658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-47",
@@ -7295,7 +7678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-48",
@@ -7314,7 +7698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-49",
@@ -7333,7 +7718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-50",
@@ -7352,7 +7738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-51",
@@ -7371,7 +7758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-52",
@@ -7390,7 +7778,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-53",
@@ -7409,7 +7798,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-54",
@@ -7428,7 +7818,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-55",
@@ -7447,7 +7838,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-56",
@@ -7466,7 +7858,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-57",
@@ -7485,7 +7878,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-58",
@@ -7504,7 +7898,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-59",
@@ -7523,7 +7918,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-60",
@@ -7542,7 +7938,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-61",
@@ -7561,7 +7958,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-62",
@@ -7580,7 +7978,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-63",
@@ -7599,7 +7998,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-64",
@@ -7618,7 +8018,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-65",
@@ -7637,7 +8038,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-66",
@@ -7656,7 +8058,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-67",
@@ -7675,7 +8078,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-68",
@@ -7694,7 +8098,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-69",
@@ -7713,7 +8118,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-70",
@@ -7732,7 +8138,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-71",
@@ -7751,7 +8158,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-72",
@@ -7770,7 +8178,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-73",
@@ -7789,7 +8198,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-74",
@@ -7808,7 +8218,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-75",
@@ -7827,7 +8238,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-76",
@@ -7846,7 +8258,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-77",
@@ -7865,7 +8278,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-78",
@@ -7884,7 +8298,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-79",
@@ -7903,7 +8318,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-80",
@@ -7922,7 +8338,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-81",
@@ -7941,7 +8358,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-82",
@@ -7960,7 +8378,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-83",
@@ -7979,7 +8398,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-84",
@@ -7998,7 +8418,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-85",
@@ -8017,7 +8438,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-86",
@@ -8036,7 +8458,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-87",
@@ -8055,7 +8478,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-88",
@@ -8074,7 +8498,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-89",
@@ -8093,7 +8518,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-90",
@@ -8112,7 +8538,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-91",
@@ -8131,7 +8558,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-92",
@@ -8150,7 +8578,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-93",
@@ -8169,7 +8598,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-94",
@@ -8188,7 +8618,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-95",
@@ -8207,7 +8638,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-96",
@@ -8226,7 +8658,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-97",
@@ -8245,7 +8678,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-98",
@@ -8264,7 +8698,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-99",
@@ -8283,7 +8718,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-100",
@@ -8302,7 +8738,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-101",
@@ -8321,7 +8758,8 @@
     "enrolledBy": "DOS",
     "enrolledAt": "2026-11-11",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:17:08.223+00:00"
+    "updatedAt": "2026-11-11T17:17:08.223+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-0",
@@ -8338,9 +8776,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.719+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-13",
@@ -8357,9 +8796,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.751+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-12",
@@ -8376,9 +8816,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.796+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-11",
@@ -8395,9 +8836,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.808+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-10",
@@ -8414,9 +8856,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.871+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-9",
@@ -8433,9 +8876,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.884+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-8",
@@ -8452,9 +8896,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.895+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-7",
@@ -8471,9 +8916,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.907+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-6",
@@ -8490,9 +8936,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.919+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-5",
@@ -8509,9 +8956,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.93+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-4",
@@ -8528,9 +8976,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.944+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-3",
@@ -8547,9 +8996,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.956+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-2",
@@ -8566,9 +9016,10 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.968+00:00",
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794416424988-1",
@@ -8585,8 +9036,9 @@
     "studentPassword": "",
     "studentAccountActive": true,
     "enrolledBy": "DOS",
-    "enrolledAt": "2026-11-11",
+    "enrolledAt": "2026-11-20",
     "status": "Active",
-    "updatedAt": "2026-11-11T17:00:25.505+00:00"
+    "updatedAt": "2026-11-20T15:20:36.98+00:00",
+    "hasPasswordHash": false
   }
 ]

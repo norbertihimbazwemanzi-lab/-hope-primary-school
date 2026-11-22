@@ -38,23 +38,107 @@ function hashPassword(plain: string): string {
   return `scrypt$${salt}$${derived}`;
 }
 
+function hashSha256Credential(plain: string): string {
+  const clean = String(plain || '').trim();
+  const salt = crypto.randomBytes(12).toString('hex');
+  const digest = sha256Hex(`${salt}:${clean}`);
+  return `sha256$${salt}$${digest}`;
+}
+
 function verifyPassword(plain: string, stored?: string): boolean {
   const cleanPlain = String(plain || '').trim();
-  if (!stored || !cleanPlain) return false;
-  if (stored.startsWith('scrypt$')) {
-    const parts = stored.split('$');
+  const cleanStored = String(stored || '').trim();
+  if (!cleanStored || !cleanPlain) return false;
+  if (cleanStored.startsWith('scrypt$')) {
+    const parts = cleanStored.split('$');
     if (parts.length !== 3) return false;
     const [, salt, hexHash] = parts;
     try {
       const derived = crypto.scryptSync(cleanPlain, salt, 64);
       const target = Buffer.from(hexHash, 'hex');
-      if (derived.length !== target.length) return false;
+      if (derived.length === 0 || derived.length !== target.length) return false;
       return crypto.timingSafeEqual(derived, target);
     } catch {
       return false;
     }
   }
-  return stored === cleanPlain;
+  if (cleanStored.startsWith('sha256$')) {
+    const parts = cleanStored.split('$');
+    if (parts.length !== 3) return false;
+    const [, salt, hexHash] = parts;
+    try {
+      const derived = Buffer.from(sha256Hex(`${salt}:${cleanPlain}`), 'hex');
+      const target = Buffer.from(hexHash, 'hex');
+      if (derived.length === 0 || derived.length !== target.length) return false;
+      return crypto.timingSafeEqual(derived, target);
+    } catch {
+      return false;
+    }
+  }
+  return cleanStored === cleanPlain;
+}
+
+async function syncCredentialHashToSupabaseVault(params: {
+  accountType: 'staff' | 'student';
+  account: any;
+  sha256Hash: string;
+}) {
+  try {
+    const sbUrl = (process.env.VITE_SUPABASE_URL || 'https://egwzhnzpsgwkhvhesode.supabase.co').replace(/\/$/, '');
+    const sbKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_982vUUyz9dc8qOU1eCWhAg_TkWcGJj_';
+    const res = await fetch(
+      `${sbUrl}/rest/v1/website_settings?id=eq.portal_auth_vault_v1&select=data`,
+      {
+        headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` },
+        signal: AbortSignal.timeout(3000),
+      }
+    );
+    const rows = res.ok ? ((await res.json()) as any[]) : [];
+    const current = rows?.[0]?.data || { staff: {}, students: {} };
+    const nowIso = new Date().toISOString();
+    const nextStaff = { ...(current.staff || {}) };
+    const nextStudents = { ...(current.students || {}) };
+    if (params.accountType === 'staff') {
+      nextStaff[params.account.id] = {
+        ...(nextStaff[params.account.id] || {}),
+        id: params.account.id,
+        username: params.account.username,
+        email: params.account.email || '',
+        role: params.account.role || 'Teacher',
+        status: params.account.status || 'Active',
+        passwordHash: params.sha256Hash,
+        updatedAt: nowIso,
+      };
+    } else {
+      nextStudents[params.account.id] = {
+        ...(nextStudents[params.account.id] || {}),
+        id: params.account.id,
+        regNumber: params.account.regNumber || '',
+        studentUsername: params.account.studentUsername || '',
+        studentAccountActive: params.account.studentAccountActive !== false,
+        passwordHash: params.sha256Hash,
+        hasPassword: true,
+        updatedAt: nowIso,
+      };
+    }
+    await fetch(`${sbUrl}/rest/v1/website_settings?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        id: 'portal_auth_vault_v1',
+        data: { staff: nextStaff, students: nextStudents, updatedAt: nowIso },
+        updated_at: nowIso,
+      }),
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch {
+    // non-fatal when offline
+  }
 }
 
 interface StudentTokenPayload {
@@ -1612,10 +1696,10 @@ app.post('/api/settings', (req, res) => {
 // 1. Staff Members (Strips sensitive hashes/plaintext on GET; hashes new plaintext safely on POST)
 app.get('/api/staff', (req, res) => {
   const items = ensureAuthoritativeStaffList();
-  const sanitized = items.map(({ passwordHash: _ph, password: _pw, ...rest }: any) => ({
+  const sanitized = items.map(({ passwordHash: _ph, clientPasswordHash: _cph, password: _pw, ...rest }: any) => ({
     ...rest,
     password: '',
-    hasPassword: Boolean(_ph || _pw),
+    hasPassword: Boolean(_ph || _cph || _pw),
   }));
   res.json({ success: true, items: sanitized });
 });
@@ -1634,10 +1718,13 @@ app.post('/api/staff', (req, res) => {
       const unameKey = String(item.username || '').trim().toLowerCase();
       const prev = existingById.get(item.id) || (unameKey ? existingByUsername.get(unameKey) : undefined);
       const rawPw = String(item.password || '').trim();
-      const { password: _discardPlain, ...rest } = item;
+      const rawClientHash = String(item.clientPasswordHash || '').trim();
+      const { password: _discardPlain, clientPasswordHash: _discardClientHash, ...rest } = item;
       let nextHash = prev?.passwordHash || item.passwordHash;
       if (rawPw && rawPw !== '••••••') {
         nextHash = hashPassword(rawPw);
+      } else if (rawClientHash && (rawClientHash.startsWith('sha256$') || rawClientHash.startsWith('scrypt$'))) {
+        nextHash = rawClientHash;
       } else if (!nextHash && prev?.password) {
         nextHash = hashPassword(prev.password);
       }
@@ -1649,10 +1736,10 @@ app.post('/api/staff', (req, res) => {
     });
 
     saveServerStaff(merged);
-    const sanitized = merged.map(({ passwordHash: _ph, password: _pw, ...rest }: any) => ({
+    const sanitized = merged.map(({ passwordHash: _ph, clientPasswordHash: _cph, password: _pw, ...rest }: any) => ({
       ...rest,
       password: '',
-      hasPassword: Boolean(_ph || _pw),
+      hasPassword: Boolean(_ph || _cph || _pw),
     }));
     res.json({ success: true, items: sanitized });
   } catch (err: any) {
@@ -1732,9 +1819,9 @@ app.post('/api/staff/profile', (req, res) => {
 app.get('/api/students', (req, res) => {
   const items = loadServerStudents();
   if (!items) return res.json({ success: true, items: null });
-  const sanitized = items.map(({ passwordHash: _ph, ...rest }: any) => ({
+  const sanitized = items.map(({ passwordHash: _ph, clientPasswordHash: _cph, ...rest }: any) => ({
     ...rest,
-    hasPasswordHash: Boolean(_ph),
+    hasPasswordHash: Boolean(_ph || _cph),
   }));
   res.json({ success: true, items: sanitized });
 });
@@ -1754,16 +1841,20 @@ app.post('/api/students', (req, res) => {
           const regKey = String(st.regNumber || '').trim().toLowerCase();
           const prev = existingById.get(st.id) || (regKey ? existingByReg.get(regKey) : undefined);
           const rawPw = String(st.studentPassword || '').trim();
+          const rawClientHash = String(st.clientPasswordHash || '').trim();
           const incomingUser = String(st.studentUsername || '').trim();
+          const { clientPasswordHash: _discardClientHash, ...restSt } = st;
           let nextHash = prev?.passwordHash || st.passwordHash;
           if (rawPw && rawPw !== '••••••') {
             nextHash = hashPassword(rawPw);
+          } else if (rawClientHash && (rawClientHash.startsWith('sha256$') || rawClientHash.startsWith('scrypt$'))) {
+            nextHash = rawClientHash;
           } else if (!nextHash && prev?.studentPassword) {
             nextHash = hashPassword(prev.studentPassword);
           }
           // Avoid storing plain passwords on disk once passwordHash exists
           return {
-            ...st,
+            ...restSt,
             studentUsername: incomingUser || prev?.studentUsername || '',
             studentAccountActive:
               st.studentAccountActive !== undefined
@@ -1779,9 +1870,9 @@ app.post('/api/students', (req, res) => {
 
     saveServerStudents(normalized);
     const sanitized = Array.isArray(normalized)
-      ? normalized.map(({ passwordHash: _ph, ...rest }: any) => ({
+      ? normalized.map(({ passwordHash: _ph, clientPasswordHash: _cph, ...rest }: any) => ({
           ...rest,
-          hasPasswordHash: Boolean(_ph),
+          hasPasswordHash: Boolean(_ph || _cph),
         }))
       : normalized;
     res.json({ success: true, items: sanitized });
@@ -1983,13 +2074,14 @@ app.post('/api/auth/staff-login', (req, res) => {
     let match = staffList.find(
       (s: any) =>
         cleanId &&
-        (String(s.username || '').toLowerCase() === cleanId || String(s.email || '').toLowerCase() === cleanId)
+        (String(s.username || '').trim().toLowerCase() === cleanId ||
+          String(s.email || '').trim().toLowerCase() === cleanId)
     );
 
     if (!match && (!cleanId || cleanId === 'admin') && cleanPass === 'mugina2026') {
-      match = staffList.find((s: any) => String(s.username || '').toLowerCase() === 'norbertihimbazwemanzi@gmail.com');
+      match = staffList.find((s: any) => String(s.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com');
     } else if (!match && !cleanId) {
-      match = staffList.find((s: any) => verifyPassword(cleanPass, s.passwordHash || s.password));
+      match = staffList.find((s: any) => verifyPassword(cleanPass, s.passwordHash || s.clientPasswordHash || s.password));
     }
 
     if (!match) {
@@ -2000,8 +2092,9 @@ app.post('/api/auth/staff-login', (req, res) => {
     const isSharedAdminCode =
       (!cleanId || cleanId === 'admin') &&
       cleanPass === 'mugina2026' &&
-      String(match.username || '').toLowerCase() === 'norbertihimbazwemanzi@gmail.com';
-    const validPass = isSharedAdminCode || verifyPassword(cleanPass, match.passwordHash || match.password);
+      String(match.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com';
+    const validPass =
+      isSharedAdminCode || verifyPassword(cleanPass, match.passwordHash || match.clientPasswordHash || match.password);
 
     if (!validPass) {
       return res.status(401).json({ error: 'Invalid staff username/email or password.' });
@@ -2122,10 +2215,10 @@ app.post('/api/auth/student-login', (req, res) => {
     const students = loadServerStudents() || [];
     const match = students.find(
       (s: any) =>
-        (String(s.studentUsername || '').toLowerCase() === cleanId ||
-          String(s.regNumber || '').toLowerCase() === cleanId ||
-          String(s.email || '').toLowerCase() === cleanId) &&
-        verifyPassword(cleanPass, s.passwordHash || s.studentPassword)
+        (String(s.studentUsername || '').trim().toLowerCase() === cleanId ||
+          String(s.regNumber || '').trim().toLowerCase() === cleanId ||
+          String(s.email || '').trim().toLowerCase() === cleanId) &&
+        verifyPassword(cleanPass, s.passwordHash || s.clientPasswordHash || s.studentPassword)
     );
 
     if (!match) {
@@ -2340,7 +2433,9 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
 
     const newHash = hashPassword(newPassword);
+    const shaHash = hashSha256Credential(newPassword);
     const nowIso = new Date().toISOString();
+    let updatedAccount: any = null;
 
     if (tokenRec.accountType === 'staff') {
       const staff = ensureAuthoritativeStaffList();
@@ -2350,6 +2445,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
       }
       const { password: _discardPlain, ...rest } = staff[sIdx];
       staff[sIdx] = { ...rest, passwordHash: newHash, updatedAt: nowIso };
+      updatedAccount = staff[sIdx];
       saveServerStaff(staff);
     } else {
       const students = loadServerStudents() || [];
@@ -2363,30 +2459,17 @@ app.post('/api/auth/reset-password', async (req, res) => {
         passwordHash: newHash,
         updatedAt: nowIso,
       };
+      updatedAccount = students[stIdx];
       saveServerStudents(students);
     }
 
-    // Best-effort sync to Supabase so password resets also work across browsers/deployments
-    try {
-      const sbUrl = (process.env.VITE_SUPABASE_URL || 'https://egwzhnzpsgwkhvhesode.supabase.co').replace(/\/$/, '');
-      const sbKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_982vUUyz9dc8qOU1eCWhAg_TkWcGJj_';
-      const table = tokenRec.accountType === 'staff' ? 'staff_members' : 'enrolled_students';
-      const patchBody =
-        tokenRec.accountType === 'staff'
-          ? { password: newPassword, updated_at: nowIso }
-          : { student_password: newPassword, updated_at: nowIso };
-      await fetch(`${sbUrl}/rest/v1/${table}?id=eq.${encodeURIComponent(tokenRec.accountId)}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: sbKey,
-          Authorization: `Bearer ${sbKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(patchBody),
-        signal: AbortSignal.timeout(3000),
+    // Best-effort sync to Supabase auth vault so password resets also work across browsers/deployments
+    if (updatedAccount) {
+      await syncCredentialHashToSupabaseVault({
+        accountType: tokenRec.accountType,
+        account: updatedAccount,
+        sha256Hash: shaHash,
       });
-    } catch {
-      // non-fatal if Supabase unreachable in offline environment
     }
 
     tokens[tokenIdx] = { ...tokenRec, used: true, usedAt: nowIso };
@@ -2598,7 +2681,7 @@ app.post('/api/student/homework-submit', (req, res) => {
 });
 
 // 7d. Student Password Change Endpoint (Uses salted scrypt hash; zero plaintext retention)
-app.post('/api/student/change-password', (req, res) => {
+app.post('/api/student/change-password', async (req, res) => {
   try {
     const tokenUser = verifyStudentToken(req.headers.authorization);
     const { studentId, currentPassword, newPassword } = req.body || {};
@@ -2606,24 +2689,30 @@ app.post('/api/student/change-password', (req, res) => {
     if (tokenUser && studentId && studentId !== tokenUser.id) {
       return res.status(403).json({ error: 'Forbidden: Students can only change their own password.' });
     }
-    if (!targetId || !currentPassword || !newPassword || String(newPassword).length < 6) {
+    if (!targetId || !currentPassword || !newPassword || String(newPassword).trim().length < 6) {
       return res.status(400).json({ error: 'Valid studentId, current password, and new password (min 6 chars) are required.' });
     }
 
     const students = loadServerStudents() || [];
     const idx = students.findIndex((s: any) => s.id === targetId);
     if (idx >= 0) {
-      const storedSecret = students[idx].passwordHash || students[idx].studentPassword;
+      const storedSecret = students[idx].passwordHash || students[idx].clientPasswordHash || students[idx].studentPassword;
       if (!verifyPassword(String(currentPassword).trim(), storedSecret)) {
         return res.status(401).json({ error: 'Current password does not match your account.' });
       }
+      const cleanNew = String(newPassword).trim();
       students[idx] = {
         ...students[idx],
         studentPassword: '',
-        passwordHash: hashPassword(String(newPassword).trim()),
+        passwordHash: hashPassword(cleanNew),
         updatedAt: new Date().toISOString(),
       };
       saveServerStudents(students);
+      await syncCredentialHashToSupabaseVault({
+        accountType: 'student',
+        account: students[idx],
+        sha256Hash: hashSha256Credential(cleanNew),
+      });
     }
 
     return res.json({ success: true, message: 'Password updated successfully.' });

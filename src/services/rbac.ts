@@ -264,13 +264,16 @@ export const getStudentSelfRecord = (
   if (!user || normalizeUserRole(user.role) !== 'Student') return null;
   const uname = (user.username || '').trim().toLowerCase();
   const email = (user.email || '').trim().toLowerCase();
+  const userFullName = (user.name || '').trim().toLowerCase();
   return (
     students.find(
       (s) =>
         s.id === user.id ||
-        s.studentUsername.toLowerCase() === uname ||
-        s.regNumber.toLowerCase() === uname ||
-        (email && s.parentEmail.toLowerCase() === email && s.fullName.toLowerCase() === user.name.toLowerCase())
+        (uname && String(s.studentUsername || '').trim().toLowerCase() === uname) ||
+        (uname && String(s.regNumber || '').trim().toLowerCase() === uname) ||
+        (email &&
+          String(s.parentEmail || '').trim().toLowerCase() === email &&
+          String(s.fullName || '').trim().toLowerCase() === userFullName)
     ) || null
   );
 };

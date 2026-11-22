@@ -80,6 +80,8 @@ const stripColumnFromPayload = <T extends Record<string, any>>(
   return copy;
 };
 
+const missingColumnsCache = new Map<string, Set<string>>();
+
 const upsertWithColumnPruning = async (
   client: SupabaseClient,
   table: string,
@@ -87,12 +89,22 @@ const upsertWithColumnPruning = async (
   onConflict = 'id'
 ): Promise<{ error: any | null }> => {
   let current: any = payload;
+  const knownMissing = missingColumnsCache.get(table);
+  if (knownMissing && knownMissing.size > 0) {
+    for (const col of knownMissing) {
+      current = stripColumnFromPayload(current, col);
+    }
+  }
   for (let attempt = 0; attempt < 15; attempt++) {
     const { error } = await client.from(table).upsert(current, { onConflict });
     if (!error) return { error: null };
     if (!isMissingColumnError(error)) return { error };
     const missingCol = extractMissingColumnName(error);
     if (!missingCol) return { error };
+    if (!missingColumnsCache.has(table)) {
+      missingColumnsCache.set(table, new Set());
+    }
+    missingColumnsCache.get(table)!.add(missingCol);
     current = stripColumnFromPayload(current, missingCol);
   }
   return client.from(table).upsert(current, { onConflict });
@@ -881,6 +893,168 @@ export const subscribeToSupabaseWebsiteSettings = (callback: (settings: any) => 
     console.warn('[Supabase Store] Could not register Supabase settings channel:', err);
     return () => {};
   }
+};
+
+// ============================================================================
+// 1B. PORTAL AUTH VAULT (Zero-Schema-Migration Salted Credential Hashes)
+// Stores cryptographic salted password hashes & derived usernames in
+// `website_settings` (`id = 'portal_auth_vault_v1'`) so newly added/edited
+// Staff & Student accounts authenticate across browsers and static hosts.
+// ============================================================================
+
+export interface AuthVaultStaffEntry {
+  id: string;
+  username: string;
+  email?: string;
+  role: string;
+  status?: 'Active' | 'Inactive';
+  passwordHash?: string;
+  updatedAt: string;
+}
+
+export interface AuthVaultStudentEntry {
+  id: string;
+  regNumber: string;
+  studentUsername: string;
+  studentAccountActive?: boolean;
+  passwordHash?: string;
+  hasPassword?: boolean;
+  updatedAt: string;
+}
+
+export interface PortalAuthVaultData {
+  staff: Record<string, AuthVaultStaffEntry>;
+  students: Record<string, AuthVaultStudentEntry>;
+  updatedAt: string;
+}
+
+export const AUTH_VAULT_ROW_ID = 'portal_auth_vault_v1';
+
+export const fetchAuthVaultFromSupabase = async (
+  targetUrl?: string,
+  targetKey?: string
+): Promise<PortalAuthVaultData | null> => {
+  const client = createCustomOrActiveClient(targetUrl, targetKey);
+  if (!client) return null;
+  try {
+    const { data, error } = await client
+      .from('website_settings')
+      .select('data, updated_at')
+      .eq('id', AUTH_VAULT_ROW_ID)
+      .maybeSingle();
+
+    if (!error && data && data.data && typeof data.data === 'object') {
+      const raw = data.data as any;
+      return {
+        staff: raw.staff && typeof raw.staff === 'object' ? raw.staff : {},
+        students: raw.students && typeof raw.students === 'object' ? raw.students : {},
+        updatedAt: raw.updatedAt || data.updated_at || new Date().toISOString(),
+      };
+    }
+  } catch (err) {
+    console.warn('[Supabase Auth Vault] Fetch notice:', err);
+  }
+  return null;
+};
+
+export const upsertAuthVaultToSupabase = async (params: {
+  staffEntries?: AuthVaultStaffEntry[];
+  studentEntries?: AuthVaultStudentEntry[];
+  deleteStaffIds?: string[];
+  deleteStudentIds?: string[];
+  targetUrl?: string;
+  targetKey?: string;
+}): Promise<boolean> => {
+  const client = createCustomOrActiveClient(params.targetUrl, params.targetKey);
+  if (!client) return false;
+  try {
+    const existing = (await fetchAuthVaultFromSupabase(params.targetUrl, params.targetKey)) || {
+      staff: {},
+      students: {},
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextStaff: Record<string, AuthVaultStaffEntry> = { ...existing.staff };
+    const nextStudents: Record<string, AuthVaultStudentEntry> = { ...existing.students };
+
+    if (Array.isArray(params.deleteStaffIds)) {
+      params.deleteStaffIds.forEach((id) => {
+        if (id) delete nextStaff[id];
+      });
+    }
+    if (Array.isArray(params.deleteStudentIds)) {
+      params.deleteStudentIds.forEach((id) => {
+        if (id) delete nextStudents[id];
+      });
+    }
+
+    if (Array.isArray(params.staffEntries)) {
+      for (const entry of params.staffEntries) {
+        if (!entry?.id) continue;
+        const prev = nextStaff[entry.id];
+        const cleanIncomingHash = String(entry.passwordHash || '').trim();
+        nextStaff[entry.id] = {
+          ...(prev || {}),
+          ...entry,
+          username: String(entry.username || prev?.username || '').trim(),
+          email: entry.email !== undefined ? entry.email : prev?.email || '',
+          role: entry.role || prev?.role || 'Teacher',
+          status: entry.status || prev?.status || 'Active',
+          passwordHash: cleanIncomingHash || prev?.passwordHash || '',
+          updatedAt: entry.updatedAt || new Date().toISOString(),
+        };
+      }
+    }
+
+    if (Array.isArray(params.studentEntries)) {
+      for (const entry of params.studentEntries) {
+        if (!entry?.id) continue;
+        const prev = nextStudents[entry.id];
+        const cleanIncomingHash = String(entry.passwordHash || '').trim();
+        const cleanIncomingUser = String(entry.studentUsername || '').trim();
+        const finalHash = cleanIncomingHash || prev?.passwordHash || '';
+        nextStudents[entry.id] = {
+          ...(prev || {}),
+          ...entry,
+          regNumber: String(entry.regNumber || prev?.regNumber || '').trim(),
+          studentUsername: cleanIncomingUser || prev?.studentUsername || '',
+          studentAccountActive:
+            entry.studentAccountActive !== undefined
+              ? entry.studentAccountActive
+              : prev?.studentAccountActive !== undefined
+              ? prev.studentAccountActive
+              : true,
+          passwordHash: finalHash,
+          hasPassword: Boolean(finalHash || entry.hasPassword || prev?.hasPassword),
+          updatedAt: entry.updatedAt || new Date().toISOString(),
+        };
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextVault: PortalAuthVaultData = {
+      staff: nextStaff,
+      students: nextStudents,
+      updatedAt: nowIso,
+    };
+
+    const { error } = await client.from('website_settings').upsert(
+      {
+        id: AUTH_VAULT_ROW_ID,
+        data: nextVault,
+        updated_at: nowIso,
+      },
+      { onConflict: 'id' }
+    );
+
+    if (!error) return true;
+    if (!isMissingTableError(error)) {
+      console.warn('[Supabase Auth Vault] Write notice:', error.message);
+    }
+  } catch (err) {
+    console.warn('[Supabase Auth Vault] Write notice:', err);
+  }
+  return false;
 };
 
 // ============================================================================
@@ -2015,8 +2189,54 @@ export const syncAllDataToSupabase = async (
     );
     if (isMissingTableError(settingsErr)) missingTables.push('website_settings');
 
+    const credHashMod = await import('./credentialHash');
+    const vaultStaffEntries: AuthVaultStaffEntry[] = await Promise.all(
+      staffMembers.map(async (s) => {
+        const plainPw = String(s.password || '').trim();
+        const pwHash =
+          plainPw && plainPw !== '••••••'
+            ? await credHashMod.hashPortalSecret(plainPw)
+            : String(s.clientPasswordHash || '').trim();
+        return {
+          id: s.id,
+          username: s.username,
+          email: s.email || '',
+          role: s.role,
+          status: s.status,
+          ...(pwHash ? { passwordHash: pwHash } : {}),
+          updatedAt: s.updatedAt || new Date().toISOString(),
+        };
+      })
+    );
+    const vaultStudentEntries: AuthVaultStudentEntry[] = await Promise.all(
+      students.map(async (st) => {
+        const plainPw = String(st.studentPassword || '').trim();
+        const pwHash =
+          plainPw && plainPw !== '••••••'
+            ? await credHashMod.hashPortalSecret(plainPw)
+            : String(st.clientPasswordHash || '').trim();
+        return {
+          id: st.id,
+          regNumber: st.regNumber,
+          studentUsername: st.studentUsername || '',
+          studentAccountActive: st.studentAccountActive !== false,
+          ...(pwHash ? { passwordHash: pwHash } : {}),
+          hasPassword: Boolean(pwHash || st.hasPasswordHash),
+          updatedAt: st.updatedAt || new Date().toISOString(),
+        };
+      })
+    );
+
     // Parallel module upserts
     await Promise.all([
+      upsertAuthVaultToSupabase({
+        staffEntries: vaultStaffEntries,
+        studentEntries: vaultStudentEntries,
+        deleteStaffIds: deletedStaffIds,
+        deleteStudentIds: deletedStudentIds,
+        targetUrl,
+        targetKey,
+      }),
       upsertTable(
         'school_gallery',
         galleryItems.map((g) => ({

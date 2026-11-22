@@ -12,7 +12,19 @@ import {
   User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { getStaffMembers, getEnrolledStudents, updateEnrolledStudent, UserRole, CurrentSessionUser } from './adminStore';
+import {
+  getStaffMembers,
+  getEnrolledStudents,
+  updateEnrolledStudent,
+  syncServerStaff,
+  syncServerStudents,
+  waitForCredentialSync,
+  UserRole,
+  CurrentSessionUser,
+  StaffMember,
+  EnrolledStudent,
+} from './adminStore';
+import { verifyPortalSecret } from './credentialHash';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
@@ -428,24 +440,26 @@ export type StaffLoginResult =
   | { authorized: true; session: CurrentSessionUser }
   | { authorized: false; reason: string; networkError?: boolean };
 
-const authenticateStaffLocallyOrFromCloud = (
+const findMatchingStaffLocally = async (
+  allStaff: StaffMember[],
   cleanId: string,
   cleanSecret: string
-): StaffLoginResult => {
-  const allStaff = getStaffMembers();
+): Promise<StaffMember | undefined> => {
   const cleanLower = cleanId.toLowerCase();
+  if (cleanLower) {
+    for (const s of allStaff) {
+      const uname = String(s.username || '').trim().toLowerCase();
+      const email = String(s.email || '').trim().toLowerCase();
+      if (uname !== cleanLower && email !== cleanLower) continue;
+      if (String(s.password || '').trim() === cleanSecret) return s;
+      if (await verifyPortalSecret(cleanSecret, s.clientPasswordHash || (s as any).passwordHash)) {
+        return s;
+      }
+    }
+  }
 
-  let match = allStaff.find(
-    (s) =>
-      cleanLower &&
-      (String(s.username || '').trim().toLowerCase() === cleanLower ||
-        String(s.email || '').trim().toLowerCase() === cleanLower) &&
-      String(s.password || '').trim() !== '' &&
-      String(s.password || '').trim() === cleanSecret
-  );
-
-  if (!match && cleanLower === 'norbertihimbazwemanzi@gmail.com' && cleanSecret === '@0798744704') {
-    match =
+  if (cleanLower === 'norbertihimbazwemanzi@gmail.com' && cleanSecret === '@0798744704') {
+    return (
       allStaff.find(
         (s) => String(s.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
       ) || {
@@ -459,13 +473,30 @@ const authenticateStaffLocallyOrFromCloud = (
         assignedSubjectOrGrade: 'Chief Administrator & Portal Controller',
         enrolledAt: '2026-01-01',
         status: 'Active' as const,
-      };
+      }
+    );
   }
 
-  if (!match && (!cleanLower || cleanLower === 'admin') && cleanSecret === 'mugina2026') {
-    match = allStaff.find(
+  if ((!cleanLower || cleanLower === 'admin') && cleanSecret === 'mugina2026') {
+    return allStaff.find(
       (s) => String(s.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
     );
+  }
+
+  return undefined;
+};
+
+const authenticateStaffLocallyOrFromCloud = async (
+  cleanId: string,
+  cleanSecret: string,
+  allowCloudSync = false
+): Promise<StaffLoginResult & { matchedStaff?: StaffMember }> => {
+  let allStaff = getStaffMembers();
+  let match = await findMatchingStaffLocally(allStaff, cleanId, cleanSecret);
+
+  if (!match && allowCloudSync) {
+    allStaff = await syncServerStaff();
+    match = await findMatchingStaffLocally(allStaff, cleanId, cleanSecret);
   }
 
   if (match) {
@@ -477,6 +508,7 @@ const authenticateStaffLocallyOrFromCloud = (
     }
     return {
       authorized: true,
+      matchedStaff: match,
       session: {
         id: match.id,
         name: match.name,
@@ -508,6 +540,10 @@ export const authenticateStaffWithBackend = async (
     return { authorized: false, reason: 'Please enter your username/email and password.' };
   }
 
+  await waitForCredentialSync();
+
+  let backendHasJson = false;
+  let serverErrorMsg = '';
   try {
     const res = await fetch('/api/auth/staff-login', {
       method: 'POST',
@@ -516,40 +552,65 @@ export const authenticateStaffWithBackend = async (
     });
 
     const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      // Static host (e.g. Vercel SPA rewrite returning HTML): fall back to synced Supabase/Firebase staff store
-      return authenticateStaffLocallyOrFromCloud(cleanId, cleanSecret);
-    }
+    if (ct.includes('application/json')) {
+      backendHasJson = true;
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.session) {
+        if (data.token) setStaffAuthToken(data.token);
+        return { authorized: true, session: data.session as CurrentSessionUser };
+      }
 
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success && data.session) {
-      if (data.token) setStaffAuthToken(data.token);
-      return { authorized: true, session: data.session as CurrentSessionUser };
+      if (res.status === 403) {
+        return {
+          authorized: false,
+          reason:
+            data.error ||
+            'This staff account is currently deactivated. Contact School Administration.',
+        };
+      }
+      serverErrorMsg = data.error || '';
     }
-
-    if (res.status === 403) {
-      return {
-        authorized: false,
-        reason:
-          data.error ||
-          'This staff account is currently deactivated. Contact School Administration.',
-      };
-    }
-
-    // Also check synced cloud staff in case password/user was updated from another browser in Supabase/Firebase
-    const cloudFallback = authenticateStaffLocallyOrFromCloud(cleanId, cleanSecret);
-    if (cloudFallback.authorized) {
-      return cloudFallback;
-    }
-
-    return {
-      authorized: false,
-      networkError: true,
-      reason: data.error || 'Invalid staff username, email, or password.',
-    };
   } catch {
-    return authenticateStaffLocallyOrFromCloud(cleanId, cleanSecret);
+    // Fall back to synced cloud/vault verification when server offline or SPA rewrite returns HTML
   }
+
+  const cloudFallback = await authenticateStaffLocallyOrFromCloud(cleanId, cleanSecret, true);
+  if (cloudFallback.authorized) {
+    if (backendHasJson && cloudFallback.matchedStaff) {
+      try {
+        const listForServer = getStaffMembers().map((s) =>
+          s.id === cloudFallback.matchedStaff!.id ? { ...s, password: cleanSecret } : s
+        );
+        await fetch('/api/staff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: listForServer }),
+        });
+        const tokenRes = await fetch('/api/auth/staff-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
+        });
+        if (tokenRes.ok && (tokenRes.headers.get('content-type') || '').includes('application/json')) {
+          const td = await tokenRes.json().catch(() => ({}));
+          if (td.token) setStaffAuthToken(td.token);
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+    return { authorized: true, session: cloudFallback.session };
+  }
+
+  if (cloudFallback.reason && cloudFallback.reason.toLowerCase().includes('deactivated')) {
+    return { authorized: false, reason: cloudFallback.reason };
+  }
+
+  return {
+    authorized: false,
+    networkError: true,
+    reason: serverErrorMsg || 'Invalid staff username, email, or password.',
+  };
 };
 
 export const exchangeFirebaseTokenForStaffSession = async (
@@ -691,6 +752,25 @@ export type StudentLoginResult =
   | { authorized: true; session: CurrentSessionUser }
   | { authorized: false; reason: string };
 
+const findMatchingStudentLocally = async (
+  students: EnrolledStudent[],
+  cleanId: string,
+  cleanSecret: string
+): Promise<EnrolledStudent | undefined> => {
+  const cleanLower = cleanId.toLowerCase();
+  for (const s of students) {
+    const uname = String(s.studentUsername || '').trim().toLowerCase();
+    const reg = String(s.regNumber || '').trim().toLowerCase();
+    const email = String(s.email || '').trim().toLowerCase();
+    if (uname !== cleanLower && reg !== cleanLower && email !== cleanLower) continue;
+    if (String(s.studentPassword || '').trim() === cleanSecret) return s;
+    if (await verifyPortalSecret(cleanSecret, s.clientPasswordHash || (s as any).passwordHash)) {
+      return s;
+    }
+  }
+  return undefined;
+};
+
 export const authenticateStudentWithBackend = async (
   identifier: string,
   secret: string
@@ -700,6 +780,8 @@ export const authenticateStudentWithBackend = async (
   if (!cleanId || !cleanSecret) {
     return { authorized: false, reason: 'Please enter your Student ID / Username and password.' };
   }
+
+  await waitForCredentialSync();
 
   // 1. Try server-verified login endpoint first when Express API is reachable
   let backendHasJson = false;
@@ -730,17 +812,13 @@ export const authenticateStudentWithBackend = async (
     // Fall back to synced cloud client check if server offline
   }
 
-  // 2. Check synced Supabase / Firebase / cached student directory
-  const students = getEnrolledStudents();
-  const cleanLower = cleanId.toLowerCase();
-  const matched = students.find(
-    (s) =>
-      (String(s.studentUsername || '').trim().toLowerCase() === cleanLower ||
-        String(s.regNumber || '').trim().toLowerCase() === cleanLower ||
-        String(s.email || '').trim().toLowerCase() === cleanLower) &&
-      String(s.studentPassword || '').trim() !== '' &&
-      String(s.studentPassword || '').trim() === cleanSecret
-  );
+  // 2. Check synced Supabase / Auth Vault / Firebase / cached student directory
+  let students = getEnrolledStudents();
+  let matched = await findMatchingStudentLocally(students, cleanId, cleanSecret);
+  if (!matched) {
+    students = await syncServerStudents();
+    matched = await findMatchingStudentLocally(students, cleanId, cleanSecret);
+  }
 
   if (!matched) {
     return {
@@ -771,10 +849,13 @@ export const authenticateStudentWithBackend = async (
   // Sync student into backend if server API is live so server token endpoints recognize them too
   if (backendHasJson) {
     try {
+      const payloadList = students.map((st) =>
+        st.id === matched!.id ? { ...st, studentPassword: cleanSecret } : st
+      );
       await fetch('/api/students', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: students }),
+        body: JSON.stringify({ items: payloadList }),
       });
       const tokenRes = await fetch('/api/auth/student-login', {
         method: 'POST',
@@ -809,11 +890,9 @@ export const changeStudentOwnPassword = async (
   if (!target) {
     return { success: false, message: 'Student record not found.' };
   }
-  if (target.studentPassword !== cleanCur) {
-    return { success: false, message: 'Current password is incorrect.' };
-  }
 
   const token = getStudentAuthToken();
+  let verifiedByBackend = false;
   try {
     const res = await fetch('/api/student/change-password', {
       method: 'POST',
@@ -823,17 +902,28 @@ export const changeStudentOwnPassword = async (
       },
       body: JSON.stringify({ studentId, currentPassword: cleanCur, newPassword: cleanNew }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      if (res.status === 401 || res.status === 403) {
-        return { success: false, message: err.error || 'Password update rejected by server.' };
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, message: data.error || 'Current password is incorrect.' };
       }
+      verifiedByBackend = true;
     }
   } catch {
-    // continue persisting via Supabase / Firebase / Store
+    // Offline/static fallback below verifies against stored plaintext or salted hash
+  }
+
+  if (!verifiedByBackend) {
+    const plainMatch = String(target.studentPassword || '').trim() === cleanCur;
+    const hashMatch = await verifyPortalSecret(cleanCur, target.clientPasswordHash);
+    if (!plainMatch && !hashMatch) {
+      return { success: false, message: 'Current password is incorrect.' };
+    }
   }
 
   updateEnrolledStudent(studentId, { studentPassword: cleanNew });
+  await waitForCredentialSync();
   return { success: true, message: 'Your student portal password has been updated and synchronized.' };
 };
 

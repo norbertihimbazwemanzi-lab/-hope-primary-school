@@ -13,10 +13,173 @@
   "termDatesNotice": "Academic Year 2026: Term 1 underway. Term 2 registration currently open.",
   "registrationFeeNotice": "Application fee: 10,000 RWF (Registration, evaluation, student file & ID card).",
   "announcementBarText": "Term 1 2026 Admissions Open · Nursery & Primary Excellence in Kamonyi · Adjacent to Mugina Police Station",
-  "heroHeadline": "Welcome to Mugina Hope Primary & Nursery Academy",
-  "heroTagline": "Nurturing purposeful, confident, and compassionate young leaders in Kamonyi District since 2014.",
+  "heroHeadline": "Welcome to Mugina Hope Primary School",
+  "heroTagline": "Welcome to Mugina Hope Primary School, located in Kamonyi District, Southern Province, Rwanda. We are proud to offer a strong foundation of academic excellence, discipline, and moral values, preparing pupils for lifelong success.",
+  "heroIntervalSeconds": 5,
+  "heroSlides": [
+    {
+      "id": "slide-2",
+      "title": "Mugina Hope Primary Campus & Classroom Blocks",
+      "imageUrl": "/images/hero_mugina_hope_campus_1791823254957.jpg"
+    },
+    {
+      "id": "slide-3",
+      "title": "ICT & Science Technology Labs",
+      "imageUrl": "/images/primary_stem_computer_lab_1791823280335.jpg"
+    },
+    {
+      "id": "slide-4",
+      "title": "Cultural Arts & Co-Curricular Excellence",
+      "imageUrl": "/images/campus_life_traditional_dance_1791823290926.jpg"
+    }
+  ],
   "nurseryTuition": "45,000 RWF / Term",
   "primaryTuition": "60,000 RWF / Term",
   "lunchFee": "25,000 RWF / Term (Hot balanced lunch & porridge)",
-  "transportFee": "30,000 RWF / Term (Kamonyi van pickup & drop-off)"
+  "schoolManagerPhotoUrl": "",
+  "schoolManagerName": "HAKIZIMANA Protais",
+  "schoolManagerRole": "School Manager & Administrative Head",
+  "schoolManagerAlt": "HAKIZIMANA Protais - School Manager & Administrative Head at Mugina Hope Primary School",
+  "adminMessageKicker": "Message from the Administration",
+  "adminMessageHeading": "Providing a Strong Foundation for Every Child in Kamonyi",
+  "adminMessageParagraph1": "Established in 2014, Mugina Hope Academy was founded on a simple, enduring conviction: that every child in Rwanda deserves access to high-quality education rooted in discipline, moral integrity, and modern competence.",
+  "adminMessageParagraph2": "Operating directly under the guidance of the Rwanda Ministry of Education (MINEDUC), our dual nursery and primary curriculum prepares learners not only for national examination excellence (PLE) but also for responsible citizenship, creative problem-solving, and fluent trilingual communication.",
+  "adminMessageMotto": "Nurturing Minds, Building Character, Inspiring Hope.",
+  "adminCommitments": [
+    "Competency-Based Curriculum: Aligned with Rwanda REB standards.",
+    "24/7 Campus Security: Direct boundary with Mugina Police Station.",
+    "18:1 Low Pupil Ratio: Individualized attention for every learner.",
+    "STEM & Computer Lab: Practical hands-on ICT education."
+  ],
+  "culturalDancePhotoUrl": "/images/campus_life_traditional_dance_1791823290926.jpg",
+  "culturalDanceAlt": "Mugina Hope Academy children performing traditional Rwandan cultural dance",
+  "culturalDanceTitle": "Itorero ry'Abato: Traditional Dance & Drumming",
+  "culturalDanceDesc": "Every pupil at Mugina Hope Academy is immersed in Rwanda’s rich cultural tradition. Through traditional Intore warrior dance, graceful Umushayayo, and rhythmic drumming, children develop poise, national pride, and teamwork.",
+  "supabaseUrl": "https://egwzhnzpsgwkhvhesode.supabase.co",
+  "supabaseAnonKey": "sb_publishable_982vUUyz9dc8qOU1eCWhAg_TkWcGJj_",
+  "aboutPrincipalPhotoUrl": "/images/hero_mugina_hope_campus_1791823254957.jpg",
+  "aboutPrincipalKicker": "MESSAGE FROM THE HEAD OF SCHOOL",
+  "aboutPrincipalWelcome": "Welcome to Mugina Hope Primary & Nursery Academy!",
+  "aboutPrincipalMessage": "Welcome to Mugina Hope Primary & Nursery Academy in Mugina Sector, Kamonyi District. Established in 2014, our school was founded on the fundamental belief that every child deserves a secure, joyful, and academically enriching foundation.\n\nOur campus is securely situated adjacent to the Mugina Police Station, offering families unshakeable peace of mind. Here, dedicated teachers deliver the Rwanda Basic Education Board (REB) curriculum, enriched with early ICT literacy, English conversational fluency, and Rwandan cultural values through Itorero ry'abato.\n\nWith an intimate 18:1 student-to-mentor ratio, we ensure that every single child is known, celebrated, and guided toward excellence, leadership, and moral integrity. Thank you for partnering with us in shaping the leaders of tomorrow!",
+  "aboutPrincipalSignoff": "Sincerely and with warm regards,",
+  "aboutPrincipalName": "Norbert Ihimbazwe Manzi",
+  "aboutPrincipalTitle": "Head of School & Chief Administrator, Mugina Hope Academy",
+  "aboutVisionTitle": "OUR VISION",
+  "aboutVisionText": "To be a premier center of foundational and primary excellence in Rwanda, raising purposeful, morally grounded, and innovative young leaders prepared to excel and contribute to our nation.",
+  "aboutMissionTitle": "OUR MISSION",
+  "aboutMissionPoints": [
+    "Deliver high-quality, competency-based early childhood and primary education adhering strictly to REB standards.",
+    "Nurture Christian integrity, mutual respect, and cultural pride through Itorero ry’abato and traditional dance.",
+    "Equip learners with digital literacy, scientific inquiry, and English-Kinyarwanda bilingual fluency in a safe learning environment."
+  ],
+  "aboutValuesBannerUrl": "/images/hero_mugina_hope_campus_1791823254957.jpg",
+  "aboutValuesBoardTitle": "INDANGAGACIRO NA KIRAZIRA",
+  "aboutIndangagaciro": [
+    "GUKUNDA IGIHUGU (Patriotism)",
+    "KUBAKA UBUMWE (Unity & Solidarity)",
+    "KWIHESHA AGACIRO (Self-Worth & Dignity)",
+    "UMURAVA NO GUTSINDA (Diligence & Resilience)",
+    "GUKUNDA ISHURI (Love for Learning)",
+    "KUGIRA IKINYABUPFURA (Respect & Discipline)",
+    "KUGIRA ISUKU (Hygiene & Cleanliness)"
+  ],
+  "aboutKirazira": [
+    "KUGAMBANIRA IGIHUGU",
+    "GUSENYA IBYAGEZWEHO",
+    "KWIYANDARIKA",
+    "KUBA IKIGWARI",
+    "GUTA ISHURI",
+    "GUSUZUGURA",
+    "KUGIRA UMWANDA"
+  ],
+  "aboutValuesSlogan": "TWIGIRA EJO HACU HEZA",
+  "feesBadge": "SCHOOL FEES",
+  "feesSubtitle": "Discover the transparent fee structure for each academic term at Mugina Hope Primary School for nursery and primary learners.",
+  "feesFirstTerm": "92000.0",
+  "feesSecondTerm": "92000.0",
+  "feesThirdTerm": "92000.0",
+  "feesCurrency": "Rwf",
+  "feesPeriod": "/ Term",
+  "feesIncluded": [
+    "Tuition Fees",
+    "Administrative Charges",
+    "Classroom Materials (Books, Stationery)",
+    "ICT and Technical Education Resources",
+    "Laboratory Fees (For Science students)",
+    "Sports and Physical Education Fees",
+    "Co-curricular activities"
+  ],
+  "feesNotIncluded": [
+    "Uniform (Students must purchase separately)",
+    "School Transport (If applicable)",
+    "External Examination Fees (e.g., National Exams)",
+    "Extra-Curricular Activity Fees (e.g., Clubs, Workshops)"
+  ],
+  "staffBadge": "SCHOOL STAFF",
+  "staffSubtitle": "Meet our dedicated team of educators and support staff who ensure our students thrive in a nurturing environment.",
+  "staffShowcase": [
+    {
+      "id": "staff-lead-1",
+      "name": "HAKIZIMANA Protais",
+      "role": "School Manager",
+      "email": "manager@muginahopeschool.com",
+      "order": 1,
+      "phone": "+250 788 258 786",
+      "imageUrl": "/images/hero_mugina_hope_campus_1791823254957.jpg"
+    },
+    {
+      "id": "staff-lead-2",
+      "name": "MBONIGABA Eric",
+      "role": "Dean Of Studies",
+      "email": "dos@muginahopeschool.com",
+      "order": 2,
+      "phone": "+250 788 345 678",
+      "imageUrl": "/images/staff_eric_dos.png"
+    },
+    {
+      "id": "staff-lead-3",
+      "name": "UWIMBABAZI Christine",
+      "role": "Dean Of Discipline",
+      "email": "dod@muginahopeschool.com",
+      "order": 3,
+      "phone": "+250 788 567 890",
+      "imageUrl": "/images/staff_christine_dod.png"
+    },
+    {
+      "id": "staff-lead-4",
+      "name": "NSENGIMANA Bonaventure",
+      "role": "Accountant",
+      "email": "finance@muginahopeschool.com",
+      "order": 4,
+      "phone": "+250 788 444 555",
+      "imageUrl": "/images/staff_bonaventure_accountant.png"
+    }
+  ],
+  "deletedStaffIds": [
+    "staff-1795199369629",
+    "staff-1795199371010"
+  ],
+  "deletedGalleryIds": [],
+  "galleryInitialized": true,
+  "deletedStudentIds": [
+    "stu-1795199398880"
+  ],
+  "updatedAt": "2026-11-20T18:30:55.027Z",
+  "serverTimestamp": {
+    "type": "firestore/timestamp/1.0",
+    "seconds": 1795199447,
+    "nanoseconds": 133000000
+  },
+  "staff": {},
+  "students": {
+    "stu-1795199398880": {
+      "id": "stu-1795199398880",
+      "regNumber": "MHA-2026-PW9948",
+      "updatedAt": "2026-11-20T18:30:32.156Z",
+      "hasPassword": true,
+      "passwordHash": "sha256$bafce4d459653ca1d3716d05$c5460d192842c62d7a27e7e5e694343ca1ebe92ba535c0670ecf01b5bc96db89",
+      "studentUsername": "pw.student.1795199359948",
+      "studentAccountActive": true
+    }
+  }
 }

@@ -93,7 +93,12 @@ import {
   saveTourBookingToSupabase,
   saveApplicantChatToSupabase,
   fetchApplicantChatByRefFromSupabase,
+  fetchAuthVaultFromSupabase,
+  upsertAuthVaultToSupabase,
+  AuthVaultStaffEntry,
+  AuthVaultStudentEntry,
 } from './supabaseClient';
+import { hashPortalSecret } from './credentialHash';
 
 export type UserRole =
   | 'SuperAdmin'
@@ -132,6 +137,8 @@ export interface StaffMember {
   bio?: string;
   enrolledAt: string;
   status: 'Active' | 'Inactive';
+  hasPassword?: boolean;
+  clientPasswordHash?: string;
   updatedAt?: string;
 }
 
@@ -165,6 +172,8 @@ export interface EnrolledStudent {
   studentUsername: string;
   studentPassword: string;
   studentAccountActive?: boolean;
+  hasPasswordHash?: boolean;
+  clientPasswordHash?: string;
   enrolledBy: string;
   enrolledAt: string;
   status: 'Active' | 'Awaiting Approval' | 'Suspended' | 'Transferred' | 'Graduated';
@@ -1226,9 +1235,13 @@ export const mergeStaffRecords = (sources: Array<StaffMember[] | null | undefine
       if (!key) continue;
       const existing = byKey.get(key);
       if (!existing) {
+        const cleanPw = String(rawItem.password || '').trim() === '••••••' ? '' : rawItem.password || '';
+        const cleanHash = String(rawItem.clientPasswordHash || '').trim();
         byKey.set(key, {
           ...rawItem,
-          password: String(rawItem.password || '').trim() === '••••••' ? '' : rawItem.password || '',
+          password: cleanPw,
+          ...(cleanHash ? { clientPasswordHash: cleanHash } : {}),
+          hasPassword: Boolean(cleanPw || cleanHash || rawItem.hasPassword),
         });
         continue;
       }
@@ -1245,10 +1258,15 @@ export const mergeStaffRecords = (sources: Array<StaffMember[] | null | undefine
           : olderPw && olderPw !== '••••••'
           ? olderPw
           : '';
+      const newerHash = String(newer.clientPasswordHash || '').trim();
+      const olderHash = String(older.clientPasswordHash || '').trim();
+      const bestHash = newerHash || olderHash || '';
       byKey.set(key, {
         ...older,
         ...newer,
         password: bestPw,
+        ...(bestHash ? { clientPasswordHash: bestHash } : {}),
+        hasPassword: Boolean(bestPw || bestHash || newer.hasPassword || older.hasPassword),
         photoUrl: newer.photoUrl || older.photoUrl || '',
         bio: newer.bio || older.bio || '',
         email: newer.email || older.email || '',
@@ -1267,13 +1285,17 @@ export const mergeStaffRecords = (sources: Array<StaffMember[] | null | undefine
     if (!uname) continue;
     const prev = byUsername.get(uname);
     if (!prev || getItemTimestampMs(s) >= getItemTimestampMs(prev)) {
+      const nextPw =
+        String(s.password || '').trim() && s.password !== '••••••'
+          ? s.password
+          : prev?.password || '';
+      const nextHash = String(s.clientPasswordHash || '').trim() || prev?.clientPasswordHash || '';
       byUsername.set(uname, {
         ...(prev || {}),
         ...s,
-        password:
-          String(s.password || '').trim() && s.password !== '••••••'
-            ? s.password
-            : prev?.password || '',
+        password: nextPw,
+        ...(nextHash ? { clientPasswordHash: nextHash } : {}),
+        hasPassword: Boolean(nextPw || nextHash || s.hasPassword || prev?.hasPassword),
       });
     }
   }
@@ -1283,11 +1305,12 @@ export const mergeStaffRecords = (sources: Array<StaffMember[] | null | undefine
     const uname = coreAdmin.username.toLowerCase();
     const existingCore = byUsername.get(uname);
     if (!existingCore) {
-      byUsername.set(uname, coreAdmin);
-    } else if (!String(existingCore.password || '').trim()) {
+      byUsername.set(uname, { ...coreAdmin, hasPassword: true });
+    } else if (!String(existingCore.password || '').trim() && !existingCore.hasPassword) {
       byUsername.set(uname, {
         ...existingCore,
         password: coreAdmin.password,
+        hasPassword: true,
       });
     }
   }
@@ -1297,7 +1320,7 @@ export const mergeStaffRecords = (sources: Array<StaffMember[] | null | undefine
 
 /**
  * Union-merges student rosters across localStorage, Express, Firebase & Supabase while preserving
- * non-empty studentUsername, studentPassword, and explicit deactivation flags.
+ * non-empty studentUsername, studentPassword, hashed credentials, and explicit deactivation flags.
  */
 export const mergeStudentRecords = (
   sources: Array<EnrolledStudent[] | null | undefined>
@@ -1311,12 +1334,16 @@ export const mergeStudentRecords = (
       if (!key) continue;
       const existing = byKey.get(key);
       if (!existing) {
+        const cleanPw =
+          String(rawItem.studentPassword || '').trim() === '••••••'
+            ? ''
+            : rawItem.studentPassword || '';
+        const cleanHash = String(rawItem.clientPasswordHash || '').trim();
         byKey.set(key, {
           ...rawItem,
-          studentPassword:
-            String(rawItem.studentPassword || '').trim() === '••••••'
-              ? ''
-              : rawItem.studentPassword || '',
+          studentPassword: cleanPw,
+          ...(cleanHash ? { clientPasswordHash: cleanHash } : {}),
+          hasPasswordHash: Boolean(cleanPw || cleanHash || rawItem.hasPasswordHash),
         });
         continue;
       }
@@ -1330,17 +1357,23 @@ export const mergeStudentRecords = (
       const olderUser = String(older.studentUsername || '').trim();
       const newerPw = String(newer.studentPassword || '').trim();
       const olderPw = String(older.studentPassword || '').trim();
+      const bestPw =
+        newerPw && newerPw !== '••••••'
+          ? newerPw
+          : olderPw && olderPw !== '••••••'
+          ? olderPw
+          : '';
+      const newerHash = String(newer.clientPasswordHash || '').trim();
+      const olderHash = String(older.clientPasswordHash || '').trim();
+      const bestHash = newerHash || olderHash || '';
 
       byKey.set(key, {
         ...older,
         ...newer,
         studentUsername: newerUser || olderUser || '',
-        studentPassword:
-          newerPw && newerPw !== '••••••'
-            ? newerPw
-            : olderPw && olderPw !== '••••••'
-            ? olderPw
-            : '',
+        studentPassword: bestPw,
+        ...(bestHash ? { clientPasswordHash: bestHash } : {}),
+        hasPasswordHash: Boolean(bestPw || bestHash || newer.hasPasswordHash || older.hasPasswordHash),
         studentAccountActive:
           newer.studentAccountActive !== undefined
             ? newer.studentAccountActive
@@ -1395,109 +1428,6 @@ const resolveAuthoritativeCloudArray = <T,>(
   return null;
 };
 
-// Persistent Server Database Synchronization
-export const persistToServer = (endpoint: string, data: any) => {
-  try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (typeof window !== 'undefined') {
-      const staffToken = sessionStorage.getItem('mugina_staff_bearer_token');
-      const studentToken = sessionStorage.getItem('mugina_student_bearer_token');
-      const token = staffToken || studentToken;
-      if (token) headers.Authorization = `Bearer ${token}`;
-    }
-    fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data),
-    }).catch((err) => {
-      console.warn(`[Database Sync] Auto-sync to ${endpoint} failed:`, err);
-    });
-  } catch (err) {
-    // quiet fallback
-  }
-};
-
-export const saveStaffMembers = (list: StaffMember[]) => {
-  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(list));
-  persistToServer('/api/staff', { items: list });
-  saveStaffMembersBatchToFirebase(list).catch((e) =>
-    console.warn('[Staff Batch] Firebase save notice:', e)
-  );
-  saveStaffMembersBatchToSupabase(list).catch((e) =>
-    console.warn('[Staff Batch] Supabase save notice:', e)
-  );
-  dispatchStoreEvent('mugina-staff-updated', list);
-};
-
-export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' | 'status'>): StaffMember => {
-  const list = getStaffMembers();
-  const newStaff: StaffMember = {
-    ...staff,
-    id: `staff-${Date.now()}`,
-    enrolledAt: new Date().toISOString().split('T')[0],
-    status: 'Active',
-    updatedAt: new Date().toISOString(),
-  };
-  const updated = [newStaff, ...list];
-  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
-  persistToServer('/api/staff', { items: updated });
-  saveStaffMemberToFirebase(newStaff).catch((e) =>
-    console.warn('[Staff Enroll] Firebase Firestore error:', e)
-  );
-  saveStaffMemberToSupabase(newStaff).catch((e) =>
-    console.warn('[Staff Enroll] Supabase error:', e)
-  );
-  dispatchStoreEvent('mugina-staff-updated', updated);
-  return newStaff;
-};
-
-export const updateStaffMember = (id: string, updates: Partial<StaffMember>): StaffMember[] => {
-  const list = getStaffMembers();
-  const nowIso = new Date().toISOString();
-  const updated = list.map((s) => (s.id === id ? { ...s, ...updates, updatedAt: nowIso } : s));
-  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
-  persistToServer('/api/staff', { items: updated });
-  const target = updated.find((s) => s.id === id);
-  if (target) {
-    saveStaffMemberToFirebase(target).catch((e) =>
-      console.warn('[Staff Update] Firebase Firestore error:', e)
-    );
-    saveStaffMemberToSupabase(target).catch((e) =>
-      console.warn('[Staff Update] Supabase error:', e)
-    );
-  }
-  dispatchStoreEvent('mugina-staff-updated', updated);
-  return updated;
-};
-
-export const deleteStaffMember = (id: string): StaffMember[] => {
-  const tracker = updateDeletedTracker((cur) => ({
-    ...cur,
-    staff: [...cur.staff, id],
-  }));
-  const currentSettings = getWebsiteSettings();
-  saveWebsiteSettings({
-    ...currentSettings,
-    deletedStaffIds: Array.from(new Set([...(currentSettings.deletedStaffIds || []), ...tracker.staff, id])),
-  });
-
-  const list = getStaffMembers();
-  const updated = list.filter((s) => s.id !== id);
-  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
-  persistToServer('/api/staff', { items: updated });
-  fetch(`/api/staff/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch((e) =>
-    console.warn('[Staff Delete] Server delete error:', e)
-  );
-  deleteStaffMemberFromFirebase(id).catch((e) =>
-    console.warn('[Staff Delete] Firebase Firestore error:', e)
-  );
-  deleteStaffMemberFromSupabase(id).catch((e) =>
-    console.warn('[Staff Delete] Supabase error:', e)
-  );
-  dispatchStoreEvent('mugina-staff-updated', updated);
-  return updated;
-};
-
 const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
   new Promise((resolve) => {
     let settled = false;
@@ -1524,11 +1454,325 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<
       });
   });
 
+// Persistent Server Database Synchronization
+let pendingCredentialSync: Promise<void> = Promise.resolve();
+
+const enqueueCredentialSync = (task: () => Promise<void>): Promise<void> => {
+  const next = pendingCredentialSync.then(task, task);
+  pendingCredentialSync = next.catch(() => {});
+  return next;
+};
+
+export const waitForCredentialSync = async (): Promise<void> => {
+  await pendingCredentialSync.catch(() => {});
+};
+
+const postJsonWithAuth = async (endpoint: string, data: any): Promise<void> => {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const staffToken = sessionStorage.getItem('mugina_staff_bearer_token');
+      const studentToken = sessionStorage.getItem('mugina_student_bearer_token');
+      const token = staffToken || studentToken;
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
+    await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    console.warn(`[Database Sync] Auto-sync to ${endpoint} failed:`, err);
+  }
+};
+
+export const persistToServer = (endpoint: string, data: any) => {
+  void postJsonWithAuth(endpoint, data);
+};
+
+const syncStaffBatchCredentials = (list: StaffMember[], rawListForServer: StaffMember[]) =>
+  enqueueCredentialSync(async () => {
+    const vaultEntries: AuthVaultStaffEntry[] = await Promise.all(
+      list.map(async (st) => {
+        const plainPw = String(st.password || '').trim();
+        const existingHash = String(st.clientPasswordHash || '').trim();
+        const passwordHash =
+          plainPw && plainPw !== '••••••' ? await hashPortalSecret(plainPw) : existingHash;
+        return {
+          id: st.id,
+          username: st.username,
+          email: st.email || '',
+          role: st.role,
+          status: st.status,
+          ...(passwordHash ? { passwordHash } : {}),
+          updatedAt: st.updatedAt || new Date().toISOString(),
+        };
+      })
+    );
+
+    const hashById = new Map(vaultEntries.map((v) => [v.id, v.passwordHash || '']));
+    try {
+      const curRaw = localStorage.getItem(STORAGE_KEYS.STAFF);
+      if (curRaw) {
+        const curList: StaffMember[] = JSON.parse(curRaw);
+        const enriched = curList.map((st) => {
+          const h = hashById.get(st.id) || st.clientPasswordHash || '';
+          return {
+            ...st,
+            ...(h ? { clientPasswordHash: h } : {}),
+            hasPassword: Boolean(st.password || h || st.hasPassword),
+          };
+        });
+        localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(enriched));
+      }
+    } catch {}
+
+    void saveStaffMembersBatchToFirebase(list).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/staff', { items: rawListForServer }),
+      saveStaffMembersBatchToSupabase(list),
+      upsertAuthVaultToSupabase({ staffEntries: vaultEntries }),
+    ]);
+  });
+
+const syncStudentBatchCredentials = (list: EnrolledStudent[], rawListForServer: EnrolledStudent[]) =>
+  enqueueCredentialSync(async () => {
+    const vaultEntries: AuthVaultStudentEntry[] = await Promise.all(
+      list.map(async (st) => {
+        const plainPw = String(st.studentPassword || '').trim();
+        const existingHash = String(st.clientPasswordHash || '').trim();
+        const passwordHash =
+          plainPw && plainPw !== '••••••' ? await hashPortalSecret(plainPw) : existingHash;
+        return {
+          id: st.id,
+          regNumber: st.regNumber,
+          studentUsername: st.studentUsername || '',
+          studentAccountActive: st.studentAccountActive !== false,
+          ...(passwordHash ? { passwordHash } : {}),
+          hasPassword: Boolean(passwordHash || st.hasPasswordHash),
+          updatedAt: st.updatedAt || new Date().toISOString(),
+        };
+      })
+    );
+
+    const hashById = new Map(vaultEntries.map((v) => [v.id, v.passwordHash || '']));
+    try {
+      const curRaw = localStorage.getItem(STORAGE_KEYS.STUDENTS);
+      if (curRaw) {
+        const curList: EnrolledStudent[] = JSON.parse(curRaw);
+        const enriched = curList.map((st) => {
+          const h = hashById.get(st.id) || st.clientPasswordHash || '';
+          return {
+            ...st,
+            ...(h ? { clientPasswordHash: h } : {}),
+            hasPasswordHash: Boolean(st.studentPassword || h || st.hasPasswordHash),
+          };
+        });
+        localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(enriched));
+      }
+    } catch {}
+
+    void Promise.all(list.map((st) => saveEnrolledStudentToFirebase(st))).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/students', { items: rawListForServer }),
+      saveEnrolledStudentsBatchToSupabase(list),
+      upsertAuthVaultToSupabase({ studentEntries: vaultEntries }),
+    ]);
+  });
+
+export const saveStaffMembers = (list: StaffMember[]) => {
+  const prepared = list.map((s) => ({
+    ...s,
+    hasPassword: Boolean((s.password && s.password !== '••••••') || s.clientPasswordHash || s.hasPassword),
+  }));
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(prepared));
+  void syncStaffBatchCredentials(prepared, prepared);
+  dispatchStoreEvent('mugina-staff-updated', prepared);
+};
+
+export const enrollStaffMember = (staff: Omit<StaffMember, 'id' | 'enrolledAt' | 'status'>): StaffMember => {
+  const list = getStaffMembers();
+  const nowIso = new Date().toISOString();
+  const newStaff: StaffMember = {
+    ...staff,
+    id: `staff-${Date.now()}`,
+    enrolledAt: nowIso.split('T')[0],
+    status: 'Active',
+    hasPassword: Boolean(String(staff.password || '').trim()),
+    updatedAt: nowIso,
+  };
+  const updated = [newStaff, ...list];
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
+  void enqueueCredentialSync(async () => {
+    const plainPw = String(newStaff.password || '').trim();
+    const passwordHash =
+      plainPw && plainPw !== '••••••'
+        ? await hashPortalSecret(plainPw)
+        : String(newStaff.clientPasswordHash || '').trim();
+    const enrichedNew: StaffMember = {
+      ...newStaff,
+      ...(passwordHash ? { clientPasswordHash: passwordHash } : {}),
+      hasPassword: Boolean(plainPw || passwordHash),
+    };
+    const updatedWithHash = updated.map((s) => (s.id === newStaff.id ? enrichedNew : s));
+    localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updatedWithHash));
+    void saveStaffMemberToFirebase(enrichedNew).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/staff', { items: updatedWithHash }),
+      saveStaffMemberToSupabase(enrichedNew),
+      upsertAuthVaultToSupabase({
+        staffEntries: [
+          {
+            id: enrichedNew.id,
+            username: enrichedNew.username,
+            email: enrichedNew.email || '',
+            role: enrichedNew.role,
+            status: enrichedNew.status,
+            ...(passwordHash ? { passwordHash } : {}),
+            updatedAt: nowIso,
+          },
+        ],
+      }),
+    ]);
+  });
+  dispatchStoreEvent('mugina-staff-updated', updated);
+  return newStaff;
+};
+
+export const updateStaffMember = (id: string, updates: Partial<StaffMember>): StaffMember[] => {
+  const list = getStaffMembers();
+  const nowIso = new Date().toISOString();
+  const sanitizedUpdates: Partial<StaffMember> = { ...updates };
+  if (
+    sanitizedUpdates.password !== undefined &&
+    (!String(sanitizedUpdates.password || '').trim() || sanitizedUpdates.password === '••••••')
+  ) {
+    delete sanitizedUpdates.password;
+  }
+  const updated = list.map((s) =>
+    s.id === id
+      ? {
+          ...s,
+          ...sanitizedUpdates,
+          hasPassword: Boolean(
+            sanitizedUpdates.password ||
+              sanitizedUpdates.clientPasswordHash ||
+              s.password ||
+              s.clientPasswordHash ||
+              s.hasPassword
+          ),
+          updatedAt: nowIso,
+        }
+      : s
+  );
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
+  const target = updated.find((s) => s.id === id);
+  void enqueueCredentialSync(async () => {
+    let enrichedTarget = target;
+    let finalList = updated;
+    if (target) {
+      const rawUpdatedPw = String(sanitizedUpdates.password || '').trim();
+      const existingHash = String(target.clientPasswordHash || '').trim();
+      const passwordHash =
+        rawUpdatedPw && rawUpdatedPw !== '••••••'
+          ? await hashPortalSecret(rawUpdatedPw)
+          : existingHash;
+      enrichedTarget = {
+        ...target,
+        ...(passwordHash ? { clientPasswordHash: passwordHash } : {}),
+        hasPassword: Boolean(target.password || passwordHash || target.hasPassword),
+      };
+      finalList = updated.map((s) => (s.id === id ? (enrichedTarget as StaffMember) : s));
+      localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(finalList));
+    }
+    if (enrichedTarget) {
+      void saveStaffMemberToFirebase(enrichedTarget).catch(() => {});
+    }
+    await Promise.allSettled([
+      postJsonWithAuth('/api/staff', { items: finalList }),
+      ...(enrichedTarget
+        ? [
+            saveStaffMemberToSupabase(enrichedTarget),
+            upsertAuthVaultToSupabase({
+              staffEntries: [
+                {
+                  id: enrichedTarget.id,
+                  username: enrichedTarget.username,
+                  email: enrichedTarget.email || '',
+                  role: enrichedTarget.role,
+                  status: enrichedTarget.status,
+                  ...(enrichedTarget.clientPasswordHash
+                    ? { passwordHash: enrichedTarget.clientPasswordHash }
+                    : {}),
+                  updatedAt: nowIso,
+                },
+              ],
+            }),
+          ]
+        : []),
+    ]);
+  });
+  dispatchStoreEvent('mugina-staff-updated', updated);
+  return updated;
+};
+
+export const deleteStaffMember = (id: string): StaffMember[] => {
+  const tracker = updateDeletedTracker((cur) => ({
+    ...cur,
+    staff: [...cur.staff, id],
+  }));
+  const currentSettings = getWebsiteSettings();
+  saveWebsiteSettings({
+    ...currentSettings,
+    deletedStaffIds: Array.from(new Set([...(currentSettings.deletedStaffIds || []), ...tracker.staff, id])),
+  });
+
+  const list = getStaffMembers();
+  const updated = list.filter((s) => s.id !== id);
+  localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(updated));
+  void enqueueCredentialSync(async () => {
+    void deleteStaffMemberFromFirebase(id).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/staff', { items: updated }),
+      fetch(`/api/staff/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      deleteStaffMemberFromSupabase(id),
+      upsertAuthVaultToSupabase({ deleteStaffIds: [id] }),
+    ]);
+  });
+  dispatchStoreEvent('mugina-staff-updated', updated);
+  return updated;
+};
+
 /**
- * Cross-Device Synchronization for Staff Accounts from Supabase, Firebase Firestore & Server
+ * Cross-Device Synchronization for Staff Accounts from Supabase, Auth Vault, Firebase Firestore & Server
  */
 export const syncServerStaff = async (): Promise<StaffMember[]> => {
   try {
+    let latestVault: Awaited<ReturnType<typeof fetchAuthVaultFromSupabase>> = null;
+
+    const hydrateStaffWithVault = (items: StaffMember[]): StaffMember[] => {
+      if (!latestVault?.staff) return items;
+      const vaultEntries = Object.values(latestVault.staff);
+      return items.map((st) => {
+        const v =
+          latestVault!.staff[st.id] ||
+          vaultEntries.find(
+            (e) =>
+              e.username &&
+              st.username &&
+              e.username.trim().toLowerCase() === st.username.trim().toLowerCase()
+          );
+        if (!v) return st;
+        const vaultHash = String(v.passwordHash || '').trim();
+        return {
+          ...st,
+          status: v.status || st.status || 'Active',
+          clientPasswordHash: vaultHash || st.clientPasswordHash,
+          hasPassword: Boolean(st.password || vaultHash || st.clientPasswordHash || st.hasPassword),
+        };
+      });
+    };
+
     const applyStaffMerge = (incoming: Array<StaffMember[] | null | undefined>): StaffMember[] => {
       let localStaff: StaffMember[] = [];
       try {
@@ -1537,7 +1781,7 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
       } catch {
         localStaff = [];
       }
-      const synced = mergeStaffRecords([localStaff, ...incoming]);
+      const synced = hydrateStaffWithVault(mergeStaffRecords([localStaff, ...incoming]));
       localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(synced));
       dispatchStoreEvent('mugina-staff-updated', synced);
       return synced;
@@ -1552,21 +1796,28 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
       if (Array.isArray(items) && items.length > 0) applyStaffMerge([items]);
       return items;
     });
-    const fbPromise = withTimeout(fetchStaffMembersFromFirebase(), 3500, []).then((items) => {
+    const vaultPromise = fetchAuthVaultFromSupabase().then((vault) => {
+      latestVault = vault;
+      return vault;
+    });
+    const fbPromise = withTimeout(fetchStaffMembersFromFirebase(), 800, []).then((items) => {
       if (Array.isArray(items) && items.length > 0) applyStaffMerge([items as StaffMember[]]);
       return items;
     });
 
-    const [serverStaff, sbStaff, fbStaff] = await Promise.all([
+    const [serverStaff, sbStaff, vaultData, fbStaff] = await Promise.all([
       serverPromise,
       sbPromise,
+      vaultPromise,
       fbPromise,
     ]);
+    latestVault = vaultData;
 
     const hasRemote =
       (Array.isArray(sbStaff) && sbStaff.length > 0) ||
       (Array.isArray(fbStaff) && fbStaff.length > 0) ||
-      serverStaff.length > 0;
+      serverStaff.length > 0 ||
+      Boolean(vaultData?.staff && Object.keys(vaultData.staff).length > 0);
 
     if (hasRemote) {
       return applyStaffMerge([serverStaff, fbStaff as StaffMember[], sbStaff]);
@@ -1584,10 +1835,42 @@ export const syncServerStaff = async (): Promise<StaffMember[]> => {
 };
 
 /**
- * Cross-Device Synchronization for Enrolled Students from Supabase, Firebase Firestore & Server
+ * Cross-Device Synchronization for Enrolled Students from Supabase, Auth Vault, Firebase Firestore & Server
  */
 export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
   try {
+    let latestVault: Awaited<ReturnType<typeof fetchAuthVaultFromSupabase>> = null;
+
+    const hydrateStudentsWithVault = (items: EnrolledStudent[]): EnrolledStudent[] => {
+      if (!latestVault?.students) return items;
+      const vaultEntries = Object.values(latestVault.students);
+      return items.map((st) => {
+        const v =
+          latestVault!.students[st.id] ||
+          vaultEntries.find(
+            (e) =>
+              (e.regNumber &&
+                st.regNumber &&
+                e.regNumber.trim().toLowerCase() === st.regNumber.trim().toLowerCase()) ||
+              (e.studentUsername &&
+                st.studentUsername &&
+                e.studentUsername.trim().toLowerCase() === st.studentUsername.trim().toLowerCase())
+          );
+        if (!v) return st;
+        const vaultHash = String(v.passwordHash || '').trim();
+        return {
+          ...st,
+          studentUsername: String(v.studentUsername || '').trim() || st.studentUsername || '',
+          studentAccountActive:
+            v.studentAccountActive !== undefined ? v.studentAccountActive : st.studentAccountActive,
+          clientPasswordHash: vaultHash || st.clientPasswordHash,
+          hasPasswordHash: Boolean(
+            st.studentPassword || vaultHash || st.clientPasswordHash || v.hasPassword || st.hasPasswordHash
+          ),
+        };
+      });
+    };
+
     const applyStudentMerge = (
       incoming: Array<EnrolledStudent[] | null | undefined>
     ): EnrolledStudent[] => {
@@ -1598,7 +1881,7 @@ export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
       } catch {
         localStudents = [];
       }
-      const merged = mergeStudentRecords([localStudents, ...incoming]);
+      const merged = hydrateStudentsWithVault(mergeStudentRecords([localStudents, ...incoming]));
       localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(merged));
       dispatchStoreEvent('mugina-students-updated', merged);
       return merged;
@@ -1613,21 +1896,28 @@ export const syncServerStudents = async (): Promise<EnrolledStudent[]> => {
       if (Array.isArray(items) && items.length > 0) applyStudentMerge([items]);
       return items;
     });
-    const fbPromise = withTimeout(fetchEnrolledStudentsFromFirebase(), 3500, []).then((items) => {
+    const vaultPromise = fetchAuthVaultFromSupabase().then((vault) => {
+      latestVault = vault;
+      return vault;
+    });
+    const fbPromise = withTimeout(fetchEnrolledStudentsFromFirebase(), 800, []).then((items) => {
       if (Array.isArray(items) && items.length > 0) applyStudentMerge([items as EnrolledStudent[]]);
       return items;
     });
 
-    const [serverStudents, sbStudents, fbStudents] = await Promise.all([
+    const [serverStudents, sbStudents, vaultData, fbStudents] = await Promise.all([
       serverPromise,
       sbPromise,
+      vaultPromise,
       fbPromise,
     ]);
+    latestVault = vaultData;
 
     const hasRemote =
       (Array.isArray(sbStudents) && sbStudents.length > 0) ||
       (Array.isArray(fbStudents) && fbStudents.length > 0) ||
-      serverStudents.length > 0;
+      serverStudents.length > 0 ||
+      Boolean(vaultData?.students && Object.keys(vaultData.students).length > 0);
 
     if (hasRemote) {
       return applyStudentMerge([serverStudents, fbStudents as EnrolledStudent[], sbStudents]);
@@ -1655,33 +1945,61 @@ export const getEnrolledStudents = (): EnrolledStudent[] => {
 };
 
 export const saveEnrolledStudents = (list: EnrolledStudent[]) => {
-  const filtered = filterStudentsAgainstTombstones(list);
+  const filtered = filterStudentsAgainstTombstones(list).map((st) => ({
+    ...st,
+    hasPasswordHash: Boolean(
+      (st.studentPassword && st.studentPassword !== '••••••') || st.clientPasswordHash || st.hasPasswordHash
+    ),
+  }));
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(filtered));
-  persistToServer('/api/students', { items: filtered });
-  Promise.all(filtered.map((st) => saveEnrolledStudentToFirebase(st))).catch(() => {});
-  saveEnrolledStudentsBatchToSupabase(filtered).catch((e) =>
-    console.warn('Supabase student batch sync notice:', e)
-  );
+  void syncStudentBatchCredentials(filtered, filtered);
   dispatchStoreEvent('mugina-students-updated', filtered);
 };
 
 export const enrollStudentByDOS = (student: Omit<EnrolledStudent, 'id' | 'enrolledAt'>): EnrolledStudent => {
   const list = getEnrolledStudents();
+  const nowIso = new Date().toISOString();
   const newStudent: EnrolledStudent = {
     ...student,
     id: `stu-${Date.now()}`,
-    enrolledAt: new Date().toISOString().split('T')[0],
-    updatedAt: new Date().toISOString(),
+    enrolledAt: nowIso.split('T')[0],
+    hasPasswordHash: Boolean(String(student.studentPassword || '').trim()),
+    updatedAt: nowIso,
   };
   const updated = [newStudent, ...list];
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
-  persistToServer('/api/students', { items: updated });
-  saveEnrolledStudentToFirebase(newStudent).catch((e) =>
-    console.warn('Firebase student sync notice:', e)
-  );
-  saveEnrolledStudentToSupabase(newStudent).catch((e) =>
-    console.warn('Supabase student sync notice:', e)
-  );
+  void enqueueCredentialSync(async () => {
+    const plainPw = String(newStudent.studentPassword || '').trim();
+    const passwordHash =
+      plainPw && plainPw !== '••••••'
+        ? await hashPortalSecret(plainPw)
+        : String(newStudent.clientPasswordHash || '').trim();
+    const enrichedNew: EnrolledStudent = {
+      ...newStudent,
+      ...(passwordHash ? { clientPasswordHash: passwordHash } : {}),
+      hasPasswordHash: Boolean(plainPw || passwordHash),
+    };
+    const updatedWithHash = updated.map((st) => (st.id === newStudent.id ? enrichedNew : st));
+    localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updatedWithHash));
+    void saveEnrolledStudentToFirebase(enrichedNew).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/students', { items: updatedWithHash }),
+      saveEnrolledStudentToSupabase(enrichedNew),
+      upsertAuthVaultToSupabase({
+        studentEntries: [
+          {
+            id: enrichedNew.id,
+            regNumber: enrichedNew.regNumber,
+            studentUsername: enrichedNew.studentUsername || '',
+            studentAccountActive: enrichedNew.studentAccountActive !== false,
+            ...(passwordHash ? { passwordHash } : {}),
+            hasPassword: Boolean(plainPw || passwordHash),
+            updatedAt: nowIso,
+          },
+        ],
+      }),
+    ]);
+  });
   dispatchStoreEvent('mugina-students-updated', updated);
   return newStudent;
 };
@@ -1698,18 +2016,13 @@ export const enrollStudentsBatchByDOS = (
     ...st,
     id: `stu-${baseTs}-${idx}`,
     enrolledAt: today,
+    hasPasswordHash: Boolean(String(st.studentPassword || '').trim()),
     updatedAt: nowIso,
   }));
 
   const updated = [...created, ...list];
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
-  persistToServer('/api/students', { items: updated });
-  Promise.all(created.map((st) => saveEnrolledStudentToFirebase(st))).catch((e) =>
-    console.warn('Firebase batch student sync notice:', e)
-  );
-  saveEnrolledStudentsBatchToSupabase(created).catch((e) =>
-    console.warn('Supabase batch student sync notice:', e)
-  );
+  void syncStudentBatchCredentials(updated, updated);
   dispatchStoreEvent('mugina-students-updated', updated);
   return created;
 };
@@ -1726,19 +2039,72 @@ export const updateEnrolledStudent = (id: string, updates: Partial<EnrolledStude
     delete sanitizedUpdates.studentPassword;
   }
   const updated = list.map((s) =>
-    s.id === id ? { ...s, ...sanitizedUpdates, updatedAt: nowIso } : s
+    s.id === id
+      ? {
+          ...s,
+          ...sanitizedUpdates,
+          hasPasswordHash: Boolean(
+            sanitizedUpdates.studentPassword ||
+              sanitizedUpdates.clientPasswordHash ||
+              s.studentPassword ||
+              s.clientPasswordHash ||
+              s.hasPasswordHash
+          ),
+          updatedAt: nowIso,
+        }
+      : s
   );
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
-  persistToServer('/api/students', { items: updated });
   const target = updated.find((s) => s.id === id);
-  if (target) {
-    saveEnrolledStudentToFirebase(target).catch((e) =>
-      console.warn('Firebase student sync notice:', e)
-    );
-    saveEnrolledStudentToSupabase(target).catch((e) =>
-      console.warn('Supabase student sync notice:', e)
-    );
-  }
+  void enqueueCredentialSync(async () => {
+    let enrichedTarget = target;
+    let finalList = updated;
+    if (target) {
+      const rawUpdatedPw = String(sanitizedUpdates.studentPassword || '').trim();
+      const existingHash = String(target.clientPasswordHash || '').trim();
+      const passwordHash =
+        rawUpdatedPw && rawUpdatedPw !== '••••••'
+          ? await hashPortalSecret(rawUpdatedPw)
+          : existingHash;
+      enrichedTarget = {
+        ...target,
+        ...(passwordHash ? { clientPasswordHash: passwordHash } : {}),
+        hasPasswordHash: Boolean(target.studentPassword || passwordHash || target.hasPasswordHash),
+      };
+      finalList = updated.map((st) => (st.id === id ? (enrichedTarget as EnrolledStudent) : st));
+      localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(finalList));
+    }
+    if (enrichedTarget) {
+      void saveEnrolledStudentToFirebase(enrichedTarget).catch(() => {});
+    }
+    await Promise.allSettled([
+      postJsonWithAuth('/api/students', { items: finalList }),
+      ...(enrichedTarget
+        ? [
+            saveEnrolledStudentToSupabase(enrichedTarget),
+            upsertAuthVaultToSupabase({
+              studentEntries: [
+                {
+                  id: enrichedTarget.id,
+                  regNumber: enrichedTarget.regNumber,
+                  studentUsername: enrichedTarget.studentUsername || '',
+                  studentAccountActive: enrichedTarget.studentAccountActive !== false,
+                  ...(enrichedTarget.clientPasswordHash
+                    ? { passwordHash: enrichedTarget.clientPasswordHash }
+                    : {}),
+                  hasPassword: Boolean(
+                    enrichedTarget.studentPassword ||
+                      enrichedTarget.clientPasswordHash ||
+                      enrichedTarget.hasPasswordHash
+                  ),
+                  updatedAt: nowIso,
+                },
+              ],
+            }),
+          ]
+        : []),
+    ]);
+  });
   dispatchStoreEvent('mugina-students-updated', updated);
   return updated;
 };
@@ -1757,13 +2123,14 @@ export const deleteEnrolledStudent = (id: string): EnrolledStudent[] => {
   const list = getEnrolledStudents();
   const updated = list.filter((s) => s.id !== id);
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
-  persistToServer('/api/students', { items: updated });
-  deleteEnrolledStudentFromFirebase(id).catch((e) =>
-    console.warn('Firebase student delete notice:', e)
-  );
-  deleteEnrolledStudentFromSupabase(id).catch((e) =>
-    console.warn('Supabase student delete notice:', e)
-  );
+  void enqueueCredentialSync(async () => {
+    void deleteEnrolledStudentFromFirebase(id).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/students', { items: updated }),
+      deleteEnrolledStudentFromSupabase(id),
+      upsertAuthVaultToSupabase({ deleteStudentIds: [id] }),
+    ]);
+  });
   dispatchStoreEvent('mugina-students-updated', updated);
   return updated;
 };
@@ -1788,14 +2155,13 @@ export const deleteEnrolledStudentsBatch = (ids: string[]): EnrolledStudent[] =>
   const list = getEnrolledStudents();
   const updated = list.filter((s) => !idSet.has(s.id));
   localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(updated));
-  persistToServer('/api/students', { items: updated });
-  cleanIds.forEach((id) => {
-    deleteEnrolledStudentFromFirebase(id).catch((e) =>
-      console.warn('Firebase batch student delete notice:', e)
-    );
-    deleteEnrolledStudentFromSupabase(id).catch((e) =>
-      console.warn('Supabase batch student delete notice:', e)
-    );
+  void enqueueCredentialSync(async () => {
+    void Promise.all(cleanIds.map((id) => deleteEnrolledStudentFromFirebase(id))).catch(() => {});
+    await Promise.allSettled([
+      postJsonWithAuth('/api/students', { items: updated }),
+      ...cleanIds.map((id) => deleteEnrolledStudentFromSupabase(id)),
+      upsertAuthVaultToSupabase({ deleteStudentIds: cleanIds }),
+    ]);
   });
   dispatchStoreEvent('mugina-students-updated', updated);
   return updated;
