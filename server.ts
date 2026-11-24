@@ -13,19 +13,117 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const DATA_DIR = IS_VERCEL ? path.join('/tmp', 'mugina-data') : __dirname;
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+app.set('trust proxy', 1);
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// Shared public uploads directory for cross-device image visibility
-const uploadsDir = path.resolve(__dirname, 'uploads');
+const uploadsDir = path.resolve(DATA_DIR, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', (req, res, next) => {
+  const rel = decodeURIComponent(req.path || '').replace(/^\/+/, '');
+  const resolved = path.resolve(uploadsDir, rel);
+  if (rel && !resolved.startsWith(uploadsDir + path.sep)) {
+    return res.status(403).json({ error: 'Forbidden path' });
+  }
+  const ext = path.extname(rel).toLowerCase();
+  if (ext && !['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext)) {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+  return express.static(uploadsDir)(req, res, next);
+});
 
-// Signed Session Token Utilities, Hashing & Backend RBAC Guard (Registered before all /api routes)
-const STUDENT_TOKEN_SECRET = process.env.SESSION_SECRET || 'mugina-hope-academy-sms-rbac-key-2026';
+const EPHEMERAL_FALLBACK_SECRET = crypto.randomBytes(32).toString('hex');
+const getTokenSecret = (): string =>
+  process.env.SESSION_SECRET || process.env.JWT_SECRET || EPHEMERAL_FALLBACK_SECRET;
+
+const SESSION_COOKIE_NAME = 'mha_session';
+
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!cookieHeader) return out;
+  cookieHeader.split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx <= 0) return;
+    const key = part.slice(0, idx).trim();
+    const val = part.slice(idx + 1).trim();
+    if (!key) return;
+    try {
+      out[key] = decodeURIComponent(val);
+    } catch {
+      out[key] = val;
+    }
+  });
+  return out;
+}
+
+function isHttpsRequest(req: express.Request): boolean {
+  const xfProto = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
+  return req.secure || xfProto.includes('https');
+}
+
+function setSessionCookie(req: express.Request, res: express.Response, token: string) {
+  const maxAge = 60 * 60 * 24 * 7;
+  const secure = isHttpsRequest(req);
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    'HttpOnly',
+    'Path=/',
+    `Max-Age=${maxAge}`,
+    secure ? 'SameSite=None' : 'SameSite=Lax',
+    ...(secure ? ['Secure', 'Partitioned'] : []),
+  ];
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
+function clearSessionCookie(req: express.Request, res: express.Response) {
+  const secure = isHttpsRequest(req);
+  const attrs = [
+    `${SESSION_COOKIE_NAME}=`,
+    'HttpOnly',
+    'Path=/',
+    'Max-Age=0',
+    secure ? 'SameSite=None' : 'SameSite=Lax',
+    ...(secure ? ['Secure', 'Partitioned'] : []),
+  ];
+  res.setHeader('Set-Cookie', attrs.join('; '));
+}
+
+function escapeHtml(unsafe: unknown): string {
+  return String(unsafe ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function isValidEmail(email: unknown): boolean {
+  const clean = String(email || '').trim();
+  if (!clean || clean.length > 254 || /[\r\n]/.test(clean)) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean);
+}
+
+function safeEqualStrings(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length === 0 || bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 function sha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -75,7 +173,7 @@ function verifyPassword(plain: string, stored?: string): boolean {
       return false;
     }
   }
-  return cleanStored === cleanPlain;
+  return false;
 }
 
 async function syncCredentialHashToSupabaseVault(params: {
@@ -161,24 +259,37 @@ interface StaffTokenPayload {
 
 function signStudentToken(payload: StudentTokenPayload): string {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', STUDENT_TOKEN_SECRET).update(encoded).digest('base64url');
+  const sig = crypto.createHmac('sha256', getTokenSecret()).update(encoded).digest('base64url');
   return `${encoded}.${sig}`;
 }
 
 function signStaffToken(payload: StaffTokenPayload): string {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', STUDENT_TOKEN_SECRET).update(encoded).digest('base64url');
+  const sig = crypto.createHmac('sha256', getTokenSecret()).update(encoded).digest('base64url');
   return `staff.${encoded}.${sig}`;
 }
 
-function verifyStudentToken(authHeader?: string): StudentTokenPayload | null {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.slice(7).trim();
-  if (token.startsWith('staff.')) return null;
+function extractRawToken(reqOrHeader?: express.Request | string): string {
+  if (!reqOrHeader) return '';
+  if (typeof reqOrHeader === 'string') {
+    return reqOrHeader.startsWith('Bearer ') ? reqOrHeader.slice(7).trim() : '';
+  }
+  const authHeader = String(reqOrHeader.headers?.authorization || '');
+  if (authHeader.startsWith('Bearer ')) {
+    const bearer = authHeader.slice(7).trim();
+    if (bearer) return bearer;
+  }
+  const cookies = parseCookies(reqOrHeader.headers?.cookie);
+  return cookies[SESSION_COOKIE_NAME] || '';
+}
+
+function verifyStudentToken(reqOrHeader?: express.Request | string): StudentTokenPayload | null {
+  const token = extractRawToken(reqOrHeader);
+  if (!token || token.startsWith('staff.')) return null;
   const [encoded, sig] = token.split('.');
   if (!encoded || !sig) return null;
-  const expectedSig = crypto.createHmac('sha256', STUDENT_TOKEN_SECRET).update(encoded).digest('base64url');
-  if (sig !== expectedSig) return null;
+  const expectedSig = crypto.createHmac('sha256', getTokenSecret()).update(encoded).digest('base64url');
+  if (!safeEqualStrings(sig, expectedSig)) return null;
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as StudentTokenPayload;
     if (parsed.role !== 'Student' || parsed.exp < Date.now()) return null;
@@ -188,15 +299,14 @@ function verifyStudentToken(authHeader?: string): StudentTokenPayload | null {
   }
 }
 
-function verifyStaffToken(authHeader?: string): StaffTokenPayload | null {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const rawToken = authHeader.slice(7).trim();
-  if (!rawToken.startsWith('staff.')) return null;
+function verifyStaffToken(reqOrHeader?: express.Request | string): StaffTokenPayload | null {
+  const rawToken = extractRawToken(reqOrHeader);
+  if (!rawToken || !rawToken.startsWith('staff.')) return null;
   const body = rawToken.slice(6);
   const [encoded, sig] = body.split('.');
   if (!encoded || !sig) return null;
-  const expectedSig = crypto.createHmac('sha256', STUDENT_TOKEN_SECRET).update(encoded).digest('base64url');
-  if (sig !== expectedSig) return null;
+  const expectedSig = crypto.createHmac('sha256', getTokenSecret()).update(encoded).digest('base64url');
+  if (!safeEqualStrings(sig, expectedSig)) return null;
   try {
     const parsed = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as StaffTokenPayload;
     if (!parsed.role || parsed.role === 'Student' || parsed.role === 'Parent' || parsed.exp < Date.now()) return null;
@@ -291,7 +401,39 @@ function rateLimitCheck(key: string, maxRequests: number, windowMs: number): { a
   return { allowed: true, retryAfterSec: 0 };
 }
 
-// Reject Student Bearer tokens if they attempt to mutate protected endpoints or read other users' private records
+// CSRF origin check for cookie-authenticated mutating requests
+app.use('/api', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const authHeader = String(req.headers.authorization || '');
+  if (authHeader.startsWith('Bearer ')) return next();
+  const cookies = parseCookies(req.headers.cookie);
+  if (!cookies[SESSION_COOKIE_NAME]) return next();
+
+  const origin = String(req.headers.origin || '').replace(/\/+$/, '');
+  const referer = String(req.headers.referer || '');
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  const appUrl = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  const allowed = new Set<string>([
+    ...(appUrl ? [appUrl] : []),
+    ...(host ? [`https://${host}`, `http://${host}`] : []),
+  ]);
+  if (origin && !allowed.has(origin)) {
+    return res.status(403).json({ error: 'Forbidden: Invalid request origin.' });
+  }
+  if (!origin && referer) {
+    try {
+      const refOrigin = new URL(referer).origin;
+      if (!allowed.has(refOrigin)) {
+        return res.status(403).json({ error: 'Forbidden: Invalid referer origin.' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Forbidden: Invalid referer.' });
+    }
+  }
+  return next();
+});
+
+// Require Staff auth (and block Student/unauthenticated tokens) on protected administrative API namespaces
 app.use(
   [
     '/api/staff',
@@ -309,33 +451,41 @@ app.use(
     '/api/sms/backup',
   ],
   (req, res, next) => {
-    const stuToken = verifyStudentToken(req.headers.authorization);
+    // Allow public applicant chat lookup & parent message posting by reference code
+    if (req.baseUrl === '/api/chats' && req.path !== '/' && req.path !== '') {
+      return next();
+    }
+    const stuToken = verifyStudentToken(req);
     if (stuToken) {
-      if (
-        req.method !== 'GET' ||
-        req.baseUrl === '/api/staff' ||
-        req.baseUrl === '/api/students' ||
-        req.baseUrl === '/api/payments' ||
-        req.baseUrl === '/api/applications' ||
-        req.baseUrl === '/api/admin' ||
-        req.baseUrl === '/api/chats' ||
-        req.baseUrl === '/api/sms/backup'
-      ) {
-        return res.status(403).json({
-          error: 'Forbidden: Student accounts cannot access or modify administrative, staff, classmate, or financial records.',
-        });
-      }
+      return res.status(403).json({
+        error: 'Forbidden: Student accounts cannot access or modify administrative, staff, classmate, or financial records.',
+      });
+    }
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({
+        error: 'Authentication required. Please sign in to the Staff Portal.',
+      });
     }
     return next();
   }
 );
 
+function resolveStoreReadPath(fileName: string): string {
+  const runtimePath = path.resolve(DATA_DIR, fileName);
+  if (fs.existsSync(runtimePath)) return runtimePath;
+  const seedPath = path.resolve(__dirname, fileName);
+  if (IS_VERCEL && fs.existsSync(seedPath)) return seedPath;
+  return runtimePath;
+}
+
 // Persistent server-side gallery store
-const galleryStoreFile = path.resolve(__dirname, 'gallery_store.json');
+const galleryStoreFile = path.resolve(DATA_DIR, 'gallery_store.json');
 function loadServerGallery(): any[] {
   try {
-    if (fs.existsSync(galleryStoreFile)) {
-      return JSON.parse(fs.readFileSync(galleryStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('gallery_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading gallery_store.json:', err);
@@ -352,11 +502,12 @@ function saveServerGallery(items: any[]) {
 }
 
 // Persistent server-side website settings store (Admin updates)
-const settingsStoreFile = path.resolve(__dirname, 'website_settings_store.json');
+const settingsStoreFile = path.resolve(DATA_DIR, 'website_settings_store.json');
 function loadServerSettings(): any {
   try {
-    if (fs.existsSync(settingsStoreFile)) {
-      return JSON.parse(fs.readFileSync(settingsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('website_settings_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading website_settings_store.json:', err);
@@ -373,11 +524,12 @@ function saveServerSettings(settings: any) {
 }
 
 // Persistent database stores on disk for all entities
-const staffStoreFile = path.resolve(__dirname, 'staff_store.json');
+const staffStoreFile = path.resolve(DATA_DIR, 'staff_store.json');
 function loadServerStaff(): any[] | null {
   try {
-    if (fs.existsSync(staffStoreFile)) {
-      return JSON.parse(fs.readFileSync(staffStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('staff_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading staff_store.json:', err);
@@ -392,11 +544,12 @@ function saveServerStaff(items: any[]) {
   }
 }
 
-const studentsStoreFile = path.resolve(__dirname, 'students_store.json');
+const studentsStoreFile = path.resolve(DATA_DIR, 'students_store.json');
 function loadServerStudents(): any[] | null {
   try {
-    if (fs.existsSync(studentsStoreFile)) {
-      return JSON.parse(fs.readFileSync(studentsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('students_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading students_store.json:', err);
@@ -411,11 +564,12 @@ function saveServerStudents(items: any[]) {
   }
 }
 
-const attendanceStoreFile = path.resolve(__dirname, 'attendance_store.json');
+const attendanceStoreFile = path.resolve(DATA_DIR, 'attendance_store.json');
 function loadServerAttendance(): any[] | null {
   try {
-    if (fs.existsSync(attendanceStoreFile)) {
-      return JSON.parse(fs.readFileSync(attendanceStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('attendance_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading attendance_store.json:', err);
@@ -430,11 +584,12 @@ function saveServerAttendance(items: any[]) {
   }
 }
 
-const teacherAttendanceStoreFile = path.resolve(__dirname, 'teacher_attendance_store.json');
+const teacherAttendanceStoreFile = path.resolve(DATA_DIR, 'teacher_attendance_store.json');
 function loadServerTeacherAttendance(): any[] | null {
   try {
-    if (fs.existsSync(teacherAttendanceStoreFile)) {
-      return JSON.parse(fs.readFileSync(teacherAttendanceStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('teacher_attendance_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading teacher_attendance_store.json:', err);
@@ -449,11 +604,12 @@ function saveServerTeacherAttendance(items: any[]) {
   }
 }
 
-const disciplineStoreFile = path.resolve(__dirname, 'discipline_store.json');
+const disciplineStoreFile = path.resolve(DATA_DIR, 'discipline_store.json');
 function loadServerDiscipline(): any[] | null {
   try {
-    if (fs.existsSync(disciplineStoreFile)) {
-      return JSON.parse(fs.readFileSync(disciplineStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('discipline_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading discipline_store.json:', err);
@@ -468,11 +624,12 @@ function saveServerDiscipline(items: any[]) {
   }
 }
 
-const paymentsStoreFile = path.resolve(__dirname, 'payments_store.json');
+const paymentsStoreFile = path.resolve(DATA_DIR, 'payments_store.json');
 function loadServerPayments(): any[] | null {
   try {
-    if (fs.existsSync(paymentsStoreFile)) {
-      return JSON.parse(fs.readFileSync(paymentsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('payments_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading payments_store.json:', err);
@@ -487,11 +644,12 @@ function saveServerPayments(items: any[]) {
   }
 }
 
-const documentsStoreFile = path.resolve(__dirname, 'documents_store.json');
+const documentsStoreFile = path.resolve(DATA_DIR, 'documents_store.json');
 function loadServerDocuments(): any[] | null {
   try {
-    if (fs.existsSync(documentsStoreFile)) {
-      return JSON.parse(fs.readFileSync(documentsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('documents_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading documents_store.json:', err);
@@ -506,11 +664,12 @@ function saveServerDocuments(items: any[]) {
   }
 }
 
-const applicationsStoreFile = path.resolve(__dirname, 'applications_store.json');
+const applicationsStoreFile = path.resolve(DATA_DIR, 'applications_store.json');
 function loadServerApplications(): any[] | null {
   try {
-    if (fs.existsSync(applicationsStoreFile)) {
-      return JSON.parse(fs.readFileSync(applicationsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('applications_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading applications_store.json:', err);
@@ -546,11 +705,12 @@ interface ChatThread {
   updatedAt: string;
 }
 
-const chatsStoreFile = path.resolve(__dirname, 'chats_store.json');
+const chatsStoreFile = path.resolve(DATA_DIR, 'chats_store.json');
 function loadServerChats(): ChatThread[] {
   try {
-    if (fs.existsSync(chatsStoreFile)) {
-      return JSON.parse(fs.readFileSync(chatsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('chats_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading chats_store.json:', err);
@@ -572,9 +732,9 @@ function saveServerChats(threads: ChatThread[]) {
 const GMAIL_USER = (process.env.GMAIL_USER || process.env.SMTP_USER || '').trim();
 const GMAIL_APP_PASSWORD = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || '').replace(/\s+/g, '');
 const EMAIL_FROM_ADDRESS = (
-  process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com'
+  process.env.EMAIL_FROM || process.env.SCHOOL_GMAIL || GMAIL_USER || ''
 ).trim();
-const SCHOOL_OFFICIAL_EMAIL = (process.env.SCHOOL_GMAIL || GMAIL_USER || 'norbertihimbazwemanzi@gmail.com').trim();
+const SCHOOL_OFFICIAL_EMAIL = (process.env.SCHOOL_GMAIL || GMAIL_USER || '').trim();
 
 function formatSmtpError(err: any): string {
   const raw = String(err?.message || 'SMTP delivery failed');
@@ -590,29 +750,29 @@ const getPublicAppUrl = (req?: express.Request): string => {
   }
   if (req) {
     const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
-    const host = req.headers.host || `localhost:${PORT}`;
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || `localhost:${PORT}`;
     return `${proto}://${host}`.replace(/\/+$/, '');
   }
   return `http://localhost:${PORT}`;
 };
 
-let transporter: Transporter;
+let transporter: Transporter | null = null;
 if (GMAIL_USER && GMAIL_APP_PASSWORD) {
   transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
       user: GMAIL_USER,
       pass: GMAIL_APP_PASSWORD,
     },
-  });
-} else {
-  // Local / preview fallback when Gmail App Password is not yet configured in env
-  transporter = nodemailer.createTransport({
-    jsonTransport: true,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 }
 
-const emailLogsStoreFile = path.resolve(__dirname, 'email_logs_store.json');
+const emailLogsStoreFile = path.resolve(DATA_DIR, 'email_logs_store.json');
 interface EmailDeliveryLog {
   id: string;
   recipientEmail: string;
@@ -638,8 +798,9 @@ interface EmailDeliveryLog {
 
 function loadEmailLogs(): EmailDeliveryLog[] {
   try {
-    if (fs.existsSync(emailLogsStoreFile)) {
-      const parsed = JSON.parse(fs.readFileSync(emailLogsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('email_logs_store.json');
+    if (fs.existsSync(p)) {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
       return Array.isArray(parsed) ? parsed : [];
     }
   } catch (err) {
@@ -655,7 +816,7 @@ function saveEmailLogs(items: EmailDeliveryLog[]) {
   }
 }
 
-const resetTokensStoreFile = path.resolve(__dirname, 'password_reset_tokens_store.json');
+const resetTokensStoreFile = path.resolve(DATA_DIR, 'password_reset_tokens_store.json');
 interface PasswordResetTokenRecord {
   id: string;
   tokenHash: string;
@@ -671,8 +832,9 @@ interface PasswordResetTokenRecord {
 
 function loadResetTokens(): PasswordResetTokenRecord[] {
   try {
-    if (fs.existsSync(resetTokensStoreFile)) {
-      const parsed = JSON.parse(fs.readFileSync(resetTokensStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('password_reset_tokens_store.json');
+    if (fs.existsSync(p)) {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
       return Array.isArray(parsed) ? parsed : [];
     }
   } catch (err) {
@@ -688,7 +850,7 @@ function saveResetTokens(items: PasswordResetTokenRecord[]) {
   }
 }
 
-const admissionVerificationStoreFile = path.resolve(__dirname, 'admission_verification_store.json');
+const admissionVerificationStoreFile = path.resolve(DATA_DIR, 'admission_verification_store.json');
 interface AdmissionVerificationRecord {
   id: string;
   appId: string;
@@ -708,8 +870,9 @@ interface AdmissionVerificationRecord {
 
 function loadVerificationRecords(): AdmissionVerificationRecord[] {
   try {
-    if (fs.existsSync(admissionVerificationStoreFile)) {
-      const parsed = JSON.parse(fs.readFileSync(admissionVerificationStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('admission_verification_store.json');
+    if (fs.existsSync(p)) {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
       return Array.isArray(parsed) ? parsed : [];
     }
   } catch (err) {
@@ -725,7 +888,7 @@ function saveVerificationRecords(items: AdmissionVerificationRecord[]) {
   }
 }
 
-const emailTemplatesStoreFile = path.resolve(__dirname, 'email_templates_store.json');
+const emailTemplatesStoreFile = path.resolve(DATA_DIR, 'email_templates_store.json');
 interface EmailTemplateConfig {
   id: 'admission_approved' | 'admission_rejected' | 'admission_more_info' | 'password_reset';
   label: string;
@@ -785,8 +948,9 @@ const DEFAULT_EMAIL_TEMPLATES: Record<EmailTemplateConfig['id'], EmailTemplateCo
 
 function loadEmailTemplates(): Record<EmailTemplateConfig['id'], EmailTemplateConfig> {
   try {
-    if (fs.existsSync(emailTemplatesStoreFile)) {
-      const parsed = JSON.parse(fs.readFileSync(emailTemplatesStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('email_templates_store.json');
+    if (fs.existsSync(p)) {
+      const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
       return { ...DEFAULT_EMAIL_TEMPLATES, ...parsed };
     }
   } catch (err) {
@@ -813,22 +977,26 @@ async function sendSchoolEmail(params: {
   to: string;
   subject: string;
   html: string;
+  replyTo?: string;
   emailType: EmailDeliveryLog['emailType'];
   relatedRef?: string;
   sanitizedSummary: string;
   allowRetryHtml?: boolean;
   simulateFailure?: boolean;
 }): Promise<{ success: boolean; log: EmailDeliveryLog; error?: string }> {
-  const fromHeader = EMAIL_FROM_ADDRESS.includes('<')
-    ? EMAIL_FROM_ADDRESS
-    : `"Mugina Hope Primary School" <${EMAIL_FROM_ADDRESS}>`;
+  const fromEmail = EMAIL_FROM_ADDRESS || GMAIL_USER;
+  const fromHeader = fromEmail.includes('<')
+    ? fromEmail
+    : `"Mugina Hope Primary School" <${fromEmail || 'noreply@muginahopeschool.com'}>`;
 
   const logs = loadEmailLogs();
+  const cleanSubject = String(params.subject || '').replace(/[\r\n]+/g, ' ').trim();
+  const cleanTo = String(params.to || '').trim();
   const logEntry: EmailDeliveryLog = {
     id: `eml-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-    recipientEmail: params.to,
+    recipientEmail: cleanTo,
     emailType: params.emailType,
-    subject: params.subject,
+    subject: cleanSubject,
     status: 'Sent',
     relatedRef: params.relatedRef,
     sentAt: new Date().toISOString(),
@@ -838,14 +1006,23 @@ async function sendSchoolEmail(params: {
   };
 
   try {
-    if (params.simulateFailure || !params.to || !params.to.includes('@')) {
-      throw new Error(!params.to || !params.to.includes('@') ? 'Invalid recipient email address' : 'Simulated SMTP delivery failure');
+    if (params.simulateFailure) {
+      throw new Error('Simulated SMTP delivery failure');
+    }
+    if (!isValidEmail(cleanTo)) {
+      throw new Error('Invalid recipient email address');
+    }
+    if (!transporter || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      throw new Error(
+        'Gmail SMTP is not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD in server environment variables.'
+      );
     }
 
     await transporter.sendMail({
       from: fromHeader,
-      to: params.to,
-      subject: params.subject,
+      to: cleanTo,
+      ...(params.replyTo && isValidEmail(params.replyTo) ? { replyTo: params.replyTo.trim() } : {}),
+      subject: cleanSubject,
       html: params.html,
     });
 
@@ -862,31 +1039,22 @@ async function sendSchoolEmail(params: {
   }
 }
 
-// Seed default administrators if staff_store.json does not exist yet (storing salted scrypt hashes cleanly)
+// Seed default non-secret administrator profile metadata; credentials come from env vars or first-run setup
 function ensureAuthoritativeStaffList(): any[] {
   const disk = loadServerStaff();
-  const seeds = [
+  const envAdminEmail = (process.env.ADMIN_EMAIL || '').trim();
+  const envAdminPassword = (process.env.ADMIN_INITIAL_PASSWORD || '').trim();
+
+  const seeds: any[] = [
     {
       id: 'staff-admin-norbert',
-      name: 'Norbert Ihimbazwe Manzi (Chief Administrator)',
+      name: 'School Chief Administrator',
       role: 'SuperAdmin',
-      email: 'norbertihimbazwemanzi@gmail.com',
+      email: envAdminEmail || 'admin@muginahopeschool.com',
       phone: '+250 788 258 786',
-      username: 'norbertihimbazwemanzi@gmail.com',
-      passwordHash: hashPassword('@0798744704'),
+      username: envAdminEmail || 'admin@muginahopeschool.com',
+      ...(envAdminPassword ? { passwordHash: hashPassword(envAdminPassword) } : {}),
       assignedSubjectOrGrade: 'School Principal & System Controller',
-      enrolledAt: '2026-01-01',
-      status: 'Active',
-    },
-    {
-      id: 'staff-headteacher-1',
-      name: 'Headteacher / School Principal',
-      role: 'HeadTeacher',
-      email: 'headteacher@muginahopeschool.com',
-      phone: '+250 788 258 786',
-      username: 'hopeprimaryschool',
-      passwordHash: hashPassword('hopeprimary@123'),
-      assignedSubjectOrGrade: 'Executive School Leadership & Academics',
       enrolledAt: '2026-01-01',
       status: 'Active',
     },
@@ -901,35 +1069,47 @@ function ensureAuthoritativeStaffList(): any[] {
   let mutated = false;
   const upgraded = disk.map((st: any) => {
     if (!st) return st;
-    if (!st.passwordHash && st.password && !st.password.startsWith('scrypt$')) {
+    if (!st.passwordHash && st.password && !String(st.password).startsWith('scrypt$')) {
       mutated = true;
       const { password, ...rest } = st;
       return { ...rest, passwordHash: hashPassword(password) };
     }
+    if (st.password !== undefined) {
+      mutated = true;
+      const { password: _discard, ...rest } = st;
+      return rest;
+    }
     return st;
   });
 
-  const hasNorbert = upgraded.some(
-    (s: any) =>
-      s &&
-      (String(s.username || '').toLowerCase() === 'norbertihimbazwemanzi@gmail.com' ||
-        s.id === 'staff-admin-norbert')
-  );
-  if (!hasNorbert) {
-    upgraded.unshift(seeds[0]);
-    mutated = true;
-  } else {
-    for (let i = 0; i < upgraded.length; i++) {
-      const s = upgraded[i];
-      if (
+  if (envAdminEmail && envAdminPassword) {
+    const cleanEnvEmail = envAdminEmail.toLowerCase();
+    const envMatchIdx = upgraded.findIndex(
+      (s: any) =>
         s &&
-        (String(s.username || '').toLowerCase() === 'norbertihimbazwemanzi@gmail.com' ||
-          s.id === 'staff-admin-norbert') &&
-        !s.passwordHash
-      ) {
-        upgraded[i] = { ...s, username: 'norbertihimbazwemanzi@gmail.com', passwordHash: hashPassword('@0798744704') };
-        mutated = true;
-      }
+        (String(s.email || '').toLowerCase() === cleanEnvEmail ||
+          String(s.username || '').toLowerCase() === cleanEnvEmail)
+    );
+    if (envMatchIdx < 0) {
+      upgraded.unshift({
+        id: 'staff-admin-env',
+        name: 'School Administrator',
+        role: 'SuperAdmin',
+        email: envAdminEmail,
+        phone: '+250 788 258 786',
+        username: envAdminEmail,
+        passwordHash: hashPassword(envAdminPassword),
+        assignedSubjectOrGrade: 'School Principal & System Controller',
+        enrolledAt: new Date().toISOString().split('T')[0],
+        status: 'Active',
+      });
+      mutated = true;
+    } else if (!upgraded[envMatchIdx].passwordHash) {
+      upgraded[envMatchIdx] = {
+        ...upgraded[envMatchIdx],
+        passwordHash: hashPassword(envAdminPassword),
+      };
+      mutated = true;
     }
   }
 
@@ -937,76 +1117,105 @@ function ensureAuthoritativeStaffList(): any[] {
   return upgraded;
 }
 
-// 1. API Endpoint: Forward Contact Form Submissions
+// 1. API Endpoint: Forward Contact Form Submissions (Rate-limited, HTML-escaped, honest SMTP errors)
 app.post('/api/contact', async (req, res) => {
   try {
-    const { name, phone, email, subject, message } = req.body;
-
-    if (!name || !phone || !message) {
-      return res.status(400).json({ error: 'Missing required fields (name, phone, message)' });
+    const clientIp = req.ip || String(req.headers['x-forwarded-for'] || 'unknown');
+    const limit = rateLimitCheck(`contact:ip:${clientIp}`, 8, 15 * 60 * 1000);
+    if (!limit.allowed) {
+      return res.status(429).json({
+        error: `Too many contact inquiries sent. Please try again in ${limit.retryAfterSec} seconds.`,
+      });
     }
 
-    // Email to School Official Gmail
-    const adminMailOptions = {
-      from: `"Mugina Hope Academy Web" <${SCHOOL_OFFICIAL_EMAIL}>`,
+    const { name, phone, email, subject, message } = req.body || {};
+    const cleanName = String(name || '').trim();
+    const cleanPhone = String(phone || '').trim();
+    const cleanEmail = String(email || '').trim();
+    const cleanSubject = String(subject || 'New Contact').replace(/[\r\n]+/g, ' ').trim();
+    const cleanMessage = String(message || '').trim();
+
+    if (!cleanName || !cleanPhone || !cleanMessage) {
+      return res.status(400).json({ error: 'Missing required fields (name, phone, message)' });
+    }
+    if (cleanEmail && !isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: 'Please provide a valid email address.' });
+    }
+
+    if (!transporter || !GMAIL_USER || !GMAIL_APP_PASSWORD || !isValidEmail(SCHOOL_OFFICIAL_EMAIL)) {
+      return res.status(503).json({
+        success: false,
+        error: 'Email delivery is not configured on the server yet. Set GMAIL_USER and GMAIL_APP_PASSWORD.',
+      });
+    }
+
+    const safeName = escapeHtml(cleanName);
+    const safePhone = escapeHtml(cleanPhone);
+    const safeEmail = escapeHtml(cleanEmail || 'Not provided');
+    const safeSubject = escapeHtml(cleanSubject);
+    const safeMessage = escapeHtml(cleanMessage);
+
+    const adminRes = await sendSchoolEmail({
       to: SCHOOL_OFFICIAL_EMAIL,
-      replyTo: email || undefined,
-      subject: `[Website Inquiry] ${subject || 'New Contact'} from ${name}`,
+      replyTo: cleanEmail || undefined,
+      subject: `[Website Inquiry] ${cleanSubject} from ${cleanName.replace(/[\r\n]+/g, ' ')}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
           <h2 style="color: #1e3a8a; margin-top: 0;">Mugina Hope Primary & Nursery Academy</h2>
           <h3 style="color: #0f172a;">New Message from Contact Form</h3>
-          <p><strong>Sender Name:</strong> ${name}</p>
-          <p><strong>Phone:</strong> <a href="tel:${phone}">${phone}</a></p>
-          <p><strong>Email:</strong> ${email || 'Not provided'}</p>
-          <p><strong>Subject:</strong> ${subject}</p>
+          <p><strong>Sender Name:</strong> ${safeName}</p>
+          <p><strong>Phone:</strong> ${safePhone}</p>
+          <p><strong>Email:</strong> ${safeEmail}</p>
+          <p><strong>Subject:</strong> ${safeSubject}</p>
           <div style="background-color: #f8fafc; padding: 15px; border-left: 4px solid #3b82f6; margin: 15px 0;">
-            <p style="margin: 0; white-space: pre-wrap;">${message}</p>
+            <p style="margin: 0; white-space: pre-wrap;">${safeMessage}</p>
           </div>
           <p style="font-size: 12px; color: #64748b;">Campus Location: Adjacent to Mugina Police Station, Kamonyi, Rwanda</p>
         </div>
       `,
-    };
+      emailType: 'contact_inquiry',
+      sanitizedSummary: `Contact inquiry received from ${cleanName} (${cleanPhone}).`,
+      allowRetryHtml: true,
+    });
 
-    // Automated Feedback Email to Parent / Sender
+    if (!adminRes.success) {
+      return res.status(502).json({
+        success: false,
+        error: adminRes.error || 'Failed to deliver contact inquiry via SMTP.',
+      });
+    }
+
     let feedbackSent = false;
-    if (email && email.includes('@')) {
-      const feedbackMailOptions = {
-        from: `"Mugina Hope Academy" <${SCHOOL_OFFICIAL_EMAIL}>`,
-        to: email,
-        subject: `Thank you for contacting Mugina Hope Academy - We received your inquiry`,
+    if (cleanEmail && isValidEmail(cleanEmail)) {
+      const fbRes = await sendSchoolEmail({
+        to: cleanEmail,
+        subject: 'Thank you for contacting Mugina Hope Academy - We received your inquiry',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
             <div style="background-color: #1e3a8a; padding: 12px 16px; border-radius: 6px; color: white;">
               <h2 style="margin: 0; font-size: 18px;">Mugina Hope Primary & Nursery Academy</h2>
               <p style="margin: 2px 0 0 0; font-size: 12px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
             </div>
-            <h3 style="color: #0f172a; margin-top: 20px;">Muraho, ${name}!</h3>
-            <p>Thank you for getting in touch with our school regarding <strong>&ldquo;${subject || 'General Inquiry'}&rdquo;</strong>.</p>
-            <p>We have safely logged your message. Our administration desk, located right next to the Mugina Police Station in Kamonyi District, will follow up with you at <strong>${phone}</strong> shortly.</p>
+            <h3 style="color: #0f172a; margin-top: 20px;">Muraho, ${safeName}!</h3>
+            <p>Thank you for getting in touch with our school regarding <strong>&ldquo;${safeSubject}&rdquo;</strong>.</p>
+            <p>We have safely logged your message. Our administration desk, located right next to the Mugina Police Station in Kamonyi District, will follow up with you at <strong>${safePhone}</strong> shortly.</p>
             <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px; margin: 16px 0; font-size: 13px; color: #166534;">
               For urgent admissions questions, call or WhatsApp our official line: <strong>+250 788 258 786</strong>.
             </div>
-            <p style="font-size: 12px; color: #64748b;">Mugina Sector, Kamonyi District, Southern Province, Rwanda · muginahopeschool.com</p>
+            <p style="font-size: 12px; color: #64748b;">Mugina Sector, Kamonyi District, Southern Province, Rwanda</p>
           </div>
         `,
-      };
-
-      try {
-        await transporter.sendMail(feedbackMailOptions);
-        feedbackSent = true;
-      } catch (err) {
-        console.warn('Feedback email dispatch notice:', err);
-      }
+        emailType: 'contact_inquiry',
+        sanitizedSummary: `Contact auto-acknowledgement sent to ${cleanEmail}.`,
+      });
+      feedbackSent = fbRes.success;
     }
-
-    const adminInfo = await transporter.sendMail(adminMailOptions);
 
     return res.json({
       success: true,
-      message: 'Inquiry forwarded to official school Gmail successfully',
+      message: 'Inquiry forwarded to official school email successfully.',
       feedbackSent,
-      info: adminInfo?.messageId || 'Delivered',
+      logId: adminRes.log.id,
     });
   } catch (error: any) {
     console.error('Nodemailer Contact Error:', error);
@@ -1014,23 +1223,39 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
-// 2. API Endpoint: Student Attendance Notification to Parent's Gmail
+// 2. API Endpoint: Student Attendance Notification to Parent's Email (Staff only)
 app.post('/api/attendance/notify', async (req, res) => {
   try {
-    const { studentName, studentId, grade, parentEmail, parentName, date, status, notes } = req.body;
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({ error: 'Staff authentication required.' });
+    }
+    const { studentName, studentId, grade, parentEmail, parentName, date, status, notes } = req.body || {};
 
-    if (!studentName || !parentEmail || !status) {
-      return res.status(400).json({ error: 'Missing required attendance fields' });
+    if (!studentName || !isValidEmail(parentEmail) || !status) {
+      return res.status(400).json({ error: 'Valid studentName, parentEmail, and status are required.' });
     }
 
-    const isAbsent = status === 'Absent';
-    const subject = isAbsent
-      ? `[ATTENDANCE ALERT] ${studentName} was marked ABSENT on ${date}`
-      : `[Attendance Notice] ${studentName} Attendance Record (${status}) on ${date}`;
+    const cleanStatus = String(status).trim();
+    const isAbsent = cleanStatus === 'Absent';
+    const cleanDate = String(date || new Date().toISOString().split('T')[0]).trim();
+    const subject = (
+      isAbsent
+        ? `[ATTENDANCE ALERT] ${studentName} was marked ABSENT on ${cleanDate}`
+        : `[Attendance Notice] ${studentName} Attendance Record (${cleanStatus}) on ${cleanDate}`
+    ).replace(/[\r\n]+/g, ' ');
 
-    const mailOptions = {
-      from: `"Mugina Hope Academy Discipline Office" <${SCHOOL_OFFICIAL_EMAIL}>`,
-      to: parentEmail,
+    const safeStudentName = escapeHtml(studentName);
+    const safeStudentId = escapeHtml(studentId || 'N/A');
+    const safeGrade = escapeHtml(grade || '');
+    const safeDate = escapeHtml(cleanDate);
+    const safeStatus = escapeHtml(cleanStatus.toUpperCase());
+    const safeNotes = notes ? escapeHtml(notes) : '';
+    const safeParentName = escapeHtml(parentName || 'Parent / Guardian');
+    const safeParentEmail = escapeHtml(parentEmail);
+
+    const parentDispatch = await sendSchoolEmail({
+      to: String(parentEmail).trim(),
       subject,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid ${isAbsent ? '#fca5a5' : '#e2e8f0'}; border-radius: 8px;">
@@ -1038,131 +1263,170 @@ app.post('/api/attendance/notify', async (req, res) => {
             <h2 style="margin: 0; font-size: 18px;">Mugina Hope Primary & Nursery Academy</h2>
             <p style="margin: 2px 0 0 0; font-size: 12px; color: #fde047;">Director of Discipline (DOD) Notification</p>
           </div>
-          <h3 style="color: #0f172a; margin-top: 18px;">Dear Parent / Guardian of ${studentName},</h3>
+          <h3 style="color: #0f172a; margin-top: 18px;">Dear ${safeParentName} (Parent / Guardian of ${safeStudentName}),</h3>
           <p style="font-size: 14px; line-height: 1.5;">
-            This is an official attendance notice for <strong>${studentName}</strong> (ID: <code>${studentId || 'N/A'}</code>, Class: <strong>${grade}</strong>) for date: <strong>${date}</strong>.
+            This is an official attendance notice for <strong>${safeStudentName}</strong> (ID: <code>${safeStudentId}</code>, Class: <strong>${safeGrade}</strong>) for date: <strong>${safeDate}</strong>.
           </p>
           <div style="background-color: ${isAbsent ? '#fef2f2' : '#f0fdf4'}; border: 1px solid ${isAbsent ? '#fecaca' : '#bbf7d0'}; border-radius: 6px; padding: 14px; margin: 16px 0;">
             <p style="margin: 0; font-size: 15px; font-weight: bold; color: ${isAbsent ? '#991b1b' : '#166534'};">
-              Status Recorded: ${status.toUpperCase()}
+              Status Recorded: ${safeStatus}
             </p>
-            ${notes ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: #475569;">Teacher Notes: ${notes}</p>` : ''}
+            ${safeNotes ? `<p style="margin: 6px 0 0 0; font-size: 13px; color: #475569;">Teacher Notes: ${safeNotes}</p>` : ''}
           </div>
-          ${isAbsent ? `
-            <p style="font-size: 13px; color: #b91c1c; font-weight: bold;">
-              If this absence was unexpected, please immediately contact our Director of Discipline (DOD) or administration desk at +250 788 258 786.
-            </p>
-          ` : `
-            <p style="font-size: 13px; color: #475569;">Thank you for your active partnership in ensuring consistent learning.</p>
-          `}
+          ${
+            isAbsent
+              ? `<p style="font-size: 13px; color: #b91c1c; font-weight: bold;">
+                  If this absence was unexpected, please immediately contact our Director of Discipline (DOD) or administration desk at +250 788 258 786.
+                </p>`
+              : `<p style="font-size: 13px; color: #475569;">Thank you for your active partnership in ensuring consistent learning.</p>`
+          }
           <div style="margin-top: 20px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">
             Mugina Hope Academy · Kamonyi District · Southern Province, Rwanda
           </div>
         </div>
       `,
-    };
+      emailType: 'attendance_alert',
+      relatedRef: String(studentId || ''),
+      sanitizedSummary: `Attendance alert (${cleanStatus}) sent to ${parentEmail} for ${studentName}.`,
+      allowRetryHtml: true,
+    });
 
-    await transporter.sendMail(mailOptions);
-
-    // Forward absence alert directly to school official Gmail as well
-    if (isAbsent) {
-      try {
-        await transporter.sendMail({
-          from: `"Mugina Hope Attendance Alert" <${SCHOOL_OFFICIAL_EMAIL}>`,
-          to: SCHOOL_OFFICIAL_EMAIL,
-          subject: `[ATTENDANCE ALERT] ${studentName} (${grade}) Recorded ABSENT on ${date}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #fca5a5; border-radius: 8px;">
-              <div style="background-color: #b91c1c; padding: 12px 16px; border-radius: 6px; color: white;">
-                <h2 style="margin: 0; font-size: 18px;">Mugina Hope Primary & Nursery Academy</h2>
-                <p style="margin: 2px 0 0 0; font-size: 12px; color: #fde047;">Official Discipline & Absence Alert</p>
-              </div>
-              <h3 style="color: #0f172a; margin-top: 16px;">Student Absence Logged</h3>
-              <p><strong>Student Name:</strong> ${studentName}</p>
-              <p><strong>Registration ID:</strong> <code>${studentId || 'N/A'}</code></p>
-              <p><strong>Class:</strong> ${grade}</p>
-              <p><strong>Date:</strong> ${date}</p>
-              <p><strong>Parent Name:</strong> ${parentName || 'Parent'}</p>
-              <p><strong>Parent Gmail:</strong> ${parentEmail}</p>
-              ${notes ? `<p><strong>Discipline Notes:</strong> ${notes}</p>` : ''}
-              <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Automated attendance status dispatch to official school inbox.</p>
-            </div>
-          `,
-        });
-      } catch (adminErr) {
-        console.warn('Notice sending copy to official school gmail:', adminErr);
-      }
+    if (!parentDispatch.success) {
+      return res.status(502).json({
+        success: false,
+        error: parentDispatch.error || 'Failed to dispatch attendance email via SMTP.',
+      });
     }
 
-    return res.json({ success: true, message: `Attendance email dispatched to ${parentEmail} and school Gmail` });
+    if (isAbsent && isValidEmail(SCHOOL_OFFICIAL_EMAIL)) {
+      await sendSchoolEmail({
+        to: SCHOOL_OFFICIAL_EMAIL,
+        subject: `[ATTENDANCE ALERT] ${String(studentName).replace(/[\r\n]+/g, ' ')} (${safeGrade}) Recorded ABSENT on ${safeDate}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #fca5a5; border-radius: 8px;">
+            <div style="background-color: #b91c1c; padding: 12px 16px; border-radius: 6px; color: white;">
+              <h2 style="margin: 0; font-size: 18px;">Mugina Hope Primary & Nursery Academy</h2>
+              <p style="margin: 2px 0 0 0; font-size: 12px; color: #fde047;">Official Discipline & Absence Alert</p>
+            </div>
+            <h3 style="color: #0f172a; margin-top: 16px;">Student Absence Logged</h3>
+            <p><strong>Student Name:</strong> ${safeStudentName}</p>
+            <p><strong>Registration ID:</strong> <code>${safeStudentId}</code></p>
+            <p><strong>Class:</strong> ${safeGrade}</p>
+            <p><strong>Date:</strong> ${safeDate}</p>
+            <p><strong>Parent Name:</strong> ${safeParentName}</p>
+            <p><strong>Parent Email:</strong> ${safeParentEmail}</p>
+            ${safeNotes ? `<p><strong>Discipline Notes:</strong> ${safeNotes}</p>` : ''}
+            <p style="font-size: 12px; color: #64748b; margin-top: 16px;">Automated attendance status dispatch to official school inbox.</p>
+          </div>
+        `,
+        emailType: 'attendance_alert',
+        relatedRef: String(studentId || ''),
+        sanitizedSummary: `Absence copy logged for school admin (${studentName}).`,
+      });
+    }
+
+    return res.json({ success: true, message: `Attendance email dispatched to ${parentEmail}` });
   } catch (error: any) {
     console.error('Attendance Notify Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to dispatch attendance notice' });
   }
 });
 
-// 2b. API Endpoint: Full Daily Attendance Status Report to School Official Gmail
+// 2b. API Endpoint: Full Daily Attendance Status Report to School Official Email (Staff only)
 app.post('/api/attendance/report', async (req, res) => {
   try {
-    const { date, grade, total, present, absent, late, absentList, senderName } = req.body;
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({ error: 'Staff authentication required.' });
+    }
+    if (!isValidEmail(SCHOOL_OFFICIAL_EMAIL)) {
+      return res.status(503).json({
+        success: false,
+        error: 'Official school email (GMAIL_USER / SCHOOL_GMAIL) is not configured.',
+      });
+    }
+    const { date, grade, total, present, absent, late, absentList, senderName } = req.body || {};
+    const cleanDate = String(date || new Date().toISOString().split('T')[0]).trim();
+    const safeDate = escapeHtml(cleanDate);
+    const safeGrade = escapeHtml(grade || 'All Classes');
+    const safeSender = escapeHtml(senderName || staffToken.name || 'Staff Administrator');
+    const safeAbsentList = Array.isArray(absentList) ? absentList : [];
 
-    const subject = `[Daily Attendance Report] Mugina Hope Academy - ${date} (${grade || 'All Classes'})`;
-    const mailOptions = {
-      from: `"Mugina Hope Attendance Desk" <${SCHOOL_OFFICIAL_EMAIL}>`,
+    const dispatch = await sendSchoolEmail({
       to: SCHOOL_OFFICIAL_EMAIL,
-      subject,
+      subject: `[Daily Attendance Report] Mugina Hope Academy - ${cleanDate} (${String(grade || 'All Classes').replace(/[\r\n]+/g, ' ')})`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
           <div style="background-color: #1e3a8a; padding: 14px 18px; border-radius: 6px; color: white;">
             <h2 style="margin: 0; font-size: 20px;">Mugina Hope Primary & Nursery Academy</h2>
             <p style="margin: 2px 0 0 0; font-size: 12px; color: #fde047;">Official Daily Attendance Status Report</p>
           </div>
-          <h3 style="color: #0f172a; margin-top: 18px;">Attendance Summary for ${date}</h3>
-          <p>Class / Level: <strong>${grade || 'All Classes'}</strong> · Logged by: <strong>${senderName || 'Staff Administrator'}</strong></p>
+          <h3 style="color: #0f172a; margin-top: 18px;">Attendance Summary for ${safeDate}</h3>
+          <p>Class / Level: <strong>${safeGrade}</strong> · Logged by: <strong>${safeSender}</strong></p>
           <div style="display: flex; gap: 10px; margin: 16px 0;">
             <div style="background-color: #f1f5f9; padding: 10px; border-radius: 6px; flex: 1; text-align: center;">
               <span style="font-size: 11px; color: #475569; display: block;">Total Learners</span>
-              <strong style="font-size: 18px; color: #0f172a;">${total || 0}</strong>
+              <strong style="font-size: 18px; color: #0f172a;">${Number(total) || 0}</strong>
             </div>
             <div style="background-color: #f0fdf4; padding: 10px; border-radius: 6px; flex: 1; text-align: center;">
               <span style="font-size: 11px; color: #166534; display: block;">Present</span>
-              <strong style="font-size: 18px; color: #15803d;">${present || 0}</strong>
+              <strong style="font-size: 18px; color: #15803d;">${Number(present) || 0}</strong>
             </div>
             <div style="background-color: #fef2f2; padding: 10px; border-radius: 6px; flex: 1; text-align: center;">
               <span style="font-size: 11px; color: #991b1b; display: block;">Absent</span>
-              <strong style="font-size: 18px; color: #b91c1c;">${absent || 0}</strong>
+              <strong style="font-size: 18px; color: #b91c1c;">${Number(absent) || 0}</strong>
             </div>
             <div style="background-color: #fffbeb; padding: 10px; border-radius: 6px; flex: 1; text-align: center;">
               <span style="font-size: 11px; color: #92400e; display: block;">Late</span>
-              <strong style="font-size: 18px; color: #b45309;">${late || 0}</strong>
+              <strong style="font-size: 18px; color: #b45309;">${Number(late) || 0}</strong>
             </div>
           </div>
-          ${absentList && absentList.length > 0 ? `
-            <div style="margin-top: 16px;">
-              <h4 style="color: #b91c1c; margin-bottom: 8px;">Absent Students:</h4>
-              <ul style="padding-left: 20px; font-size: 13px; color: #334155;">
-                ${absentList.map((a: any) => `<li><strong>${a.name}</strong> (${a.grade || grade}) - Parent: ${a.parentEmail || a.parentPhone || 'N/A'}</li>`).join('')}
-              </ul>
-            </div>
-          ` : '<p style="color: #15803d; font-size: 13px;">No absent students recorded.</p>'}
+          ${
+            safeAbsentList.length > 0
+              ? `<div style="margin-top: 16px;">
+                  <h4 style="color: #b91c1c; margin-bottom: 8px;">Absent Students:</h4>
+                  <ul style="padding-left: 20px; font-size: 13px; color: #334155;">
+                    ${safeAbsentList
+                      .map(
+                        (a: any) =>
+                          `<li><strong>${escapeHtml(a?.name)}</strong> (${escapeHtml(a?.grade || grade || '')}) - Parent: ${escapeHtml(a?.parentEmail || a?.parentPhone || 'N/A')}</li>`
+                      )
+                      .join('')}
+                  </ul>
+                </div>`
+              : '<p style="color: #15803d; font-size: 13px;">No absent students recorded.</p>'
+          }
           <p style="font-size: 11px; color: #64748b; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
             Mugina Hope Primary & Nursery Academy · Located Adjacent to Mugina Police Station, Kamonyi, Rwanda
           </p>
         </div>
       `,
-    };
+      emailType: 'attendance_alert',
+      sanitizedSummary: `Daily attendance report sent for ${cleanDate} (${grade || 'All Classes'}).`,
+      allowRetryHtml: true,
+    });
 
-    await transporter.sendMail(mailOptions);
-    return res.json({ success: true, message: 'Daily attendance status report sent to official school Gmail' });
+    if (!dispatch.success) {
+      return res.status(502).json({ success: false, error: dispatch.error || 'Failed to send attendance report.' });
+    }
+    return res.json({ success: true, message: 'Daily attendance status report sent to official school email.' });
   } catch (error: any) {
     console.error('Attendance Report Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to send attendance report' });
   }
 });
 
-// 3a. API Endpoint: New Student Admission Registration
+// 3a. API Endpoint: New Student Admission Registration (Public, rate-limited, HTML-escaped)
 app.post('/api/admissions/register', async (req, res) => {
   try {
+    const clientIp = req.ip || String(req.headers['x-forwarded-for'] || 'unknown');
+    const limit = rateLimitCheck(`admissions:register:${clientIp}`, 10, 15 * 60 * 1000);
+    if (!limit.allowed) {
+      return res.status(429).json({
+        error: `Too many registration requests. Please try again in ${limit.retryAfterSec} seconds.`,
+      });
+    }
+
     const {
       refCode,
       studentName,
@@ -1177,138 +1441,118 @@ app.post('/api/admissions/register', async (req, res) => {
       wantsTransport,
       previousSchool,
       notes,
-    } = req.body;
+    } = req.body || {};
 
     if (!studentName || !parentPhone || !gradeCode) {
       return res.status(400).json({ error: 'Missing required registration fields' });
     }
-
-    const applicationRef = refCode || `MHA-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    // 1. Mandatory Email Notification to School Admin (norbertihimbazwemanzi@gmail.com)
-    const adminAlertOptions = {
-      from: `"Mugina Hope Admissions Desk" <${SCHOOL_OFFICIAL_EMAIL}>`,
-      to: SCHOOL_OFFICIAL_EMAIL,
-      replyTo: parentEmail || undefined,
-      subject: `[NEW REGISTRATION ALERT] Pupil ${studentName} applied for ${gradeCode} (Ref: ${applicationRef})`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 620px; padding: 22px; border: 1px solid #cbd5e1; border-radius: 10px; background-color: #ffffff;">
-          <div style="background-color: #1e3a8a; padding: 14px 18px; border-radius: 8px; color: white;">
-            <h2 style="margin: 0; font-size: 20px;">Mugina Hope Primary & Nursery Academy</h2>
-            <p style="margin: 3px 0 0 0; font-size: 13px; color: #fde047; font-weight: bold;">
-              New Online Student Admission Registered
-            </p>
-          </div>
-
-          <div style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
-            <p style="margin: 0 0 10px 0; font-size: 15px; color: #0f172a;">
-              A new student registration has been submitted and is <strong>waiting for administrator confirmation</strong> in the Staff Portal.
-            </p>
-            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-              <p style="margin: 4px 0; font-size: 14px;"><strong>Application Ref Code:</strong> <code style="background-color: #e0f2fe; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #0369a1;">${applicationRef}</code></p>
-              <p style="margin: 4px 0; font-size: 14px;"><strong>Learner Name:</strong> ${studentName}</p>
-              <p style="margin: 4px 0; font-size: 14px;"><strong>Target Class / Grade:</strong> <strong>${gradeCode}</strong></p>
-              <p style="margin: 4px 0; font-size: 13px;"><strong>Gender / DOB:</strong> ${gender || 'N/A'} · ${dob || 'N/A'}</p>
-              <p style="margin: 4px 0; font-size: 13px;"><strong>Parent / Guardian:</strong> ${parentName} (${parentPhone})</p>
-              <p style="margin: 4px 0; font-size: 13px;"><strong>Parent Gmail:</strong> ${parentEmail || 'Not provided'}</p>
-              <p style="margin: 4px 0; font-size: 13px;"><strong>Residential Location:</strong> ${sector || 'Mugina, Kamonyi'}</p>
-              <p style="margin: 4px 0; font-size: 13px;"><strong>Hot Lunch Service:</strong> ${wantsLunch ? 'Yes (Requested)' : 'No'}</p>
-              <p style="margin: 4px 0; font-size: 13px;"><strong>School Van Pick-up:</strong> ${wantsTransport ? 'Yes (Requested)' : 'No'}</p>
-              ${previousSchool ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Previous School:</strong> ${previousSchool}</p>` : ''}
-              ${notes ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Notes:</strong> ${notes}</p>` : ''}
-            </div>
-          </div>
-
-          <div style="padding: 16px 0;">
-            <p style="margin: 0 0 10px 0; font-size: 13px; color: #b45309; font-weight: bold;">
-              Action Required: Please log in to the Admin Portal to review, verify required documentation, and confirm this registration.
-            </p>
-            <p style="margin: 0; font-size: 12px; color: #64748b;">
-              Upon your confirmation, an automated acceptance notice and student portal credentials will be dispatched to the parent.
-            </p>
-          </div>
-
-          <div style="margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-size: 11px; color: #94a3b8;">
-            Mugina Hope Academy · Adjacent to Mugina Police Station, Kamonyi, Southern Province, Rwanda
-          </div>
-        </div>
-      `,
-    };
-
-    try {
-      await transporter.sendMail(adminAlertOptions);
-    } catch (adminErr) {
-      console.warn('Admin registration notification dispatch note:', adminErr);
+    const cleanParentEmail = String(parentEmail || '').trim();
+    if (cleanParentEmail && !isValidEmail(cleanParentEmail)) {
+      return res.status(400).json({ error: 'Invalid parent email address format.' });
     }
 
-    // 2. Automated Confirmation Receipt to Parent's Gmail
+    const applicationRef = String(refCode || `MHA-2026-${crypto.randomInt(1000, 9999)}`).trim();
+    const safeRef = escapeHtml(applicationRef);
+    const safeStudent = escapeHtml(studentName);
+    const safeGrade = escapeHtml(gradeCode);
+    const safeGender = escapeHtml(gender || 'N/A');
+    const safeDob = escapeHtml(dob || 'N/A');
+    const safeParent = escapeHtml(parentName || 'Parent / Guardian');
+    const safePhone = escapeHtml(parentPhone);
+    const safeEmail = escapeHtml(cleanParentEmail || 'Not provided');
+    const safeSector = escapeHtml(sector || 'Mugina, Kamonyi');
+    const safePrevSchool = previousSchool ? escapeHtml(previousSchool) : '';
+    const safeNotes = notes ? escapeHtml(notes) : '';
+
+    let adminNotified = false;
+    if (isValidEmail(SCHOOL_OFFICIAL_EMAIL)) {
+      const adminRes = await sendSchoolEmail({
+        to: SCHOOL_OFFICIAL_EMAIL,
+        replyTo: cleanParentEmail || undefined,
+        subject: `[NEW REGISTRATION ALERT] Pupil ${String(studentName).replace(/[\r\n]+/g, ' ')} applied for ${String(gradeCode).replace(/[\r\n]+/g, ' ')} (Ref: ${applicationRef})`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 620px; padding: 22px; border: 1px solid #cbd5e1; border-radius: 10px; background-color: #ffffff;">
+            <div style="background-color: #1e3a8a; padding: 14px 18px; border-radius: 8px; color: white;">
+              <h2 style="margin: 0; font-size: 20px;">Mugina Hope Primary & Nursery Academy</h2>
+              <p style="margin: 3px 0 0 0; font-size: 13px; color: #fde047; font-weight: bold;">New Online Student Admission Registered</p>
+            </div>
+            <div style="padding: 16px 0; border-bottom: 1px solid #e2e8f0;">
+              <p style="margin: 0 0 10px 0; font-size: 15px; color: #0f172a;">
+                A new student registration has been submitted and is <strong>waiting for administrator confirmation</strong> in the Staff Portal.
+              </p>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Application Ref Code:</strong> <code style="background-color: #e0f2fe; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #0369a1;">${safeRef}</code></p>
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Learner Name:</strong> ${safeStudent}</p>
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Target Class / Grade:</strong> <strong>${safeGrade}</strong></p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Gender / DOB:</strong> ${safeGender} · ${safeDob}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Parent / Guardian:</strong> ${safeParent} (${safePhone})</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Parent Email:</strong> ${safeEmail}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Residential Location:</strong> ${safeSector}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Hot Lunch Service:</strong> ${wantsLunch ? 'Yes (Requested)' : 'No'}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>School Van Pick-up:</strong> ${wantsTransport ? 'Yes (Requested)' : 'No'}</p>
+                ${safePrevSchool ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Previous School:</strong> ${safePrevSchool}</p>` : ''}
+                ${safeNotes ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Notes:</strong> ${safeNotes}</p>` : ''}
+              </div>
+            </div>
+            <div style="margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-size: 11px; color: #94a3b8;">
+              Mugina Hope Academy · Adjacent to Mugina Police Station, Kamonyi, Southern Province, Rwanda
+            </div>
+          </div>
+        `,
+        emailType: 'admission_received',
+        relatedRef: applicationRef,
+        sanitizedSummary: `New admission application logged for ${studentName} (${gradeCode}) - Ref ${applicationRef}.`,
+      });
+      adminNotified = adminRes.success;
+    }
+
     let parentReceiptSent = false;
-    if (parentEmail && parentEmail.includes('@')) {
-      const parentMailOptions = {
-        from: `"Mugina Hope Primary & Nursery Academy" <${SCHOOL_OFFICIAL_EMAIL}>`,
-        to: parentEmail,
-        subject: `[Mugina Hope Academy] Registration Received for ${studentName} - Ref: ${applicationRef}`,
+    let emailError: string | undefined;
+    if (cleanParentEmail && isValidEmail(cleanParentEmail)) {
+      const parentRes = await sendSchoolEmail({
+        to: cleanParentEmail,
+        subject: `[Mugina Hope Academy] Registration Received for ${String(studentName).replace(/[\r\n]+/g, ' ')} - Ref: ${applicationRef}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 22px; border: 1px solid #cbd5e1; border-radius: 10px; background-color: #ffffff;">
             <div style="background-color: #1e3a8a; padding: 14px 18px; border-radius: 8px; color: white;">
               <h2 style="margin: 0; font-size: 20px;">Mugina Hope Primary & Nursery Academy</h2>
               <p style="margin: 3px 0 0 0; font-size: 12px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
             </div>
-
             <div style="padding: 18px 0; border-bottom: 1px solid #e2e8f0;">
-              <h3 style="color: #0f172a; margin: 0 0 12px 0;">Muraho, ${parentName}!</h3>
+              <h3 style="color: #0f172a; margin: 0 0 12px 0;">Muraho, ${safeParent}!</h3>
               <p style="font-size: 14px; line-height: 1.6; color: #334155; margin: 0 0 14px 0;">
-                Thank you for applying to enroll <strong>${studentName}</strong> into <strong>${gradeCode}</strong> at Mugina Hope Academy.
+                Thank you for applying to enroll <strong>${safeStudent}</strong> into <strong>${safeGrade}</strong> at Mugina Hope Academy.
               </p>
-              
               <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 14px; margin: 14px 0;">
-                <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #92400e;">
-                  Current Status: PENDING ADMINISTRATOR CONFIRMATION
-                </p>
-                <p style="margin: 0; font-size: 13px; color: #78350f;">
-                  Your application has been safely registered and forwarded directly to School Administrator Norbert Ihimbazwe Manzi for verification.
-                </p>
+                <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #92400e;">Current Status: PENDING ADMINISTRATOR CONFIRMATION</p>
+                <p style="margin: 0; font-size: 13px; color: #78350f;">Your application has been safely registered and forwarded to the Admissions Office for verification.</p>
               </div>
-
               <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                <p style="margin: 4px 0; font-size: 13px;"><strong>Your Application Reference Code:</strong> <code style="font-size: 15px; font-weight: bold; color: #1e3a8a;">${applicationRef}</code></p>
-                <p style="margin: 4px 0; font-size: 13px;"><strong>Target Class:</strong> ${gradeCode}</p>
-                <p style="margin: 4px 0; font-size: 13px;"><strong>Registered Contact:</strong> ${parentPhone}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Your Application Reference Code:</strong> <code style="font-size: 15px; font-weight: bold; color: #1e3a8a;">${safeRef}</code></p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Target Class:</strong> ${safeGrade}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Registered Contact:</strong> ${safePhone}</p>
               </div>
             </div>
-
-            <div style="padding: 16px 0;">
-              <h4 style="color: #1e3a8a; margin: 0 0 8px 0;">What Happens Next?</h4>
-              <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: #475569; line-height: 1.6;">
-                <li>Administrator review will be completed within 24–48 hours.</li>
-                <li>Once confirmed, you will receive an official approval email with your child's assigned Student ID & Portal credentials right here at <strong>${parentEmail}</strong>.</li>
-                <li>You can also visit our website anytime to track your live status and <strong>chat directly with the school administration</strong> using your reference code: <code>${applicationRef}</code>.</li>
-              </ol>
-            </div>
-
             <div style="margin-top: 16px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; font-size: 12px; color: #166534;">
               Campus Location: Mugina Sector, Kamonyi District (Adjacent to Mugina Police Station) · Helpline: +250 788 258 786
             </div>
           </div>
         `,
-      };
-
-      try {
-        await transporter.sendMail(parentMailOptions);
-        parentReceiptSent = true;
-      } catch (parentErr) {
-        console.warn('Parent registration receipt dispatch note:', parentErr);
-      }
+        emailType: 'admission_received',
+        relatedRef: applicationRef,
+        sanitizedSummary: `Parent receipt dispatched to ${cleanParentEmail} for Ref ${applicationRef}.`,
+      });
+      parentReceiptSent = parentRes.success;
+      if (!parentRes.success) emailError = parentRes.error;
     }
 
-    // 3. Initialize Chat Thread in Server Store
     const threads = loadServerChats();
     const existingIdx = threads.findIndex((t) => t.refCode === applicationRef);
     const initialMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       sender: 'system',
       senderName: 'Mugina Hope Administration Desk',
-      text: `Registration received for ${studentName} (${gradeCode}). Application is currently under review by School Administrator Norbert Ihimbazwe Manzi.`,
+      text: `Registration received for ${String(studentName).trim()} (${String(gradeCode).trim()}). Application is currently under review by School Administration.`,
       createdAt: new Date().toISOString(),
     };
 
@@ -1319,11 +1563,11 @@ app.post('/api/admissions/register', async (req, res) => {
     } else {
       threads.unshift({
         refCode: applicationRef,
-        studentName,
-        parentName,
-        parentEmail,
-        parentPhone,
-        gradeCode,
+        studentName: String(studentName).trim(),
+        parentName: String(parentName || 'Parent / Guardian').trim(),
+        parentEmail: cleanParentEmail,
+        parentPhone: String(parentPhone).trim(),
+        gradeCode: String(gradeCode).trim(),
         status: 'Pending Confirmation',
         messages: [initialMsg],
         updatedAt: new Date().toISOString(),
@@ -1334,8 +1578,12 @@ app.post('/api/admissions/register', async (req, res) => {
     return res.json({
       success: true,
       refCode: applicationRef,
-      message: 'Registration submitted successfully. Admin notified at official school Gmail.',
+      message: parentReceiptSent
+        ? 'Registration submitted and confirmation email dispatched.'
+        : 'Registration saved successfully.',
+      adminNotified,
       parentReceiptSent,
+      ...(emailError ? { emailWarning: emailError } : {}),
     });
   } catch (error: any) {
     console.error('Registration API Error:', error);
@@ -1343,86 +1591,91 @@ app.post('/api/admissions/register', async (req, res) => {
   }
 });
 
-// 3b. API Endpoint: Admissions Confirmation & Student Credentials Feedback
+// 3b. API Endpoint: Admissions Confirmation & Student Credentials Feedback (Authorized Admissions Staff only)
 app.post('/api/admissions/confirm', async (req, res) => {
   try {
-    const { studentName, studentId, grade, parentName, parentEmail, studentUsername, studentPassword, feedbackNotes, refCode } = req.body;
-
-    if (!parentEmail || !studentName) {
-      return res.status(400).json({ error: 'Missing required admission fields' });
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
+      return res.status(403).json({ error: 'Forbidden: Only authorized Admissions staff may confirm admissions.' });
     }
 
-    const mailOptions = {
-      from: `"Mugina Hope Academy - Administration" <${SCHOOL_OFFICIAL_EMAIL}>`,
-      to: parentEmail,
-      subject: `Official Admission Confirmation & Student Portal Credentials: ${studentName}`,
+    const { studentName, studentId, grade, parentName, parentEmail, studentUsername, studentPassword, feedbackNotes, refCode } = req.body || {};
+
+    if (!isValidEmail(parentEmail) || !studentName) {
+      return res.status(400).json({ error: 'Valid studentName and parentEmail are required.' });
+    }
+
+    const safeStudent = escapeHtml(studentName);
+    const safeGrade = escapeHtml(grade || '');
+    const safeParent = escapeHtml(parentName || 'Parent / Guardian');
+    const safeId = escapeHtml(studentId || 'MHA-STU-2026');
+    const safeUsername = escapeHtml(studentUsername || studentId || '');
+    const cleanTempPassword = String(studentPassword || '').trim();
+    const safeNotes = feedbackNotes ? escapeHtml(feedbackNotes) : '';
+
+    const parentDispatch = await sendSchoolEmail({
+      to: String(parentEmail).trim(),
+      subject: `Official Admission Confirmation & Student Portal Credentials: ${String(studentName).replace(/[\r\n]+/g, ' ')}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #93c5fd; border-radius: 8px;">
           <div style="background-color: #1e3a8a; padding: 14px 18px; border-radius: 6px; color: white;">
             <h2 style="margin: 0; font-size: 20px;">Mugina Hope Primary & Nursery Academy</h2>
             <p style="margin: 2px 0 0 0; font-size: 12px; color: #fde047;">Official Acceptance & Enrollment Notification</p>
           </div>
-          <h3 style="color: #0f172a; margin-top: 20px;">Congratulations, ${parentName || 'Parent / Guardian'}!</h3>
+          <h3 style="color: #0f172a; margin-top: 20px;">Congratulations, ${safeParent}!</h3>
           <p style="font-size: 14px; line-height: 1.6;">
-            We are pleased to inform you that the registration for <strong>${studentName}</strong> into <strong>${grade}</strong> has been <strong>OFFICIALLY CONFIRMED & APPROVED</strong> by School Administrator Norbert Ihimbazwe Manzi and the Board of Studies.
+            We are pleased to inform you that the registration for <strong>${safeStudent}</strong> into <strong>${safeGrade}</strong> has been <strong>OFFICIALLY CONFIRMED & APPROVED</strong> by ${escapeHtml(staffToken.name)}.
           </p>
-
           <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin: 18px 0;">
             <h4 style="margin: 0 0 10px 0; color: #1e3a8a; font-size: 14px;">Student Portal Credentials:</h4>
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Student Registration ID:</strong> <code>${studentId || 'MHA-STU-2026'}</code></p>
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Username / Code:</strong> <code>${studentUsername || studentId}</code></p>
-            <p style="margin: 4px 0; font-size: 13px;"><strong>Temporary Password:</strong> <code>${studentPassword || 'mugina@student'}</code></p>
-            <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748b;">(Keep these credentials safe for viewing attendance and school reports)</p>
+            <p style="margin: 4px 0; font-size: 13px;"><strong>Student Registration ID:</strong> <code>${safeId}</code></p>
+            <p style="margin: 4px 0; font-size: 13px;"><strong>Username / Code:</strong> <code>${safeUsername}</code></p>
+            ${
+              cleanTempPassword
+                ? `<p style="margin: 4px 0; font-size: 13px;"><strong>Temporary Password:</strong> <code>${escapeHtml(cleanTempPassword)}</code></p>`
+                : `<p style="margin: 4px 0; font-size: 13px;">Use <strong>Forgot Password</strong> on the Student Portal sign-in screen to set your password.</p>`
+            }
           </div>
-
-          ${feedbackNotes ? `
-            <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px; margin: 16px 0; font-size: 13px; color: #1e3a8a;">
-              <strong>Administration Feedback:</strong> ${feedbackNotes}
-            </div>
-          ` : ''}
-
-          <div style="font-size: 13px; color: #334155; line-height: 1.5;">
-            <p><strong>Next Steps:</strong></p>
-            <ol style="padding-left: 20px;">
-              <li>Visit the bursar's office next to Mugina Police Station to collect the uniform pack.</li>
-              <li>Attend new learner orientation with class teacher.</li>
-            </ol>
-          </div>
-
+          ${
+            safeNotes
+              ? `<div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px; margin: 16px 0; font-size: 13px; color: #1e3a8a;"><strong>Administration Feedback:</strong> ${safeNotes}</div>`
+              : ''
+          }
           <div style="margin-top: 24px; padding-top: 14px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">
             Mugina Hope Primary & Nursery Academy · Kamonyi District · Tel: +250 788 258 786
           </div>
         </div>
       `,
-    };
+      emailType: 'admission_approved',
+      relatedRef: String(refCode || studentId || ''),
+      sanitizedSummary: `Admission confirmation sent to ${parentEmail} for ${studentName} (${studentId || 'N/A'}).`,
+    });
 
-    await transporter.sendMail(mailOptions);
-
-    // Send copy to School Official Gmail (norbertihimbazwemanzi@gmail.com)
-    try {
-      await transporter.sendMail({
-        from: `"Mugina Hope Admissions Confirmations" <${SCHOOL_OFFICIAL_EMAIL}>`,
+    if (isValidEmail(SCHOOL_OFFICIAL_EMAIL)) {
+      await sendSchoolEmail({
         to: SCHOOL_OFFICIAL_EMAIL,
-        subject: `[CONFIRMATION DISPATCHED] ${studentName} (${grade}) Confirmed - ID: ${studentId}`,
+        subject: `[CONFIRMATION DISPATCHED] ${String(studentName).replace(/[\r\n]+/g, ' ')} (${safeGrade}) Confirmed - ID: ${safeId}`,
         html: `
           <div style="font-family: Arial, sans-serif; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px;">
             <h3 style="color: #1e3a8a;">Registration Confirmed & Dispatched</h3>
-            <p><strong>Student:</strong> ${studentName} (${grade})</p>
-            <p><strong>Assigned ID:</strong> <code>${studentId}</code></p>
-            <p><strong>Parent Gmail:</strong> ${parentEmail}</p>
-            <p><strong>Parent Name:</strong> ${parentName}</p>
-            <p><strong>Feedback:</strong> ${feedbackNotes || 'None'}</p>
+            <p><strong>Student:</strong> ${safeStudent} (${safeGrade})</p>
+            <p><strong>Assigned ID:</strong> <code>${safeId}</code></p>
+            <p><strong>Parent Email:</strong> ${escapeHtml(parentEmail)}</p>
+            <p><strong>Parent Name:</strong> ${safeParent}</p>
+            <p><strong>Feedback:</strong> ${safeNotes || 'None'}</p>
           </div>
         `,
+        emailType: 'admission_approved',
+        relatedRef: String(refCode || studentId || ''),
+        sanitizedSummary: `Admin confirmation copy logged for ${studentName}.`,
       });
-    } catch (e) {
-      console.warn('Copy to admin notice:', e);
     }
 
-    // Update Chat Thread to Confirmed & add system message
     const threads = loadServerChats();
     const targetThread = threads.find(
-      (t) => (refCode && t.refCode === refCode) || (t.studentName.toLowerCase() === studentName.toLowerCase())
+      (t) =>
+        (refCode && t.refCode === refCode) ||
+        t.studentName.toLowerCase() === String(studentName).toLowerCase()
     );
     if (targetThread) {
       targetThread.status = 'Confirmed & Enrolled';
@@ -1431,13 +1684,19 @@ app.post('/api/admissions/confirm', async (req, res) => {
         id: `msg-${Date.now()}`,
         sender: 'system',
         senderName: 'Mugina Hope Administration Desk',
-        text: `🎉 Registration confirmed! ${studentName} has been officially approved and enrolled. Assigned Student Registration ID: ${studentId}. Welcome to Mugina Hope Academy!`,
+        text: `Registration confirmed! ${String(studentName).trim()} has been officially approved and enrolled. Assigned Student Registration ID: ${String(studentId || '').trim()}. Welcome to Mugina Hope Academy!`,
         createdAt: new Date().toISOString(),
       });
       saveServerChats(threads);
     }
 
-    return res.json({ success: true, message: `Admission approval email dispatched to ${parentEmail} and admin notified` });
+    if (!parentDispatch.success) {
+      return res.status(502).json({
+        success: false,
+        error: parentDispatch.error || 'Confirmation saved, but SMTP email delivery failed.',
+      });
+    }
+    return res.json({ success: true, message: `Admission approval email dispatched to ${parentEmail}.` });
   } catch (error: any) {
     console.error('Admission Confirmation Error:', error);
     return res.status(500).json({ error: error.message || 'Failed to dispatch admission confirmation' });
@@ -1452,14 +1711,21 @@ app.get('/api/chats', (req, res) => {
 
 app.get('/api/chats/:refCode', (req, res) => {
   const { refCode } = req.params;
+  const staffToken = verifyStaffToken(req);
   const threads = loadServerChats();
-  const search = refCode.trim().toLowerCase();
+  const search = String(refCode || '').trim().toLowerCase();
   const match = threads.find(
-    (t) => t.refCode.toLowerCase() === search || (t.parentEmail && t.parentEmail.toLowerCase() === search)
+    (t) =>
+      t.refCode.toLowerCase() === search ||
+      (Boolean(staffToken) && t.parentEmail && t.parentEmail.toLowerCase() === search)
   );
 
   if (!match) {
     return res.status(404).json({ error: 'Chat thread not found for reference code' });
+  }
+  if (!staffToken) {
+    const { parentEmail: _pe, parentPhone: _pp, ...safeThread } = match;
+    return res.json({ success: true, thread: safeThread });
   }
   return res.json({ success: true, thread: match });
 });
@@ -1467,28 +1733,51 @@ app.get('/api/chats/:refCode', (req, res) => {
 app.post('/api/chats/:refCode/messages', async (req, res) => {
   try {
     const { refCode } = req.params;
-    const { sender, senderName, text } = req.body;
+    const { sender, senderName, text } = req.body || {};
 
     if (!text || !sender) {
       return res.status(400).json({ error: 'Message text and sender are required' });
     }
 
+    const staffToken = verifyStaffToken(req);
+    if (sender === 'admin' && !staffToken) {
+      return res.status(403).json({ error: 'Forbidden: Only authenticated staff may send admin replies.' });
+    }
+
+    const effectiveSender: 'admin' | 'parent' = staffToken && sender === 'admin' ? 'admin' : 'parent';
+    if (effectiveSender === 'parent') {
+      const clientIp = req.ip || String(req.headers['x-forwarded-for'] || 'unknown');
+      const limit = rateLimitCheck(`chat:parent:${refCode}:${clientIp}`, 15, 15 * 60 * 1000);
+      if (!limit.allowed) {
+        return res.status(429).json({
+          error: `Too many chat messages. Please wait ${limit.retryAfterSec} seconds.`,
+        });
+      }
+    }
+
+    const cleanText = String(text).trim();
+    const cleanRef = String(refCode).trim();
     const threads = loadServerChats();
-    let thread = threads.find((t) => t.refCode.toLowerCase() === refCode.trim().toLowerCase());
+    let thread = threads.find((t) => t.refCode.toLowerCase() === cleanRef.toLowerCase());
+
+    const resolvedSenderName =
+      effectiveSender === 'admin'
+        ? String(staffToken?.name || senderName || 'School Administration')
+        : String(senderName || 'Parent').trim();
 
     const newMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
-      sender: sender as 'parent' | 'admin',
-      senderName: senderName || (sender === 'admin' ? 'Norbert Ihimbazwe Manzi (Admin)' : 'Parent'),
-      text: text.trim(),
+      sender: effectiveSender,
+      senderName: resolvedSenderName,
+      text: cleanText,
       createdAt: new Date().toISOString(),
     };
 
     if (!thread) {
       thread = {
-        refCode,
+        refCode: cleanRef,
         studentName: 'Applicant',
-        parentName: senderName || 'Parent',
+        parentName: resolvedSenderName,
         gradeCode: 'General Inquiry',
         status: 'Pending Confirmation',
         messages: [newMessage],
@@ -1502,56 +1791,50 @@ app.post('/api/chats/:refCode/messages', async (req, res) => {
 
     saveServerChats(threads);
 
-    // If Parent sent message -> Notify Admin via Gmail
-    if (sender === 'parent') {
-      try {
-        await transporter.sendMail({
-          from: `"Mugina Hope Applicant Chat" <${SCHOOL_OFFICIAL_EMAIL}>`,
-          to: SCHOOL_OFFICIAL_EMAIL,
-          subject: `[New Parent Message] Ref: ${refCode} from ${senderName || 'Parent'}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 18px; border: 1px solid #e2e8f0; border-radius: 8px;">
-              <h3 style="color: #1e3a8a; margin-top: 0;">New Message from Applicant Parent</h3>
-              <p><strong>Ref Code:</strong> <code>${refCode}</code></p>
-              <p><strong>Sender:</strong> ${senderName || 'Parent'}</p>
-              <p><strong>Student:</strong> ${thread.studentName} (${thread.gradeCode})</p>
-              <div style="background-color: #f1f5f9; padding: 12px; border-left: 4px solid #3b82f6; border-radius: 4px; margin: 12px 0;">
-                <p style="margin: 0; font-size: 14px;">${text}</p>
-              </div>
-              <p style="font-size: 12px; color: #64748b;">Reply directly in the Admin Portal Applicant Chat tab.</p>
+    if (effectiveSender === 'parent' && isValidEmail(SCHOOL_OFFICIAL_EMAIL)) {
+      await sendSchoolEmail({
+        to: SCHOOL_OFFICIAL_EMAIL,
+        subject: `[New Parent Message] Ref: ${cleanRef.replace(/[\r\n]+/g, ' ')} from ${resolvedSenderName.replace(/[\r\n]+/g, ' ')}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 18px; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <h3 style="color: #1e3a8a; margin-top: 0;">New Message from Applicant Parent</h3>
+            <p><strong>Ref Code:</strong> <code>${escapeHtml(cleanRef)}</code></p>
+            <p><strong>Sender:</strong> ${escapeHtml(resolvedSenderName)}</p>
+            <p><strong>Student:</strong> ${escapeHtml(thread.studentName)} (${escapeHtml(thread.gradeCode)})</p>
+            <div style="background-color: #f1f5f9; padding: 12px; border-left: 4px solid #3b82f6; border-radius: 4px; margin: 12px 0;">
+              <p style="margin: 0; font-size: 14px;">${escapeHtml(cleanText)}</p>
             </div>
-          `,
-        });
-      } catch (err) {
-        console.warn('Parent message notification note:', err);
-      }
+            <p style="font-size: 12px; color: #64748b;">Reply directly in the Admin Portal Applicant Chat tab.</p>
+          </div>
+        `,
+        emailType: 'general',
+        relatedRef: cleanRef,
+        sanitizedSummary: `Parent chat message received on Ref ${cleanRef}.`,
+      });
     }
 
-    // If Admin sent message -> Notify Parent via Gmail
-    if (sender === 'admin' && thread.parentEmail && thread.parentEmail.includes('@')) {
-      try {
-        await transporter.sendMail({
-          from: `"Mugina Hope Academy Administration" <${SCHOOL_OFFICIAL_EMAIL}>`,
-          to: thread.parentEmail,
-          subject: `[Mugina Hope Academy] Message from Administrator Norbert Ihimbazwe Manzi regarding ${thread.studentName}`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px;">
-              <h3 style="color: #1e3a8a; margin-top: 0;">Message from School Administration</h3>
-              <p>Dear ${thread.parentName || 'Parent'},</p>
-              <p>School Administrator Norbert Ihimbazwe Manzi sent a message regarding application <strong>${refCode}</strong> for <strong>${thread.studentName}</strong>:</p>
-              <div style="background-color: #eff6ff; padding: 14px; border-left: 4px solid #2563eb; border-radius: 6px; margin: 16px 0;">
-                <p style="margin: 0; font-size: 14px; color: #1e3a8a; font-weight: 500;">${text}</p>
-              </div>
-              <p style="font-size: 13px; color: #475569;">You can reply to this message anytime directly in the Applicant Chat console on our school website.</p>
-              <p style="font-size: 11px; color: #94a3b8; margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
-                Mugina Hope Primary & Nursery Academy · Kamonyi District, Rwanda
-              </p>
+    if (effectiveSender === 'admin' && thread.parentEmail && isValidEmail(thread.parentEmail)) {
+      await sendSchoolEmail({
+        to: thread.parentEmail,
+        subject: `[Mugina Hope Academy] Message regarding ${thread.studentName.replace(/[\r\n]+/g, ' ')}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px;">
+            <h3 style="color: #1e3a8a; margin-top: 0;">Message from School Administration</h3>
+            <p>Dear ${escapeHtml(thread.parentName || 'Parent')},</p>
+            <p>${escapeHtml(resolvedSenderName)} sent a message regarding application <strong>${escapeHtml(cleanRef)}</strong> for <strong>${escapeHtml(thread.studentName)}</strong>:</p>
+            <div style="background-color: #eff6ff; padding: 14px; border-left: 4px solid #2563eb; border-radius: 6px; margin: 16px 0;">
+              <p style="margin: 0; font-size: 14px; color: #1e3a8a; font-weight: 500;">${escapeHtml(cleanText)}</p>
             </div>
-          `,
-        });
-      } catch (err) {
-        console.warn('Admin message dispatch note to parent:', err);
-      }
+            <p style="font-size: 13px; color: #475569;">You can reply to this message anytime directly in the Applicant Chat console on our school website.</p>
+            <p style="font-size: 11px; color: #94a3b8; margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+              Mugina Hope Primary & Nursery Academy · Kamonyi District, Rwanda
+            </p>
+          </div>
+        `,
+        emailType: 'general',
+        relatedRef: cleanRef,
+        sanitizedSummary: `Admin reply emailed to parent for Ref ${cleanRef}.`,
+      });
     }
 
     return res.json({ success: true, message: newMessage });
@@ -1561,72 +1844,89 @@ app.post('/api/chats/:refCode/messages', async (req, res) => {
   }
 });
 
-// 4. API Endpoint: File / Asset Upload handler (Cross-Device Shared Storage)
+// 4. API Endpoint: File / Asset Upload handler (Authenticated staff/students only, strict extension allowlist)
+const ALLOWED_UPLOAD_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'pdf', 'doc', 'docx', 'txt']);
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 app.post('/api/upload', (req, res) => {
   try {
-    const { fileData, fileName, category, title, description, caption } = req.body;
+    const staffToken = verifyStaffToken(req);
+    const studentToken = verifyStudentToken(req);
+    if (!staffToken && !studentToken) {
+      return res.status(401).json({ error: 'Authentication required to upload files.' });
+    }
+
+    const { fileData, fileName, category, title, description, caption } = req.body || {};
     if (!fileData || !title) {
       return res.status(400).json({ error: 'fileData and title are required' });
     }
-
-    let publicUrl = fileData;
-
-    // If fileData is base64 data (image or document), persist it to disk in uploads directory so all devices can view/download it
-    if (typeof fileData === 'string' && fileData.startsWith('data:')) {
-      try {
-        const imgMatches = fileData.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
-        const docMatches = fileData.match(/^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/);
-        if (imgMatches && imgMatches.length === 3) {
-          const ext = imgMatches[1] === 'jpeg' ? 'jpg' : imgMatches[1].replace('+xml', '');
-          const base64Content = imgMatches[2];
-          const buffer = Buffer.from(base64Content, 'base64');
-          const cleanName = (fileName || title || 'asset').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
-          const savedFileName = `${Date.now()}_${cleanName}.${ext}`;
-          const filePath = path.join(uploadsDir, savedFileName);
-
-          fs.writeFileSync(filePath, buffer);
-          publicUrl = `/uploads/${savedFileName}`;
-        } else if (docMatches && docMatches.length === 3) {
-          const mime = docMatches[1];
-          const rawExt = path.extname(fileName || '').replace('.', '').toLowerCase();
-          const ext =
-            rawExt ||
-            (mime.includes('pdf')
-              ? 'pdf'
-              : mime.includes('wordprocessingml')
-              ? 'docx'
-              : mime.includes('msword')
-              ? 'doc'
-              : mime.includes('plain')
-              ? 'txt'
-              : 'bin');
-          const buffer = Buffer.from(docMatches[2], 'base64');
-          const cleanName = (fileName || title || 'doc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 36);
-          const savedFileName = `${Date.now()}_${cleanName}.${ext}`;
-          const filePath = path.join(uploadsDir, savedFileName);
-          fs.writeFileSync(filePath, buffer);
-          publicUrl = `/uploads/${savedFileName}`;
-        }
-      } catch (writeErr) {
-        console.warn('Error saving file buffer to uploads dir:', writeErr);
-      }
+    if (!staffToken && category !== 'homework') {
+      return res.status(403).json({ error: 'Forbidden: Students may only upload homework attachments.' });
     }
 
-    // Returns formatted asset object ready for gallery consumption
+    let publicUrl = String(fileData);
+
+    if (typeof fileData === 'string' && fileData.startsWith('data:')) {
+      const dataMatch = fileData.match(/^data:([a-zA-Z0-9.+/-]+);base64,(.+)$/);
+      if (!dataMatch || dataMatch.length !== 3) {
+        return res.status(400).json({ error: 'Invalid base64 upload payload.' });
+      }
+      const mime = dataMatch[1].toLowerCase();
+      if (mime.includes('svg') || mime.includes('html') || mime.includes('javascript')) {
+        return res.status(400).json({ error: 'Executable or SVG file uploads are not permitted.' });
+      }
+
+      const rawExt = path.extname(String(fileName || '')).replace('.', '').toLowerCase();
+      let ext = rawExt;
+      if (!ext) {
+        if (mime === 'image/jpeg' || mime === 'image/jpg') ext = 'jpg';
+        else if (mime === 'image/png') ext = 'png';
+        else if (mime === 'image/webp') ext = 'webp';
+        else if (mime === 'application/pdf') ext = 'pdf';
+        else if (mime.includes('wordprocessingml')) ext = 'docx';
+        else if (mime.includes('msword')) ext = 'doc';
+        else if (mime.includes('plain')) ext = 'txt';
+      }
+      if (!ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+        return res.status(400).json({
+          error: `Unsupported file type ".${ext}". Allowed: jpg, jpeg, png, webp, pdf, doc, docx, txt.`,
+        });
+      }
+
+      const buffer = Buffer.from(dataMatch[2], 'base64');
+      if (buffer.length > MAX_UPLOAD_BYTES) {
+        return res.status(413).json({ error: 'File exceeds the 10 MB maximum upload size.' });
+      }
+
+      const cleanName = String(fileName || title || 'asset')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .slice(0, 36);
+      const savedFileName = `${Date.now()}_${cleanName}.${ext}`;
+      const filePath = path.resolve(uploadsDir, savedFileName);
+      if (!filePath.startsWith(uploadsDir + path.sep)) {
+        return res.status(403).json({ error: 'Invalid upload destination path.' });
+      }
+      fs.writeFileSync(filePath, buffer);
+      publicUrl = `/uploads/${savedFileName}`;
+    } else if (!/^https?:\/\//i.test(publicUrl)) {
+      return res.status(400).json({ error: 'Invalid file URL format.' });
+    }
+
     const newAsset = {
       id: `asset-${Date.now()}`,
-      title,
+      title: String(title).trim(),
       category: category || 'classrooms',
-      description: description || title,
-      caption: caption || title,
+      description: String(description || title).trim(),
+      caption: String(caption || title).trim(),
       imageSrc: publicUrl,
       createdAt: new Date().toISOString(),
     };
 
-    // Persist into server gallery store
-    const currentItems = loadServerGallery();
-    const updatedItems = [newAsset, ...currentItems.filter((i: any) => i.id !== newAsset.id)];
-    saveServerGallery(updatedItems);
+    if (staffToken && !['documents', 'homework', 'avatars'].includes(String(category || ''))) {
+      const currentItems = loadServerGallery();
+      const updatedItems = [newAsset, ...currentItems.filter((i: any) => i.id !== newAsset.id)];
+      saveServerGallery(updatedItems);
+    }
 
     return res.json({ success: true, asset: newAsset });
   } catch (error: any) {
@@ -1634,7 +1934,7 @@ app.post('/api/upload', (req, res) => {
   }
 });
 
-// 5. API Endpoints: Shared Cross-Device School Gallery
+// 5. API Endpoints: Shared Cross-Device School Gallery (Public read, Staff write/delete)
 app.get('/api/gallery', (req, res) => {
   const items = loadServerGallery();
   res.json({ success: true, items });
@@ -1642,6 +1942,10 @@ app.get('/api/gallery', (req, res) => {
 
 app.post('/api/gallery', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({ error: 'Staff authentication required to update gallery.' });
+    }
     if (Array.isArray(req.body?.items)) {
       const nextItems = req.body.items;
       saveServerGallery(nextItems);
@@ -1666,6 +1970,10 @@ app.post('/api/gallery', (req, res) => {
 
 app.delete('/api/gallery/:id', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({ error: 'Staff authentication required to delete gallery items.' });
+    }
     const { id } = req.params;
     const currentItems = loadServerGallery();
     const updated = currentItems.filter((i: any) => i.id !== id);
@@ -1676,7 +1984,7 @@ app.delete('/api/gallery/:id', (req, res) => {
   }
 });
 
-// Website settings endpoint for admin web updates
+// Website settings endpoint (Public read, Admin/HeadTeacher/DOS write)
 app.get('/api/settings', (req, res) => {
   const settings = loadServerSettings();
   res.json({ success: true, settings });
@@ -1684,6 +1992,10 @@ app.get('/api/settings', (req, res) => {
 
 app.post('/api/settings', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && staffToken.role !== 'HeadTeacher' && staffToken.role !== 'DOS')) {
+      return res.status(403).json({ error: 'Forbidden: Administrator privileges required to modify school settings.' });
+    }
     const settings = req.body;
     saveServerSettings(settings);
     res.json({ success: true, settings });
@@ -1692,8 +2004,50 @@ app.post('/api/settings', (req, res) => {
   }
 });
 
+// Generic Express /api/email handler (mirrors api/email.ts for local Node/Express runtime)
+app.post('/api/email', async (req, res) => {
+  try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({ error: 'Staff authentication required to dispatch email.' });
+    }
+    const { to, subject, html, type } = req.body || {};
+    const cleanTo = String(to || SCHOOL_OFFICIAL_EMAIL).trim();
+    const cleanSubject = String(subject || '').replace(/[\r\n]+/g, ' ').trim();
+    const cleanHtml = String(html || '').trim();
+    if (!isValidEmail(cleanTo) || !cleanSubject || !cleanHtml) {
+      return res.status(400).json({ error: 'Valid recipient email, subject, and html body are required.' });
+    }
+    const mappedType: EmailDeliveryLog['emailType'] =
+      type === 'admission_confirm'
+        ? 'admission_approved'
+        : type === 'attendance_alert'
+        ? 'attendance_alert'
+        : type === 'contact_inquiry'
+        ? 'contact_inquiry'
+        : 'general';
+
+    const dispatch = await sendSchoolEmail({
+      to: cleanTo,
+      subject: cleanSubject,
+      html: cleanHtml,
+      emailType: mappedType,
+      sanitizedSummary: `Staff-initiated email sent to ${cleanTo}.`,
+      allowRetryHtml: true,
+    });
+
+    if (!dispatch.success) {
+      const status = !transporter || !GMAIL_USER || !GMAIL_APP_PASSWORD ? 503 : 502;
+      return res.status(status).json({ success: false, configured: Boolean(transporter), error: dispatch.error });
+    }
+    return res.json({ success: true, configured: true, logId: dispatch.log.id });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: formatSmtpError(err) });
+  }
+});
+
 // Database REST API Endpoints (All changes saved to persistent disk database)
-// 1. Staff Members (Strips sensitive hashes/plaintext on GET; hashes new plaintext safely on POST)
+// 1. Staff Members (Strips sensitive hashes/plaintext on GET; requires Admin/HeadTeacher to modify)
 app.get('/api/staff', (req, res) => {
   const items = ensureAuthoritativeStaffList();
   const sanitized = items.map(({ passwordHash: _ph, clientPasswordHash: _cph, password: _pw, ...rest }: any) => ({
@@ -1705,6 +2059,12 @@ app.get('/api/staff', (req, res) => {
 });
 app.post('/api/staff', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && staffToken.role !== 'HeadTeacher')) {
+      return res.status(403).json({
+        error: 'Forbidden: Only Administrators or Headteachers may modify staff directory or roles.',
+      });
+    }
     const incoming = Array.isArray(req.body?.items) ? req.body.items : Array.isArray(req.body) ? req.body : [];
     const existing = ensureAuthoritativeStaffList();
     const existingById = new Map<string, any>();
@@ -1749,7 +2109,16 @@ app.post('/api/staff', (req, res) => {
 
 app.delete('/api/staff/:id', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && staffToken.role !== 'HeadTeacher')) {
+      return res.status(403).json({
+        error: 'Forbidden: Only Administrators or Headteachers may delete staff members.',
+      });
+    }
     const { id } = req.params;
+    if (id === staffToken.id) {
+      return res.status(400).json({ error: 'You cannot delete your own currently signed-in admin account.' });
+    }
     const currentItems = ensureAuthoritativeStaffList();
     const updated = currentItems.filter((s: any) => s.id !== id);
     saveServerStaff(updated);
@@ -1767,7 +2136,7 @@ app.delete('/api/staff/:id', (req, res) => {
 // 1b. Self-service Staff / Teacher Profile Update (name, email, phone, photoUrl, bio, assignedSubjectOrGrade)
 app.post('/api/staff/profile', (req, res) => {
   try {
-    const staffToken = verifyStaffToken(req.headers.authorization);
+    const staffToken = verifyStaffToken(req);
     if (!staffToken) {
       return res.status(401).json({ error: 'Valid staff authentication token required.' });
     }
@@ -1815,18 +2184,33 @@ app.post('/api/staff/profile', (req, res) => {
   }
 });
 
-// 2. Enrolled Students (Preserves passwordHash cleanly on updates)
+// 2. Enrolled Students (Preserves passwordHash cleanly on updates; scopes Teacher view to assigned classes)
 app.get('/api/students', (req, res) => {
+  const staffToken = verifyStaffToken(req);
   const items = loadServerStudents();
   if (!items) return res.json({ success: true, items: null });
-  const sanitized = items.map(({ passwordHash: _ph, clientPasswordHash: _cph, ...rest }: any) => ({
+  let scoped = items;
+  if (staffToken?.role === 'Teacher') {
+    const allowedGrades = getTeacherAllowedGradesServer(staffToken.id, staffToken.name);
+    scoped = allowedGrades.length > 0
+      ? items.filter((st: any) => allowedGrades.includes(String(st.gradeCode || '').toUpperCase()))
+      : [];
+  }
+  const sanitized = scoped.map(({ passwordHash: _ph, clientPasswordHash: _cph, ...rest }: any) => ({
     ...rest,
+    studentPassword: '',
     hasPasswordHash: Boolean(_ph || _cph),
   }));
   res.json({ success: true, items: sanitized });
 });
 app.post('/api/students', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
+      return res.status(403).json({
+        error: 'Forbidden: Only Administrators, Headteachers, DOS, or Registrars may modify the student roster.',
+      });
+    }
     const incoming = req.body.items || req.body;
     const existing = loadServerStudents() || [];
     const existingById = new Map<string, any>();
@@ -1852,7 +2236,6 @@ app.post('/api/students', (req, res) => {
           } else if (!nextHash && prev?.studentPassword) {
             nextHash = hashPassword(prev.studentPassword);
           }
-          // Avoid storing plain passwords on disk once passwordHash exists
           return {
             ...restSt,
             studentUsername: incomingUser || prev?.studentUsername || '',
@@ -1872,6 +2255,7 @@ app.post('/api/students', (req, res) => {
     const sanitized = Array.isArray(normalized)
       ? normalized.map(({ passwordHash: _ph, clientPasswordHash: _cph, ...rest }: any) => ({
           ...rest,
+          studentPassword: '',
           hasPasswordHash: Boolean(_ph || _cph),
         }))
       : normalized;
@@ -1895,8 +2279,11 @@ app.post('/api/attendance', (req, res) => {
       : Array.isArray(req.body)
       ? req.body
       : [];
-    const staffToken = verifyStaffToken(req.headers.authorization);
-    if (staffToken && staffToken.role === 'Teacher') {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
+      return res.status(401).json({ error: 'Staff authentication required.' });
+    }
+    if (staffToken.role === 'Teacher') {
       const allowedGrades = getTeacherAllowedGradesServer(staffToken.id, staffToken.name);
       const existing = loadServerAttendance() || [];
       const existingByKey = new Map<string, any>();
@@ -1920,7 +2307,6 @@ app.post('/api/attendance', (req, res) => {
           });
         }
       }
-      // Preserve untouched records from other grades safely while updating teacher's assigned grades
       const mergedMap = new Map<string, any>();
       existing.forEach((rec: any) => {
         mergedMap.set(`${rec.studentId}_${rec.date}`, rec);
@@ -1948,6 +2334,10 @@ app.get('/api/teacher-attendance', (req, res) => {
 });
 app.post('/api/teacher-attendance', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && staffToken.role !== 'HeadTeacher' && staffToken.role !== 'DOS')) {
+      return res.status(403).json({ error: 'Forbidden: Only Admin, Headteacher, or DOS may record staff attendance.' });
+    }
     const items = req.body.items || req.body;
     saveServerTeacherAttendance(items);
     res.json({ success: true, items });
@@ -1963,6 +2353,10 @@ app.get('/api/discipline', (req, res) => {
 });
 app.post('/api/discipline', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && !['HeadTeacher', 'DOD', 'DOS'].includes(staffToken.role))) {
+      return res.status(403).json({ error: 'Forbidden: Only DOD, DOS, Headteacher, or Admin may modify discipline records.' });
+    }
     const items = req.body.items || req.body;
     saveServerDiscipline(items);
     res.json({ success: true, items });
@@ -1978,6 +2372,10 @@ app.get('/api/payments', (req, res) => {
 });
 app.post('/api/payments', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && !['HeadTeacher', 'Finance'].includes(staffToken.role))) {
+      return res.status(403).json({ error: 'Forbidden: Only Finance Officers, Headteachers, or Admins may modify payment ledgers.' });
+    }
     const items = req.body.items || req.body;
     saveServerPayments(items);
     res.json({ success: true, items });
@@ -1986,18 +2384,37 @@ app.post('/api/payments', (req, res) => {
   }
 });
 
-// 5. Registration Documents
+// 5. Registration Documents (Public read, Staff write/delete)
 app.get('/api/documents', (req, res) => {
   const items = loadServerDocuments();
   res.json({ success: true, items });
 });
 app.post('/api/documents', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
+      return res.status(403).json({ error: 'Forbidden: Admissions or Admin role required to update registration documents.' });
+    }
     const items = req.body.items || req.body;
     saveServerDocuments(items);
     res.json({ success: true, items });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to save documents database' });
+  }
+});
+app.delete('/api/documents/:id', (req, res) => {
+  try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
+      return res.status(403).json({ error: 'Forbidden: Admissions or Admin role required to delete documents.' });
+    }
+    const { id } = req.params;
+    const current = loadServerDocuments() || [];
+    const updated = current.filter((d: any) => d.id !== id);
+    saveServerDocuments(updated);
+    return res.json({ success: true, items: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to delete document' });
   }
 });
 
@@ -2008,6 +2425,10 @@ app.get('/api/applications', (req, res) => {
 });
 app.post('/api/applications', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
+      return res.status(403).json({ error: 'Forbidden: Admissions or Admin role required to modify applications.' });
+    }
     const items = req.body.items || req.body;
     saveServerApplications(items);
     res.json({ success: true, items });
@@ -2017,11 +2438,12 @@ app.post('/api/applications', (req, res) => {
 });
 
 // 7. School Management System (SMS) Extended Domain Store (Academics, Exams, LMS, Messages, Audit Logs)
-const smsStoreFile = path.resolve(__dirname, 'sms_store.json');
+const smsStoreFile = path.resolve(DATA_DIR, 'sms_store.json');
 function loadSmsStore(): Record<string, any> {
   try {
-    if (fs.existsSync(smsStoreFile)) {
-      return JSON.parse(fs.readFileSync(smsStoreFile, 'utf8'));
+    const p = resolveStoreReadPath('sms_store.json');
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
   } catch (err) {
     console.warn('Error reading sms_store.json:', err);
@@ -2057,46 +2479,200 @@ const VALID_SMS_DOMAINS = new Set([
   'fee_structures',
 ]);
 
-// 7a. Backend Staff & Admin Authentication Endpoint (Supports salted scrypt hashes + Active check)
+const PUBLIC_READ_SMS_DOMAINS = new Set([
+  'fee_structures',
+  'academic_years_terms',
+  'school_classes_streams',
+  'school_subjects',
+]);
+
+// 7a-0. Session Introspection, Logout & First-Run Admin Bootstrap
+app.get('/api/auth/session', (req, res) => {
+  const staffToken = verifyStaffToken(req);
+  if (staffToken) {
+    const staffList = ensureAuthoritativeStaffList();
+    const match = staffList.find((s: any) => s.id === staffToken.id);
+    if (!match || match.status === 'Inactive') {
+      return res.json({ authenticated: false });
+    }
+    return res.json({
+      authenticated: true,
+      userType: 'staff',
+      session: {
+        id: match.id,
+        name: match.name,
+        role: match.role,
+        username: match.username,
+        email: match.email || '',
+        phone: match.phone || '',
+        photoUrl: match.photoUrl || '',
+        bio: match.bio || '',
+        assignedSubjectOrGrade: match.assignedSubjectOrGrade || '',
+      },
+    });
+  }
+
+  const stuToken = verifyStudentToken(req);
+  if (stuToken) {
+    const students = loadServerStudents() || [];
+    const match = students.find((s: any) => s.id === stuToken.id);
+    if (!match || match.studentAccountActive === false || (match.status && match.status !== 'Active')) {
+      return res.json({ authenticated: false });
+    }
+    return res.json({
+      authenticated: true,
+      userType: 'student',
+      session: {
+        id: match.id,
+        name: match.fullName,
+        role: 'Student',
+        username: match.studentUsername || match.regNumber,
+        email: match.email || match.parentEmail || '',
+        assignedSubjectOrGrade: `${match.gradeCode} (${match.stream || 'Stream A'})`,
+        linkedStudentIds: [match.id],
+      },
+    });
+  }
+
+  return res.json({ authenticated: false });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearSessionCookie(req, res);
+  return res.json({ success: true });
+});
+
+app.get('/api/auth/bootstrap-status', (_req, res) => {
+  const staffList = ensureAuthoritativeStaffList();
+  const hasConfiguredAdmin = staffList.some(
+    (s: any) =>
+      s &&
+      s.status !== 'Inactive' &&
+      (FULL_ADMIN_ROLES.has(s.role) || s.role === 'HeadTeacher') &&
+      Boolean(s.passwordHash)
+  );
+  return res.json({ success: true, needsBootstrap: !hasConfiguredAdmin });
+});
+
+app.post('/api/auth/bootstrap-admin', async (req, res) => {
+  try {
+    const staffList = ensureAuthoritativeStaffList();
+    const hasConfiguredAdmin = staffList.some(
+      (s: any) =>
+        s &&
+        s.status !== 'Inactive' &&
+        (FULL_ADMIN_ROLES.has(s.role) || s.role === 'HeadTeacher') &&
+        Boolean(s.passwordHash)
+    );
+    if (hasConfiguredAdmin) {
+      return res.status(403).json({
+        error: 'Initial administrator setup is already complete. Sign in with an existing admin account.',
+      });
+    }
+
+    const { name, email, username, password } = req.body || {};
+    const cleanName = String(name || 'School Chief Administrator').trim();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanUsername = String(username || cleanEmail).trim();
+    const cleanPass = String(password || '').trim();
+
+    if (!isValidEmail(cleanEmail) || !cleanUsername || cleanPass.length < 8) {
+      return res.status(400).json({
+        error: 'A valid admin email, username, and password (at least 8 characters) are required.',
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const newHash = hashPassword(cleanPass);
+    const shaHash = hashSha256Credential(cleanPass);
+
+    let adminRec: any = {
+      id: 'staff-admin-norbert',
+      name: cleanName,
+      role: 'SuperAdmin',
+      email: cleanEmail,
+      phone: '+250 788 258 786',
+      username: cleanUsername,
+      passwordHash: newHash,
+      assignedSubjectOrGrade: 'School Principal & System Controller',
+      enrolledAt: nowIso.split('T')[0],
+      status: 'Active',
+      updatedAt: nowIso,
+    };
+
+    const existingIdx = staffList.findIndex(
+      (s: any) => s.id === 'staff-admin-norbert' || String(s.username || '').toLowerCase() === cleanUsername.toLowerCase()
+    );
+    const nextList = [...staffList];
+    if (existingIdx >= 0) {
+      adminRec = { ...nextList[existingIdx], ...adminRec, id: nextList[existingIdx].id };
+      nextList[existingIdx] = adminRec;
+    } else {
+      nextList.unshift(adminRec);
+    }
+    saveServerStaff(nextList);
+
+    await syncCredentialHashToSupabaseVault({
+      accountType: 'staff',
+      account: adminRec,
+      sha256Hash: shaHash,
+    });
+
+    const token = signStaffToken({
+      id: adminRec.id,
+      name: adminRec.name,
+      username: adminRec.username,
+      email: adminRec.email,
+      role: adminRec.role,
+      exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
+    });
+    setSessionCookie(req, res, token);
+
+    return res.json({
+      success: true,
+      token,
+      session: {
+        id: adminRec.id,
+        name: adminRec.name,
+        role: adminRec.role,
+        username: adminRec.username,
+        email: adminRec.email,
+        phone: adminRec.phone,
+        assignedSubjectOrGrade: adminRec.assignedSubjectOrGrade,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Admin bootstrap failed' });
+  }
+});
+
+// 7a. Backend Staff & Admin Authentication Endpoint (Salted scrypt hashes + rate limit + HttpOnly cookie)
 app.post('/api/auth/staff-login', (req, res) => {
   try {
     const { identifier, password } = req.body || {};
     const cleanId = String(identifier || '').trim().toLowerCase();
     const cleanPass = String(password || '').trim();
 
-    if (!cleanPass) {
-      return res.status(400).json({ error: 'Password is required.' });
+    if (!cleanId || !cleanPass) {
+      return res.status(400).json({ error: 'Username/email and password are required.' });
+    }
+
+    const clientIp = req.ip || String(req.headers['x-forwarded-for'] || 'unknown');
+    const loginLimit = rateLimitCheck(`staff-login:${clientIp}:${cleanId}`, 10, 15 * 60 * 1000);
+    if (!loginLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many login attempts. Please wait ${loginLimit.retryAfterSec} seconds and try again.`,
+      });
     }
 
     const staffList = ensureAuthoritativeStaffList();
-
-    // Lookup matching staff by username, email, or quick admin shortcut
-    let match = staffList.find(
+    const match = staffList.find(
       (s: any) =>
-        cleanId &&
-        (String(s.username || '').trim().toLowerCase() === cleanId ||
-          String(s.email || '').trim().toLowerCase() === cleanId)
+        String(s.username || '').trim().toLowerCase() === cleanId ||
+        String(s.email || '').trim().toLowerCase() === cleanId
     );
 
-    if (!match && (!cleanId || cleanId === 'admin') && cleanPass === 'mugina2026') {
-      match = staffList.find((s: any) => String(s.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com');
-    } else if (!match && !cleanId) {
-      match = staffList.find((s: any) => verifyPassword(cleanPass, s.passwordHash || s.clientPasswordHash || s.password));
-    }
-
-    if (!match) {
-      return res.status(401).json({ error: 'Invalid staff username/email or password.' });
-    }
-
-    // Verify password against hashed/stored credential (if not shared quick-access mugina2026 shortcut before reset)
-    const isSharedAdminCode =
-      (!cleanId || cleanId === 'admin') &&
-      cleanPass === 'mugina2026' &&
-      String(match.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com';
-    const validPass =
-      isSharedAdminCode || verifyPassword(cleanPass, match.passwordHash || match.clientPasswordHash || match.password);
-
-    if (!validPass) {
+    if (!match || !verifyPassword(cleanPass, match.passwordHash || match.clientPasswordHash)) {
       return res.status(401).json({ error: 'Invalid staff username/email or password.' });
     }
 
@@ -2115,6 +2691,7 @@ app.post('/api/auth/staff-login', (req, res) => {
       exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
     };
     const token = signStaffToken(tokenPayload);
+    setSessionCookie(req, res, token);
 
     return res.json({
       success: true,
@@ -2136,7 +2713,7 @@ app.post('/api/auth/staff-login', (req, res) => {
   }
 });
 
-// 7a-2. Backend Firebase Google Identity -> Signed Staff Token Exchange
+// 7a-2. Backend Firebase Google Identity -> Signed Staff Token & Session Cookie Exchange
 app.post('/api/auth/staff-firebase-session', async (req, res) => {
   try {
     const { idToken } = req.body || {};
@@ -2182,6 +2759,8 @@ app.post('/api/auth/staff-firebase-session', async (req, res) => {
       role: match.role,
       exp: Date.now() + 1000 * 60 * 60 * 24 * 7,
     });
+    setSessionCookie(req, res, token);
+
     return res.json({
       success: true,
       token,
@@ -2202,7 +2781,7 @@ app.post('/api/auth/staff-firebase-session', async (req, res) => {
   }
 });
 
-// 7a-3. Backend Student Login Endpoint (Supports salted scrypt hashes + legacy credentials)
+// 7a-3. Backend Student Login Endpoint (Salted scrypt hashes + rate limit + HttpOnly cookie)
 app.post('/api/auth/student-login', (req, res) => {
   try {
     const { identifier, password } = req.body || {};
@@ -2212,13 +2791,21 @@ app.post('/api/auth/student-login', (req, res) => {
       return res.status(400).json({ error: 'Student ID / Username and password are required.' });
     }
 
+    const clientIp = req.ip || String(req.headers['x-forwarded-for'] || 'unknown');
+    const loginLimit = rateLimitCheck(`student-login:${clientIp}:${cleanId}`, 12, 15 * 60 * 1000);
+    if (!loginLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many login attempts. Please wait ${loginLimit.retryAfterSec} seconds and try again.`,
+      });
+    }
+
     const students = loadServerStudents() || [];
     const match = students.find(
       (s: any) =>
         (String(s.studentUsername || '').trim().toLowerCase() === cleanId ||
           String(s.regNumber || '').trim().toLowerCase() === cleanId ||
           String(s.email || '').trim().toLowerCase() === cleanId) &&
-        verifyPassword(cleanPass, s.passwordHash || s.clientPasswordHash || s.studentPassword)
+        verifyPassword(cleanPass, s.passwordHash || s.clientPasswordHash)
     );
 
     if (!match) {
@@ -2241,6 +2828,8 @@ app.post('/api/auth/student-login', (req, res) => {
     };
 
     const token = signStudentToken(tokenPayload);
+    setSessionCookie(req, res, token);
+
     return res.json({
       success: true,
       token,
@@ -2263,7 +2852,7 @@ app.post('/api/auth/student-login', (req, res) => {
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
     const rawEmail = String(req.body?.email || '').trim().toLowerCase();
-    if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    if (!rawEmail || !isValidEmail(rawEmail)) {
       return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
 
@@ -2276,7 +2865,6 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       });
     }
 
-    // Generic response guarantees zero account enumeration regardless of whether email matches
     const genericMessage =
       'If an account matching that email exists in our school directory, a secure password reset link has been sent to that email address.';
 
@@ -2305,13 +2893,12 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = sha256Hex(rawToken);
-    const expiresAt = Date.now() + 30 * 60 * 1000; // 30-minute single-use expiry
+    const expiresAt = Date.now() + 30 * 60 * 1000;
 
     const targetType: 'staff' | 'student' = staffMatch ? 'staff' : 'student';
     const targetId = staffMatch ? staffMatch.id : studentMatch.id;
     const displayName = staffMatch ? staffMatch.name : studentMatch.fullName;
 
-    // Invalidate previous active tokens for same account
     const tokens = loadResetTokens().map((t) =>
       t.accountId === targetId && !t.used ? { ...t, used: true, usedAt: new Date().toISOString() } : t
     );
@@ -2341,20 +2928,20 @@ app.post('/api/auth/forgot-password', async (req, res) => {
           <p style="margin: 4px 0 0 0; font-size: 12px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
         </div>
         <div style="padding: 22px; color: #1e293b; font-size: 14px; line-height: 1.6;">
-          <p>Hello <strong>${displayName}</strong>,</p>
-          <p>${tpl.introParagraph}</p>
-          <p>${tpl.instructionsParagraph}</p>
+          <p>Hello <strong>${escapeHtml(displayName)}</strong>,</p>
+          <p>${escapeHtml(tpl.introParagraph)}</p>
+          <p>${escapeHtml(tpl.instructionsParagraph)}</p>
           <div style="margin: 22px 0; text-align: center;">
-            <a href="${resetLink}" style="display: inline-block; background-color: #1e3a8a; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 14px;">
+            <a href="${escapeHtml(resetLink)}" style="display: inline-block; background-color: #1e3a8a; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 14px;">
               Reset My Portal Password
             </a>
           </div>
           <p style="font-size: 12px; color: #64748b;">
             Or open this link in your browser:<br />
-            <span style="word-break: break-all; color: #1d4ed8;">${resetLink}</span>
+            <span style="word-break: break-all; color: #1d4ed8;">${escapeHtml(resetLink)}</span>
           </p>
           <p style="font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 20px;">
-            ${tpl.footerSignature}
+            ${escapeHtml(tpl.footerSignature)}
           </p>
         </div>
       </div>
@@ -2488,7 +3075,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
 
 // 7b. Scoped Student Portal Data Endpoint (Strict Backend Isolation)
 app.get('/api/student/portal-data', (req, res) => {
-  const tokenUser = verifyStudentToken(req.headers.authorization);
+  const tokenUser = verifyStudentToken(req);
   if (!tokenUser) {
     return res.status(401).json({ error: 'Valid student authentication token required.' });
   }
@@ -2502,7 +3089,7 @@ app.get('/api/student/portal-data', (req, res) => {
   if (!student) {
     return res.status(404).json({ error: 'Student record not found.' });
   }
-  const { studentPassword: _pw, ...safeStudent } = student;
+  const { studentPassword: _pw, passwordHash: _ph, clientPasswordHash: _cph, ...safeStudent } = student;
 
   const sms = loadSmsStore();
   const attendance = (loadServerAttendance() || []).filter((a: any) => a.studentId === tokenUser.id);
@@ -2534,16 +3121,16 @@ app.get('/api/student/portal-data', (req, res) => {
   });
 });
 
-// 7c. Student Homework & Quiz Submission Endpoint (Auto-grades MCQ & Closed Qs, enforces retakes, tracks timer)
+// 7c. Student Homework & Quiz Submission Endpoint (Strict Student Token required; auto-grades MCQ & Closed Qs)
 app.post('/api/student/homework-submit', (req, res) => {
-  const tokenUser = verifyStudentToken(req.headers.authorization);
+  const tokenUser = verifyStudentToken(req);
+  if (!tokenUser) {
+    return res.status(401).json({ error: 'Valid student authentication required to submit homework or quizzes.' });
+  }
   const {
     homeworkId,
     studentId,
-    regNumber,
     studentName,
-    gradeCode,
-    stream,
     subjectName,
     answerText,
     fileUrl,
@@ -2555,19 +3142,22 @@ app.post('/api/student/homework-submit', (req, res) => {
     timedOut,
   } = req.body || {};
 
-  if (tokenUser && studentId && studentId !== tokenUser.id) {
+  if (studentId && studentId !== tokenUser.id) {
     return res.status(403).json({ error: 'Forbidden: Cannot submit homework on behalf of another student.' });
   }
-  const targetStudentId = tokenUser?.id || studentId;
+  const targetStudentId = tokenUser.id;
   const hasStructuredResp = questionResponses && typeof questionResponses === 'object' && Object.keys(questionResponses).length > 0;
-  if (!homeworkId || !targetStudentId || (!answerText && !fileUrl && !hasStructuredResp && !timedOut)) {
-    return res.status(400).json({ error: 'homeworkId, studentId, and responses or attachment are required.' });
+  if (!homeworkId || (!answerText && !fileUrl && !hasStructuredResp && !timedOut)) {
+    return res.status(400).json({ error: 'homeworkId and responses or attachment are required.' });
   }
 
   const store = loadSmsStore();
   const assignments = Array.isArray(store.homework_assignments) ? store.homework_assignments : [];
   const hw = assignments.find((h: any) => h.id === homeworkId);
 
+  if (hw && hw.gradeCode && hw.gradeCode !== tokenUser.gradeCode) {
+    return res.status(403).json({ error: 'Forbidden: Assignment belongs to another grade level.' });
+  }
   if (hw && hw.status === 'Closed') {
     return res.status(400).json({ error: 'This homework/quiz is closed and no longer accepts submissions.' });
   }
@@ -2581,7 +3171,6 @@ app.post('/api/student/homework-submit', (req, res) => {
   const hasStructuredQuestions = Boolean(hw && Array.isArray(hw.questions) && hw.questions.length > 0);
   const maxAttempts = hw?.maxAttempts !== undefined ? Number(hw.maxAttempts) : 1;
   if (maxAttempts > 0 && priorAttempts.length >= maxAttempts) {
-    // Allow updating an ungraded plain homework draft only if maxAttempts===1 and not structured quiz
     const singleDraft = !hasStructuredQuestions && maxAttempts === 1 && priorAttempts[0]?.status === 'Submitted';
     if (!singleDraft) {
       return res.status(403).json({
@@ -2663,15 +3252,18 @@ app.post('/api/student/homework-submit', (req, res) => {
     : -1;
   const attemptNumber = existingIdx >= 0 ? list[existingIdx].attemptNumber || 1 : priorAttempts.length + 1;
 
+  const students = loadServerStudents() || [];
+  const authoritativeStudent = students.find((s: any) => s.id === targetStudentId);
+
   const record: any = {
     id: existingIdx >= 0 ? list[existingIdx].id : `hwsub-${Date.now()}-${Math.floor(Math.random() * 999)}`,
     homeworkId,
     studentId: targetStudentId,
-    regNumber: tokenUser?.regNumber || regNumber || '',
-    studentName: studentName || 'Student',
-    gradeCode: tokenUser?.gradeCode || gradeCode || '',
-    stream: tokenUser?.stream || stream || 'Stream A',
-    subjectName: subjectName || hw?.subjectName || 'Subject',
+    regNumber: tokenUser.regNumber,
+    studentName: authoritativeStudent?.fullName || studentName || 'Student',
+    gradeCode: tokenUser.gradeCode,
+    stream: tokenUser.stream || 'Stream A',
+    subjectName: hw?.subjectName || subjectName || 'Subject',
     answerText: String(answerText || '').trim(),
     fileUrl: fileUrl || undefined,
     fileName: fileName || undefined,
@@ -2707,40 +3299,44 @@ app.post('/api/student/homework-submit', (req, res) => {
   return res.json({ success: true, submission: record });
 });
 
-// 7d. Student Password Change Endpoint (Uses salted scrypt hash; zero plaintext retention)
+// 7d. Student Password Change Endpoint (Strict Student Token required; salted scrypt hash)
 app.post('/api/student/change-password', async (req, res) => {
   try {
-    const tokenUser = verifyStudentToken(req.headers.authorization);
+    const tokenUser = verifyStudentToken(req);
+    if (!tokenUser) {
+      return res.status(401).json({ error: 'Valid student authentication required.' });
+    }
     const { studentId, currentPassword, newPassword } = req.body || {};
-    const targetId = tokenUser?.id || studentId;
-    if (tokenUser && studentId && studentId !== tokenUser.id) {
+    if (studentId && studentId !== tokenUser.id) {
       return res.status(403).json({ error: 'Forbidden: Students can only change their own password.' });
     }
-    if (!targetId || !currentPassword || !newPassword || String(newPassword).trim().length < 6) {
-      return res.status(400).json({ error: 'Valid studentId, current password, and new password (min 6 chars) are required.' });
+    if (!currentPassword || !newPassword || String(newPassword).trim().length < 6) {
+      return res.status(400).json({ error: 'Current password and new password (min 6 chars) are required.' });
     }
 
     const students = loadServerStudents() || [];
-    const idx = students.findIndex((s: any) => s.id === targetId);
-    if (idx >= 0) {
-      const storedSecret = students[idx].passwordHash || students[idx].clientPasswordHash || students[idx].studentPassword;
-      if (!verifyPassword(String(currentPassword).trim(), storedSecret)) {
-        return res.status(401).json({ error: 'Current password does not match your account.' });
-      }
-      const cleanNew = String(newPassword).trim();
-      students[idx] = {
-        ...students[idx],
-        studentPassword: '',
-        passwordHash: hashPassword(cleanNew),
-        updatedAt: new Date().toISOString(),
-      };
-      saveServerStudents(students);
-      await syncCredentialHashToSupabaseVault({
-        accountType: 'student',
-        account: students[idx],
-        sha256Hash: hashSha256Credential(cleanNew),
-      });
+    const idx = students.findIndex((s: any) => s.id === tokenUser.id);
+    if (idx < 0) {
+      return res.status(404).json({ error: 'Student account not found.' });
     }
+
+    const storedSecret = students[idx].passwordHash || students[idx].clientPasswordHash;
+    if (!verifyPassword(String(currentPassword).trim(), storedSecret)) {
+      return res.status(401).json({ error: 'Current password does not match your account.' });
+    }
+    const cleanNew = String(newPassword).trim();
+    students[idx] = {
+      ...students[idx],
+      studentPassword: '',
+      passwordHash: hashPassword(cleanNew),
+      updatedAt: new Date().toISOString(),
+    };
+    saveServerStudents(students);
+    await syncCredentialHashToSupabaseVault({
+      accountType: 'student',
+      account: students[idx],
+      sha256Hash: hashSha256Credential(cleanNew),
+    });
 
     return res.json({ success: true, message: 'Password updated successfully.' });
   } catch (err: any) {
@@ -2748,19 +3344,23 @@ app.post('/api/student/change-password', async (req, res) => {
   }
 });
 
-// 7e. Student Notification Read Endpoint
+// 7e. Student Notification Read Endpoint (Strict Student Token required)
 app.post('/api/student/notifications/read', (req, res) => {
-  const tokenUser = verifyStudentToken(req.headers.authorization);
-  const { notificationId, studentId, gradeCode, markAll } = req.body || {};
-  const targetId = tokenUser?.id || studentId;
-  if (!targetId) {
-    return res.status(400).json({ error: 'studentId is required.' });
+  const tokenUser = verifyStudentToken(req);
+  if (!tokenUser) {
+    return res.status(401).json({ error: 'Valid student authentication required.' });
   }
+  const { notificationId, studentId, markAll } = req.body || {};
+  if (studentId && studentId !== tokenUser.id) {
+    return res.status(403).json({ error: 'Forbidden: Cannot modify another student’s notifications.' });
+  }
+  const targetId = tokenUser.id;
+  const targetGrade = tokenUser.gradeCode;
   const store = loadSmsStore();
   const list = Array.isArray(store.student_notifications) ? store.student_notifications : [];
   store.student_notifications = list.map((n: any) => {
     const matchesTarget = markAll
-      ? n.studentId === targetId || n.studentId === 'ALL' || n.studentId === `GRADE:${gradeCode}` || n.gradeCode === gradeCode
+      ? n.studentId === targetId || n.studentId === 'ALL' || n.studentId === `GRADE:${targetGrade}` || n.gradeCode === targetGrade
       : n.id === notificationId;
     if (!matchesTarget) return n;
     const readByIds = Array.from(new Set([...(n.readByIds || []), targetId]));
@@ -2772,14 +3372,18 @@ app.post('/api/student/notifications/read', (req, res) => {
 
 app.get('/api/sms/backup', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && staffToken.role !== 'HeadTeacher')) {
+      return res.status(403).json({ error: 'Forbidden: Only Administrators or Headteachers may export full system backups.' });
+    }
     const backup = {
       exportedAt: new Date().toISOString(),
       school: 'Mugina Hope Primary & Nursery Academy',
       version: '2.0',
       websiteSettings: loadServerSettings(),
       gallery: loadServerGallery(),
-      staff: loadServerStaff(),
-      students: loadServerStudents(),
+      staff: (loadServerStaff() || []).map(({ passwordHash: _ph, clientPasswordHash: _cph, password: _pw, ...rest }: any) => rest),
+      students: (loadServerStudents() || []).map(({ passwordHash: _ph, clientPasswordHash: _cph, studentPassword: _pw, ...rest }: any) => rest),
       attendance: loadServerAttendance(),
       teacherAttendance: loadServerTeacherAttendance(),
       discipline: loadServerDiscipline(),
@@ -2797,14 +3401,38 @@ app.get('/api/sms/backup', (req, res) => {
 
 app.post('/api/sms/restore', (req, res) => {
   try {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken || (!FULL_ADMIN_ROLES.has(staffToken.role) && staffToken.role !== 'HeadTeacher')) {
+      return res.status(403).json({ error: 'Forbidden: Only Administrators or Headteachers may restore system backups.' });
+    }
     const b = req.body?.backup || req.body;
     if (!b || typeof b !== 'object') {
       return res.status(400).json({ error: 'Invalid backup payload' });
     }
     if (b.websiteSettings) saveServerSettings(b.websiteSettings);
     if (Array.isArray(b.gallery)) saveServerGallery(b.gallery);
-    if (Array.isArray(b.staff)) saveServerStaff(b.staff);
-    if (Array.isArray(b.students)) saveServerStudents(b.students);
+    if (Array.isArray(b.staff)) {
+      const existingStaff = loadServerStaff() || [];
+      const hashMap = new Map(existingStaff.map((s: any) => [s.id, s.passwordHash]));
+      saveServerStaff(
+        b.staff.map((s: any) => ({
+          ...s,
+          password: '',
+          ...(hashMap.get(s.id) || s.passwordHash ? { passwordHash: s.passwordHash || hashMap.get(s.id) } : {}),
+        }))
+      );
+    }
+    if (Array.isArray(b.students)) {
+      const existingStu = loadServerStudents() || [];
+      const hashMap = new Map(existingStu.map((s: any) => [s.id, s.passwordHash]));
+      saveServerStudents(
+        b.students.map((s: any) => ({
+          ...s,
+          studentPassword: '',
+          ...(hashMap.get(s.id) || s.passwordHash ? { passwordHash: s.passwordHash || hashMap.get(s.id) } : {}),
+        }))
+      );
+    }
     if (Array.isArray(b.attendance)) saveServerAttendance(b.attendance);
     if (Array.isArray(b.teacherAttendance)) saveServerTeacherAttendance(b.teacherAttendance);
     if (Array.isArray(b.discipline)) saveServerDiscipline(b.discipline);
@@ -2824,9 +3452,17 @@ app.get('/api/sms/:domain', (req, res) => {
   if (!VALID_SMS_DOMAINS.has(domain)) {
     return res.status(400).json({ error: 'Invalid SMS domain' });
   }
+  const staffToken = verifyStaffToken(req);
+  const stuToken = verifyStudentToken(req);
+  if (!staffToken && !stuToken && !PUBLIC_READ_SMS_DOMAINS.has(domain)) {
+    return res.status(401).json({ error: 'Authentication required to access academic records.' });
+  }
+
   const store = loadSmsStore();
   let items = store[domain] ?? null;
-  if (domain === 'homework_assignments' && Array.isArray(items) && verifyStudentToken(req.headers.authorization)) {
+
+  // Strip quiz answer keys & explanations for everyone except authenticated Staff
+  if (domain === 'homework_assignments' && Array.isArray(items) && !staffToken) {
     items = items.map((hw: any) => ({
       ...hw,
       questions: Array.isArray(hw.questions)
@@ -2834,6 +3470,22 @@ app.get('/api/sms/:domain', (req, res) => {
         : undefined,
     }));
   }
+
+  // Scope sensitive domain rows for Students to only their own records or class
+  if (stuToken && !staffToken && Array.isArray(items)) {
+    if (domain === 'exam_marks' || domain === 'homework_submissions' || domain === 'student_achievements') {
+      items = items.filter((r: any) => r.studentId === stuToken.id);
+    } else if (domain === 'student_notifications') {
+      items = items.filter(
+        (n: any) => n.studentId === stuToken.id || n.studentId === 'ALL' || n.studentId === `GRADE:${stuToken.gradeCode}` || n.gradeCode === stuToken.gradeCode
+      );
+    } else if (domain === 'learning_materials' || domain === 'class_timetables' || domain === 'exam_schedules' || domain === 'homework_assignments') {
+      items = items.filter((r: any) => r.gradeCode === stuToken.gradeCode);
+    } else if (domain === 'audit_logs') {
+      return res.status(403).json({ error: 'Forbidden: Audit logs are restricted to Staff.' });
+    }
+  }
+
   return res.json({ success: true, items });
 });
 
@@ -2843,11 +3495,18 @@ app.post('/api/sms/:domain', (req, res) => {
     if (!VALID_SMS_DOMAINS.has(domain)) {
       return res.status(400).json({ error: 'Invalid SMS domain' });
     }
-    const stuToken = verifyStudentToken(req.headers.authorization);
-    if (stuToken && STUDENT_READONLY_SMS_DOMAINS.has(domain)) {
+    const staffToken = verifyStaffToken(req);
+    if (!staffToken) {
       return res.status(403).json({
-        error: `Forbidden: Student accounts cannot modify ${domain}.`,
+        error: `Forbidden: Staff authentication required to modify ${domain}.`,
       });
+    }
+    if (
+      ['fee_structures', 'audit_logs'].includes(domain) &&
+      !FULL_ADMIN_ROLES.has(staffToken.role) &&
+      !['HeadTeacher', 'Finance', 'DOS'].includes(staffToken.role)
+    ) {
+      return res.status(403).json({ error: `Forbidden: Insufficient role privileges for ${domain}.` });
     }
     const store = loadSmsStore();
     const payload = req.body?.items !== undefined ? req.body.items : req.body;
@@ -2903,10 +3562,20 @@ async function issueAndSendAdmissionVerificationEmail(params: {
   const baseUrl = getPublicAppUrl(req);
   const verifyUrl = `${baseUrl}/verify-admission?ref=${encodeURIComponent(appRecord.refCode)}`;
 
-  const subject =
+  const rawSubject =
     emailType === 'admission_approved'
       ? tpl.subject || 'Mugina Hope Primary School - Admission Application Approved'
       : `Mugina Hope Primary School - Verification Code (${appRecord.refCode})`;
+  const subject = rawSubject.replace(/[\r\n]+/g, ' ').trim();
+
+  const safeParentName = escapeHtml(appRecord.parentName || 'Parent / Guardian');
+  const safeStudentName = escapeHtml(appRecord.studentName || '');
+  const safeGradeCode = escapeHtml(appRecord.gradeCode || '');
+  const safeRefCode = escapeHtml(appRecord.refCode || '');
+  const safeNotes = reviewerNotes ? escapeHtml(reviewerNotes) : '';
+  const safeIntro = escapeHtml(tpl.introParagraph || '');
+  const safeInstructions = escapeHtml(tpl.instructionsParagraph || '');
+  const safeSignature = escapeHtml(tpl.footerSignature || '');
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background-color: #ffffff;">
@@ -2915,33 +3584,33 @@ async function issueAndSendAdmissionVerificationEmail(params: {
         <p style="margin: 4px 0 0 0; font-size: 12px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
       </div>
       <div style="padding: 22px; color: #1e293b; font-size: 14px; line-height: 1.6;">
-        <p>Dear <strong>${appRecord.parentName || 'Parent / Guardian'}</strong>,</p>
-        <p>${tpl.introParagraph}</p>
+        <p>Dear <strong>${safeParentName}</strong>,</p>
+        <p>${safeIntro}</p>
 
         <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin: 16px 0;">
-          <p style="margin: 4px 0;"><strong>Student Full Name:</strong> ${appRecord.studentName}</p>
-          <p style="margin: 4px 0;"><strong>Requested Class:</strong> ${appRecord.gradeCode}</p>
-          <p style="margin: 4px 0;"><strong>Admission Reference:</strong> <code style="font-weight: bold; color: #1e3a8a;">${appRecord.refCode}</code></p>
+          <p style="margin: 4px 0;"><strong>Student Full Name:</strong> ${safeStudentName}</p>
+          <p style="margin: 4px 0;"><strong>Requested Class:</strong> ${safeGradeCode}</p>
+          <p style="margin: 4px 0;"><strong>Admission Reference:</strong> <code style="font-weight: bold; color: #1e3a8a;">${safeRefCode}</code></p>
           <p style="margin: 10px 0 4px 0;"><strong>Verification Code:</strong> <span style="display: inline-block; background-color: #fef3c7; border: 1px solid #f59e0b; color: #78350f; font-family: monospace; font-size: 18px; font-weight: bold; padding: 4px 12px; border-radius: 6px; letter-spacing: 2px;">${rawCode}</span></p>
         </div>
 
-        <p>${tpl.instructionsParagraph}</p>
+        <p>${safeInstructions}</p>
         ${
-          reviewerNotes
-            ? `<div style="background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 12px; margin: 14px 0; font-size: 13px; color: #1e3a8a;"><strong>Admissions Note:</strong> ${reviewerNotes}</div>`
+          safeNotes
+            ? `<div style="background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 12px; margin: 14px 0; font-size: 13px; color: #1e3a8a;"><strong>Admissions Note:</strong> ${safeNotes}</div>`
             : ''
         }
         <div style="margin: 20px 0; text-align: center;">
-          <a href="${verifyUrl}" style="display: inline-block; background-color: #15803d; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 14px;">
+          <a href="${escapeHtml(verifyUrl)}" style="display: inline-block; background-color: #15803d; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 14px;">
             Verify Admission &amp; Complete Enrollment
           </a>
         </div>
         <p style="font-size: 12px; color: #64748b;">
-          Verification Portal: <span style="color: #1d4ed8;">${verifyUrl}</span> (This code expires in 48 hours and can be used once.)
+          Verification Portal: <span style="color: #1d4ed8;">${escapeHtml(verifyUrl)}</span> (This code expires in 48 hours and can be used once.)
         </p>
         <p style="margin-top: 20px; padding-top: 14px; border-top: 1px solid #e2e8f0; font-size: 13px; color: #334155;">
           Sincerely,<br />
-          <strong>${tpl.footerSignature}</strong><br />
+          <strong>${safeSignature}</strong><br />
           <span style="font-size: 11px; color: #64748b;">Motto: We learn for our better future · Mugina Sector, Kamonyi District</span>
         </p>
       </div>
@@ -2963,7 +3632,7 @@ async function issueAndSendAdmissionVerificationEmail(params: {
 // 8a. Admin Admissions Review Endpoint (Approve / Reject / Request More Info)
 app.post('/api/admissions/review', async (req, res) => {
   try {
-    const staffToken = verifyStaffToken(req.headers.authorization);
+    const staffToken = verifyStaffToken(req);
     if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
       return res.status(403).json({
         error: 'Forbidden: Only authorized School Administrators, Headteachers, DOS, or Registrars may review admission applications.',
@@ -2985,6 +3654,10 @@ app.post('/api/admissions/review', async (req, res) => {
     const nowIso = new Date().toISOString();
     const reviewer = staffToken.name || 'Admissions Office';
     const templates = loadEmailTemplates();
+    const safeParent = escapeHtml(targetApp.parentName || 'Parent / Guardian');
+    const safeStudent = escapeHtml(targetApp.studentName || '');
+    const safeGrade = escapeHtml(targetApp.gradeCode || '');
+    const safeRef = escapeHtml(targetApp.refCode || '');
 
     if (action === 'approve') {
       const dispatchRes = await issueAndSendAdmissionVerificationEmail({
@@ -3043,15 +3716,15 @@ app.post('/api/admissions/review', async (req, res) => {
             <p style="margin: 4px 0 0 0; font-size: 12px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
           </div>
           <div style="padding: 22px; color: #1e293b; font-size: 14px; line-height: 1.6;">
-            <p>Dear <strong>${targetApp.parentName || 'Parent / Guardian'}</strong>,</p>
-            <p>${tpl.introParagraph}</p>
+            <p>Dear <strong>${safeParent}</strong>,</p>
+            <p>${escapeHtml(tpl.introParagraph || '')}</p>
             <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 14px; margin: 16px 0;">
-              <p style="margin: 4px 0;"><strong>Student:</strong> ${targetApp.studentName} (${targetApp.gradeCode})</p>
-              <p style="margin: 4px 0;"><strong>Admission Reference:</strong> ${targetApp.refCode}</p>
-              <p style="margin: 8px 0 0 0;"><strong>Admissions Decision Note:</strong> ${reason}</p>
+              <p style="margin: 4px 0;"><strong>Student:</strong> ${safeStudent} (${safeGrade})</p>
+              <p style="margin: 4px 0;"><strong>Admission Reference:</strong> ${safeRef}</p>
+              <p style="margin: 8px 0 0 0;"><strong>Admissions Decision Note:</strong> ${escapeHtml(reason)}</p>
             </div>
-            <p>${tpl.instructionsParagraph}</p>
-            <p style="margin-top: 20px; font-size: 13px;">Sincerely,<br /><strong>${tpl.footerSignature}</strong></p>
+            <p>${escapeHtml(tpl.instructionsParagraph || '')}</p>
+            <p style="margin-top: 20px; font-size: 13px;">Sincerely,<br /><strong>${escapeHtml(tpl.footerSignature || '')}</strong></p>
           </div>
         </div>
       `;
@@ -3084,6 +3757,7 @@ app.post('/api/admissions/review', async (req, res) => {
         application: updatedApp,
         emailDeliveryStatus: dispatchRes.log.status,
         emailLogId: dispatchRes.log.id,
+        error: dispatchRes.error,
       });
     }
 
@@ -3097,15 +3771,15 @@ app.post('/api/admissions/review', async (req, res) => {
           <p style="margin: 4px 0 0 0; font-size: 12px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
         </div>
         <div style="padding: 22px; color: #1e293b; font-size: 14px; line-height: 1.6;">
-          <p>Dear <strong>${targetApp.parentName || 'Parent / Guardian'}</strong>,</p>
-          <p>${tpl.introParagraph}</p>
+          <p>Dear <strong>${safeParent}</strong>,</p>
+          <p>${escapeHtml(tpl.introParagraph || '')}</p>
           <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 14px; margin: 16px 0;">
-            <p style="margin: 4px 0;"><strong>Student:</strong> ${targetApp.studentName} (${targetApp.gradeCode})</p>
-            <p style="margin: 4px 0;"><strong>Admission Reference:</strong> ${targetApp.refCode}</p>
-            <p style="margin: 8px 0 0 0;"><strong>Requested Information:</strong> ${requestedDetails}</p>
+            <p style="margin: 4px 0;"><strong>Student:</strong> ${safeStudent} (${safeGrade})</p>
+            <p style="margin: 4px 0;"><strong>Admission Reference:</strong> ${safeRef}</p>
+            <p style="margin: 8px 0 0 0;"><strong>Requested Information:</strong> ${escapeHtml(requestedDetails)}</p>
           </div>
-          <p>${tpl.instructionsParagraph}</p>
-          <p style="margin-top: 20px; font-size: 13px;">Sincerely,<br /><strong>${tpl.footerSignature}</strong></p>
+          <p>${escapeHtml(tpl.instructionsParagraph || '')}</p>
+          <p style="margin-top: 20px; font-size: 13px;">Sincerely,<br /><strong>${escapeHtml(tpl.footerSignature || '')}</strong></p>
         </div>
       </div>
     `;
@@ -3138,6 +3812,7 @@ app.post('/api/admissions/review', async (req, res) => {
       application: updatedApp,
       emailDeliveryStatus: dispatchRes.log.status,
       emailLogId: dispatchRes.log.id,
+      error: dispatchRes.error,
     });
   } catch (err: any) {
     console.error('Admission review error:', err);
@@ -3153,6 +3828,13 @@ app.post('/api/admissions/verify-code', (req, res) => {
 
     if (!refCode || !code) {
       return res.status(400).json({ error: 'Both Admission Reference Number and Verification Code are required.' });
+    }
+
+    const verifyLimit = rateLimitCheck(`verify:${refCode}:${req.ip}`, 12, 15 * 60 * 1000);
+    if (!verifyLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many verification requests. Please wait ${verifyLimit.retryAfterSec} seconds and try again.`,
+      });
     }
 
     const verifications = loadVerificationRecords();
@@ -3185,7 +3867,7 @@ app.post('/api/admissions/verify-code', (req, res) => {
     }
 
     const expectedHash = sha256Hex(`${refCode}:${code}`);
-    if (expectedHash !== rec.codeHash) {
+    if (!safeEqualStrings(expectedHash, rec.codeHash)) {
       const nextAttempts = rec.attempts + 1;
       const isNowLocked = nextAttempts >= rec.maxAttempts;
       verifications[latest.idx] = {
@@ -3298,12 +3980,12 @@ app.post('/api/admissions/verify-code', (req, res) => {
 // 8c. Resend Admission Verification Code (Rate-limited; accepts authorized Staff OR public refCode)
 app.post('/api/admissions/resend-code', async (req, res) => {
   try {
-    const stuToken = verifyStudentToken(req.headers.authorization);
+    const stuToken = verifyStudentToken(req);
     if (stuToken) {
       return res.status(403).json({ error: 'Forbidden: Student accounts cannot resend admission codes.' });
     }
 
-    const staffToken = verifyStaffToken(req.headers.authorization);
+    const staffToken = verifyStaffToken(req);
     const refCode = String(req.body?.refCode || '').trim().toUpperCase();
     const appId = String(req.body?.appId || '').trim();
 
@@ -3365,7 +4047,7 @@ app.post('/api/admissions/resend-code', async (req, res) => {
 
 // 8d. Admin Email Delivery Logs, Retry & Template Configuration Endpoints
 app.get('/api/admin/email-logs', (req, res) => {
-  const staffToken = verifyStaffToken(req.headers.authorization);
+  const staffToken = verifyStaffToken(req);
   if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
     return res.status(403).json({ error: 'Forbidden: Only authorized Administrators may view email delivery logs.' });
   }
@@ -3375,7 +4057,7 @@ app.get('/api/admin/email-logs', (req, res) => {
 
 app.post('/api/admin/email-logs/:id/retry', async (req, res) => {
   try {
-    const staffToken = verifyStaffToken(req.headers.authorization);
+    const staffToken = verifyStaffToken(req);
     if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
       return res.status(403).json({ error: 'Forbidden: Only authorized Administrators may retry emails.' });
     }
@@ -3419,8 +4101,25 @@ app.post('/api/admin/email-logs/:id/retry', async (req, res) => {
           };
           saveEmailLogs(refreshed);
         }
-        return res.json({ success: retryRes.success, message: 'Retried admission verification email dispatch.' });
+        return res.status(retryRes.success ? 200 : 502).json({
+          success: retryRes.success,
+          error: retryRes.error,
+          message: retryRes.success
+            ? 'Retried admission verification email dispatch.'
+            : retryRes.error || 'Email retry failed.',
+        });
       }
+    }
+
+    if (!transporter || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      return res.status(503).json({
+        success: false,
+        error: 'Gmail SMTP is not configured on the server. Set GMAIL_USER and GMAIL_APP_PASSWORD before retrying email delivery.',
+      });
+    }
+
+    if (!isValidEmail(targetLog.recipientEmail)) {
+      return res.status(400).json({ success: false, error: 'Recorded recipient email is invalid.' });
     }
 
     const fromHeader = EMAIL_FROM_ADDRESS.includes('<')
@@ -3429,12 +4128,12 @@ app.post('/api/admin/email-logs/:id/retry', async (req, res) => {
 
     const htmlToSend =
       targetLog.safeRetryHtml ||
-      `<div style="font-family: Arial, sans-serif; padding: 18px;"><h3>Mugina Hope Primary School</h3><p>${targetLog.sanitizedSummary}</p><p>Motto: We learn for our better future</p></div>`;
+      `<div style="font-family: Arial, sans-serif; padding: 18px;"><h3>Mugina Hope Primary School</h3><p>${escapeHtml(targetLog.sanitizedSummary || '')}</p><p>Motto: We learn for our better future</p></div>`;
 
     await transporter.sendMail({
       from: fromHeader,
       to: targetLog.recipientEmail,
-      subject: targetLog.subject,
+      subject: String(targetLog.subject || '').replace(/[\r\n]+/g, ' ').trim(),
       html: htmlToSend,
     });
 
@@ -3454,30 +4153,30 @@ app.post('/api/admin/email-logs/:id/retry', async (req, res) => {
 });
 
 app.get('/api/admin/email-status', (req, res) => {
-  const staffToken = verifyStaffToken(req.headers.authorization);
+  const staffToken = verifyStaffToken(req);
   if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   return res.json({
     success: true,
-    configured: Boolean(GMAIL_USER && GMAIL_APP_PASSWORD),
+    configured: Boolean(GMAIL_USER && GMAIL_APP_PASSWORD && transporter),
     gmailUser: GMAIL_USER ? `${GMAIL_USER.slice(0, 3)}***@${GMAIL_USER.split('@')[1] || ''}` : '',
     appPasswordLength: GMAIL_APP_PASSWORD.length,
-    mode: GMAIL_USER && GMAIL_APP_PASSWORD ? 'gmail-smtp' : 'local-preview-json',
+    mode: GMAIL_USER && GMAIL_APP_PASSWORD && transporter ? 'gmail-smtp' : 'unconfigured',
   });
 });
 
 app.post('/api/admin/email-test', async (req, res) => {
   try {
-    const staffToken = verifyStaffToken(req.headers.authorization);
+    const staffToken = verifyStaffToken(req);
     if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
-      return res.json({
+    if (!transporter || !GMAIL_USER || !GMAIL_APP_PASSWORD) {
+      return res.status(503).json({
         success: false,
         configured: false,
-        error: 'GMAIL_USER or GMAIL_APP_PASSWORD is not set in server environment variables. Preview mode logs emails locally without sending to Gmail.',
+        error: 'GMAIL_USER or GMAIL_APP_PASSWORD is not configured in server environment variables. No emails can be dispatched until SMTP credentials are set.',
       });
     }
     await transporter.verify();
@@ -3489,14 +4188,14 @@ app.post('/api/admin/email-test', async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({
       success: false,
-      configured: true,
+      configured: Boolean(GMAIL_USER && GMAIL_APP_PASSWORD),
       error: formatSmtpError(err),
     });
   }
 });
 
 app.get('/api/admin/email-templates', (req, res) => {
-  const staffToken = verifyStaffToken(req.headers.authorization);
+  const staffToken = verifyStaffToken(req);
   if (!staffToken || !ADMISSIONS_ADMIN_ROLES.has(staffToken.role)) {
     return res.status(403).json({ error: 'Forbidden: Only authorized Administrators may view email templates.' });
   }
@@ -3504,7 +4203,7 @@ app.get('/api/admin/email-templates', (req, res) => {
 });
 
 app.post('/api/admin/email-templates', (req, res) => {
-  const staffToken = verifyStaffToken(req.headers.authorization);
+  const staffToken = verifyStaffToken(req);
   if (!staffToken || !FULL_ADMIN_ROLES.has(staffToken.role)) {
     return res.status(403).json({ error: 'Forbidden: Only authorized Administrators may modify email templates.' });
   }
@@ -3589,4 +4288,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!IS_VERCEL && path.resolve(process.argv[1] || '') === __filename) {
+  startServer();
+}
+
+export default app;

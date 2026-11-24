@@ -238,10 +238,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
   useEffect(() => {
     if (!student?.id) return;
     const token = getStudentAuthToken();
-    if (!token) return;
     let active = true;
     fetch(`/api/student/portal-data?studentId=${encodeURIComponent(student.id)}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(async (res) => {
         if (!res.ok) return null;
@@ -671,34 +671,40 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
       const token = getStudentAuthToken();
       let savedSub: HomeworkSubmission | null = null;
 
-      if (token) {
+      try {
         const res = await fetch('/api/student/homework-submit', {
           method: 'POST',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             ...basePayload,
             questionResponses: curResponses,
           }),
         });
-        const resData = await res.json().catch(() => null);
-        if (!res.ok) {
-          setHwNotice({
-            type: 'err',
-            text: resData?.error || 'Could not record your submission. Please verify attempt limits or due window.',
-          });
-          setSubmittingHwId(null);
-          setRunnerSecondsLeft(null);
-          setRunnerTotalSeconds(null);
-          return;
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('application/json')) {
+          const resData = await res.json().catch(() => null);
+          if (!res.ok && res.status !== 401) {
+            setHwNotice({
+              type: 'err',
+              text: resData?.error || 'Could not record your submission. Please verify attempt limits or due window.',
+            });
+            setSubmittingHwId(null);
+            setRunnerSecondsLeft(null);
+            setRunnerTotalSeconds(null);
+            return;
+          }
+          if (res.ok && resData?.submission) {
+            savedSub = resData.submission as HomeworkSubmission;
+            const existing = getHomeworkSubmissions();
+            saveHomeworkSubmissions([savedSub, ...existing.filter((x) => x.id !== savedSub!.id)]);
+          }
         }
-        if (resData?.submission) {
-          savedSub = resData.submission as HomeworkSubmission;
-          const existing = getHomeworkSubmissions();
-          saveHomeworkSubmissions([savedSub, ...existing.filter((x) => x.id !== savedSub!.id)]);
-        }
+      } catch {
+        // Offline/static fallback below
       }
 
       if (!savedSub) {
@@ -756,21 +762,20 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
       markAllStudentNotificationsRead(effectiveStudent.id, gradeCode);
     }
     const token = getStudentAuthToken();
-    if (token) {
-      fetch('/api/student/notifications/read', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          studentId: effectiveStudent.id,
-          gradeCode,
-          notificationId,
-          markAll: !notificationId,
-        }),
-      }).catch(() => {});
-    }
+    fetch('/api/student/notifications/read', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        studentId: effectiveStudent.id,
+        gradeCode,
+        notificationId,
+        markAll: !notificationId,
+      }),
+    }).catch(() => {});
     setRefreshTick((t) => t + 1);
   };
 

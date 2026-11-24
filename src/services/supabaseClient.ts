@@ -299,10 +299,6 @@ const mapStaffToRow = (s: any, includeExtended = true) => {
     status: s.status || 'Active',
     updated_at: s.updatedAt || new Date().toISOString(),
   };
-  const cleanPw = String(s.password || '').trim();
-  if (cleanPw && cleanPw !== '••••••') {
-    base.password = cleanPw;
-  }
   if (includeExtended) {
     if (s.photoUrl) base.photo_url = s.photoUrl;
     if (s.bio) base.bio = s.bio;
@@ -317,7 +313,8 @@ const mapRowToStaff = (row: any) => ({
   email: row.email || '',
   phone: row.phone || '',
   username: row.username,
-  password: row.password || '',
+  password: '',
+  hasPasswordHash: Boolean(row.has_password_hash || row.password_hash || row.client_password_hash || row.password),
   assignedSubjectOrGrade: row.assigned_subject_or_grade || row.assignedSubjectOrGrade || '',
   photoUrl: row.photo_url || row.photoUrl || '',
   bio: row.bio || '',
@@ -346,10 +343,6 @@ const mapStudentToRow = (st: any, includeExtended = true) => {
   const cleanStudentUser = String(st.studentUsername || '').trim();
   if (cleanStudentUser) {
     base.student_username = cleanStudentUser;
-  }
-  const cleanStudentPw = String(st.studentPassword || '').trim();
-  if (cleanStudentPw && cleanStudentPw !== '••••••') {
-    base.student_password = cleanStudentPw;
   }
   if (includeExtended) {
     base.photo_url = st.photoUrl || null;
@@ -380,7 +373,8 @@ const mapRowToStudent = (row: any) => ({
   parentPhone: row.parent_phone || row.parentPhone || '',
   parentEmail: row.parent_email || row.parentEmail || '',
   studentUsername: row.student_username || row.studentUsername || '',
-  studentPassword: row.student_password || row.studentPassword || '',
+  studentPassword: '',
+  hasPasswordHash: Boolean(row.has_password_hash || row.password_hash || row.client_password_hash || row.student_password),
   studentAccountActive:
     row.student_account_active === false || row.studentAccountActive === false
       ? false

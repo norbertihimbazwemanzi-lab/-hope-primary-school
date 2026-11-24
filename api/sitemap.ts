@@ -20,10 +20,11 @@ export default function handler(req: ApiRequest, res: ApiResponse) {
   const forwardedHost = Array.isArray(rawForwardedHost) ? rawForwardedHost[0] : rawForwardedHost;
   const rawHost = req.headers?.host;
   const hostHeader = Array.isArray(rawHost) ? rawHost[0] : rawHost;
-  const resolvedHost = forwardedHost || hostHeader || '';
+  const resolvedHost = String(forwardedHost || hostHeader || '').split(',')[0].trim();
+  const isSafeHost = /^[a-zA-Z0-9.-]+(?::\d{1,5})?$/.test(resolvedHost);
 
   const originFromHeaders =
-    resolvedHost && !resolvedHost.includes('localhost') && !resolvedHost.includes('127.0.0.1')
+    isSafeHost && resolvedHost && !resolvedHost.includes('localhost') && !resolvedHost.includes('127.0.0.1')
       ? `https://${resolvedHost}`
       : '';
 

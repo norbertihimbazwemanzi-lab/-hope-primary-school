@@ -324,9 +324,18 @@ export const uploadSchoolDocument = async (
     const base64Data = await readFileAsDataUrl(file);
 
     try {
+      const staffToken =
+        typeof window !== 'undefined' ? sessionStorage.getItem('mugina_staff_bearer_token') : null;
+      const studentToken =
+        typeof window !== 'undefined' ? sessionStorage.getItem('mugina_student_bearer_token') : null;
+      const bearer = staffToken || studentToken;
       const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+        },
         body: JSON.stringify({
           fileData: base64Data,
           fileName: cleanName,

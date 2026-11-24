@@ -21,6 +21,7 @@ import {
   AttendanceRecord,
   getEnrolledStudents,
   enrollStudentsBatchByDOS,
+  generateTemporaryPortalPassword,
   saveAttendanceBatch,
 } from '../services/adminStore';
 
@@ -544,7 +545,7 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
           parentPhone: row.parentPhone.trim() || '+250 788 000 000',
           parentEmail: row.parentEmail.trim(),
           studentUsername: usernameCandidate,
-          studentPassword: 'student@2026',
+          studentPassword: generateTemporaryPortalPassword(),
           enrolledBy,
           status: 'Active',
           feedbackNotes: selectedFileName ? `Imported via ${selectedFileName}` : 'Batch class import',

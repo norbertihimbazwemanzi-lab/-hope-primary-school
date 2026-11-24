@@ -13,6 +13,7 @@ import {
 import { ROLE_PERMISSION_DIRECTORY } from '../services/rbac';
 import { getAuditLogs, logAuditEvent, syncAllSmsDomains } from '../services/smsStore';
 import { syncAllStoresWithServerDatabase } from '../services/adminStore';
+import { getStaffAuthToken } from '../services/authService';
 
 export const SystemAuditAndBackupModule: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState(() => getAuditLogs());
@@ -39,7 +40,11 @@ export const SystemAuditAndBackupModule: React.FC = () => {
     setErrMsg(null);
     let serverSnapshot: Record<string, any> = {};
     try {
-      const res = await fetch('/api/sms/backup');
+      const token = getStaffAuthToken();
+      const res = await fetch('/api/sms/backup', {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) serverSnapshot = await res.json();
     } catch {
       // fall back to localStorage snapshot
@@ -91,11 +96,16 @@ export const SystemAuditAndBackupModule: React.FC = () => {
           }
         });
       }
-      if (parsed.serverDomains?.domains) {
+      if (parsed.serverDomains?.backup || parsed.serverDomains?.domains) {
+        const token = getStaffAuthToken();
         await fetch('/api/sms/restore', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domains: parsed.serverDomains.domains }),
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(parsed.serverDomains.backup || parsed.serverDomains.domains),
         }).catch(() => {});
       }
       await syncAllStoresWithServerDatabase();

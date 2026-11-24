@@ -1153,10 +1153,18 @@ export const syncAllSmsDomains = async (): Promise<void> => {
   await Promise.allSettled(
     ALL_SMS_DOMAINS.map(async (domain) => {
       try {
+        const token =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem('mugina_staff_bearer_token') ||
+              sessionStorage.getItem('mugina_student_bearer_token')
+            : null;
         const [sbItems, fbItems, serverRes] = await Promise.all([
           fetchSmsDomainFromSupabase(domain),
           fetchSmsDomainFromFirebase(domain),
-          fetch(`/api/sms/${domain}`)
+          fetch(`/api/sms/${domain}`, {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
             .then(async (r) => (r.ok ? (await r.json()).items : null))
             .catch(() => null),
         ]);

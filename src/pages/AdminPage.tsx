@@ -67,6 +67,7 @@ import {
   syncServerApplications,
   promoteStudentsBatch,
   waitForCredentialSync,
+  generateTemporaryPortalPassword,
 } from '../services/adminStore';
 import { FacilityItem, PageId } from '../types';
 import { ACADEMIC_GRADES } from '../data/schoolData';
@@ -88,6 +89,9 @@ import {
   warmUpFirebaseAuth,
   publishGoogleOAuthHandoff,
   consumeGoogleOAuthHandoff,
+  fetchActiveServerSession,
+  getBootstrapStatus,
+  bootstrapFirstAdmin,
 } from '../services/authService';
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
@@ -132,6 +136,7 @@ import {
 import { getTeacherAssignments, logAuditEvent } from '../services/smsStore';
 import {
   Shield,
+  ShieldCheck,
   Lock,
   UserCheck,
   GraduationCap,
@@ -294,6 +299,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [googleFullTabNotice, setGoogleFullTabNotice] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
+  const [needsBootstrap, setNeedsBootstrap] = useState(false);
+  const [showBootstrapForm, setShowBootstrapForm] = useState(false);
+  const [bootstrapName, setBootstrapName] = useState('School Chief Administrator');
+  const [bootstrapEmail, setBootstrapEmail] = useState('');
+  const [bootstrapUsername, setBootstrapUsername] = useState('');
+  const [bootstrapPassword, setBootstrapPassword] = useState('');
+  const [bootstrapConfirmPassword, setBootstrapConfirmPassword] = useState('');
+  const [bootstrapError, setBootstrapError] = useState('');
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
 
   // Forgot Password inline state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -301,50 +315,68 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [forgotSending, setForgotSending] = useState(false);
   const [forgotFeedback, setForgotFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Auto-populate saved credentials on phone/browser mount if remember option was enabled
+  // Restore server cookie session or check first-run bootstrap status; scrub any legacy plaintext credentials
   useEffect(() => {
     try {
+      localStorage.removeItem('mha_saved_credentials_v1');
       const isRemembered = localStorage.getItem('mha_remember_password');
       if (isRemembered !== 'false') {
-        const saved = localStorage.getItem('mha_saved_credentials_v1');
+        const saved = localStorage.getItem('mha_remembered_username_v2');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed && typeof parsed === 'object') {
-            if (parsed.username) setLoginUsername(parsed.username);
-            if (parsed.password) setLoginPassword(parsed.password);
+          if (parsed && typeof parsed === 'object' && parsed.username) {
+            setLoginUsername(parsed.username);
             setHasSavedCredentials(true);
           }
         }
       }
     } catch (err) {
-      console.warn('Could not read remembered credentials:', err);
+      console.warn('Could not read remembered username:', err);
     }
+
+    let cancelled = false;
+    (async () => {
+      if (!currentUser) {
+        const activeSession = await fetchActiveServerSession();
+        if (!cancelled && activeSession) {
+          setCurrentSessionUser(activeSession);
+          setCurrentUser(activeSession);
+          setActiveTab(resolveDefaultTabForUser(activeSession));
+          return;
+        }
+        const boot = await getBootstrapStatus();
+        if (!cancelled && boot.needsBootstrap) {
+          setNeedsBootstrap(true);
+          setShowBootstrapForm(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const persistCredentialsIfEnabled = (username: string, pass: string) => {
-    if (rememberPassword) {
-      try {
+  const persistCredentialsIfEnabled = (username: string, _pass: string) => {
+    try {
+      localStorage.removeItem('mha_saved_credentials_v1');
+      if (rememberPassword) {
         localStorage.setItem('mha_remember_password', 'true');
         localStorage.setItem(
-          'mha_saved_credentials_v1',
+          'mha_remembered_username_v2',
           JSON.stringify({
             username,
-            password: pass,
             savedAt: new Date().toISOString(),
           })
         );
         setHasSavedCredentials(true);
-      } catch (err) {
-        console.warn('Failed saving credentials to device storage:', err);
-      }
-    } else {
-      try {
+      } else {
         localStorage.setItem('mha_remember_password', 'false');
-        localStorage.removeItem('mha_saved_credentials_v1');
+        localStorage.removeItem('mha_remembered_username_v2');
         setHasSavedCredentials(false);
-      } catch (err) {
-        console.warn('Failed clearing saved credentials:', err);
       }
+    } catch (err) {
+      console.warn('Failed updating remembered username preference:', err);
     }
   };
 
@@ -352,6 +384,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     if (e) e.preventDefault();
     try {
       localStorage.removeItem('mha_saved_credentials_v1');
+      localStorage.removeItem('mha_remembered_username_v2');
       localStorage.setItem('mha_remember_password', 'false');
       setRememberPassword(false);
       setHasSavedCredentials(false);
@@ -463,7 +496,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showBulkStudentModal, setShowBulkStudentModal] = useState(false);
   const [resetPasswordStudent, setResetPasswordStudent] = useState<EnrolledStudent | null>(null);
-  const [resetPasswordInput, setResetPasswordInput] = useState('student@2026');
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
   const [studentFormData, setStudentFormData] = useState({
     regNumber: `MHA-2026-${Math.floor(100 + Math.random() * 900)}`,
     fullName: '',
@@ -479,7 +512,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
     parentPhone: '+250 78',
     parentEmail: '',
     studentUsername: '',
-    studentPassword: 'student@2026',
+    studentPassword: '',
     studentAccountActive: true,
     status: 'Active' as EnrolledStudent['status'],
   });
@@ -488,7 +521,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   const [confirmAppTarget, setConfirmAppTarget] = useState<AdminApplication | null>(null);
   const [confirmFeedbackNotes, setConfirmFeedbackNotes] = useState('Welcome to Mugina Hope Academy! Your admission is confirmed.');
   const [confirmStudentUser, setConfirmStudentUser] = useState('');
-  const [confirmStudentPass, setConfirmStudentPass] = useState('mugina@2026');
+  const [confirmStudentPass, setConfirmStudentPass] = useState('');
   const [isConfirmingApp, setIsConfirmingApp] = useState(false);
 
   // Admissions Review Modal (Approve + Verification Code / Request More Info / Reject)
@@ -620,7 +653,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       const [sbThreads, fbThreads, serverThreads, latestApps] = await Promise.all([
         fetchApplicantChatsFromSupabase().catch(() => null),
         fetchApplicantChatsFromFirebase().catch(() => []),
-        fetch('/api/chats')
+        fetch('/api/chats', {
+          credentials: 'include',
+          headers: getStaffAuthToken() ? { Authorization: `Bearer ${getStaffAuthToken()}` } : {},
+        })
           .then(async (res) => (res.ok ? (await res.json()).threads : []))
           .catch(() => []),
         syncServerApplications().catch(() => getApplications()),
@@ -864,6 +900,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         return;
       }
 
+      if (staffRes.reason.toLowerCase().includes('too many')) {
+        setLoginError(staffRes.reason);
+        return;
+      }
+
       // 2. Student Portal Authentication (Backend + Synced Cloud Directory)
       let studentRes = await authenticateStudentWithBackend(cleanUser, cleanPass);
       if (
@@ -888,14 +929,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       if (
         studentRes.reason.toLowerCase().includes('deactivated') ||
         studentRes.reason.toLowerCase().includes('suspended') ||
-        studentRes.reason.toLowerCase().includes('transferred')
+        studentRes.reason.toLowerCase().includes('transferred') ||
+        studentRes.reason.toLowerCase().includes('too many')
       ) {
         setLoginError(studentRes.reason);
         return;
       }
 
       // 3. Parent / Guardian Authentication against synced student records
-      const parentSession = authenticateParentAccount(cleanUser, cleanPass);
+      const parentSession = await authenticateParentAccount(cleanUser, cleanPass);
       if (parentSession) {
         persistCredentialsIfEnabled(cleanUser, cleanPass);
         setCurrentSessionUser(parentSession);
@@ -910,6 +952,44 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       setLoginError('Could not verify credentials across database. Please check your connection and try again.');
     } finally {
       setIsVerifyingLogin(false);
+    }
+  };
+
+  const handleBootstrapAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBootstrapError('');
+    if (bootstrapPassword.length < 8) {
+      setBootstrapError('Administrator password must be at least 8 characters long.');
+      return;
+    }
+    if (bootstrapPassword !== bootstrapConfirmPassword) {
+      setBootstrapError('Passwords do not match.');
+      return;
+    }
+    setIsBootstrapping(true);
+    try {
+      const res = await bootstrapFirstAdmin({
+        name: bootstrapName.trim(),
+        email: bootstrapEmail.trim(),
+        username: bootstrapUsername.trim() || bootstrapEmail.trim(),
+        password: bootstrapPassword,
+      });
+      if (res.authorized) {
+        const synced = await syncServerStaff();
+        setStaffList(synced);
+        setNeedsBootstrap(false);
+        setShowBootstrapForm(false);
+        setBootstrapPassword('');
+        setBootstrapConfirmPassword('');
+        persistCredentialsIfEnabled(res.session.username, '');
+        setCurrentSessionUser(res.session);
+        setCurrentUser(res.session);
+        setActiveTab(resolveDefaultTabForUser(res.session));
+      } else {
+        setBootstrapError(res.reason || 'Could not create initial administrator account.');
+      }
+    } finally {
+      setIsBootstrapping(false);
     }
   };
 
@@ -1147,7 +1227,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         );
         setEditingStudent(null);
       } else {
-        const initialPw = cleanNewPw && cleanNewPw !== '••••••' ? cleanNewPw : 'student@2026';
+        const initialPw = cleanNewPw && cleanNewPw !== '••••••' ? cleanNewPw : generateTemporaryPortalPassword();
         const created = enrollStudentByDOS({
           regNumber: studentFormData.regNumber.trim(),
           fullName: studentFormData.fullName.trim(),
@@ -1171,7 +1251,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         await waitForCredentialSync();
         logAuditEvent('CREATE', 'Student', created.id, `Enrolled student ${created.fullName} into ${created.gradeCode}`);
         setDeleteSuccessMsg(
-          `Enrolled ${created.fullName} (${created.regNumber}) — Portal Username: "${username}".`
+          `Enrolled ${created.fullName} (${created.regNumber}) — Portal Username: "${username}" · Initial Password: "${initialPw}".`
         );
       }
       setTimeout(() => setDeleteSuccessMsg(null), 6000);
@@ -1193,7 +1273,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
         parentPhone: '+250 78',
         parentEmail: '',
         studentUsername: '',
-        studentPassword: 'student@2026',
+        studentPassword: '',
         studentAccountActive: true,
         status: 'Active',
       });
@@ -1681,36 +1761,45 @@ END $$;`;
   };
 
   // 3. Confirm Admissions Application (Admin & DOS)
+  const escHtml = (v: unknown) =>
+    String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
   const handleConfirmApplication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirmAppTarget) return;
     setConfirmAppError(null);
     setIsConfirmingApp(true);
     try {
+      const issuedTempPassword = confirmStudentPass.trim() || generateTemporaryPortalPassword();
       const { student } = confirmApplicationByDOSOrAdmin(
         confirmAppTarget.id,
         confirmFeedbackNotes,
         currentUser?.name || 'Director of Studies',
         confirmStudentUser || `stu.${confirmAppTarget.studentName.toLowerCase().replace(/\s+/g, '')}`,
-        confirmStudentPass || 'mugina@2026'
+        issuedTempPassword
       );
 
       // Dispatch multi-tier confirmation email (Vercel serverless / Express / Cloud notification)
       if (student.parentEmail) {
         dispatchOfficialEmail({
           to: student.parentEmail,
-          subject: `[Mugina Hope Academy] Official Admission Confirmation: ${student.fullName}`,
+          subject: `[Mugina Hope Academy] Official Admission Confirmation: ${String(student.fullName || '').replace(/[\r\n]+/g, ' ')}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #93c5fd; border-radius: 8px;">
               <h2 style="color: #1e3a8a;">Mugina Hope Primary & Nursery Academy</h2>
-              <p>Dear ${student.parentName || 'Parent / Guardian'},</p>
-              <p>Registration for <strong>${student.fullName}</strong> (${student.gradeCode}) has been officially <strong>CONFIRMED & APPROVED</strong>.</p>
+              <p>Dear ${escHtml(student.parentName || 'Parent / Guardian')},</p>
+              <p>Registration for <strong>${escHtml(student.fullName)}</strong> (${escHtml(student.gradeCode)}) has been officially <strong>CONFIRMED & APPROVED</strong>.</p>
               <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; margin: 15px 0;">
-                <p><strong>Registration ID:</strong> <code>${student.regNumber}</code></p>
-                <p><strong>Student Portal Username:</strong> <code>${student.studentUsername}</code></p>
-                <p><strong>Temporary Password:</strong> <code>${student.studentPassword}</code></p>
+                <p><strong>Registration ID:</strong> <code>${escHtml(student.regNumber)}</code></p>
+                <p><strong>Student Portal Username:</strong> <code>${escHtml(student.studentUsername)}</code></p>
+                <p><strong>Temporary Password:</strong> <code>${escHtml(issuedTempPassword)}</code></p>
               </div>
-              ${confirmFeedbackNotes ? `<p><strong>Feedback from Administration:</strong> ${confirmFeedbackNotes}</p>` : ''}
+              ${confirmFeedbackNotes ? `<p><strong>Feedback from Administration:</strong> ${escHtml(confirmFeedbackNotes)}</p>` : ''}
               <p style="font-size: 11px; color: #64748b;">Mugina Sector, Kamonyi District, Rwanda · Adjacent to Mugina Police Station</p>
             </div>
           `,
@@ -1723,7 +1812,7 @@ END $$;`;
             parentName: student.parentName,
             parentEmail: student.parentEmail,
             studentUsername: student.studentUsername,
-            studentPassword: student.studentPassword,
+            studentPassword: issuedTempPassword,
             feedbackNotes: confirmFeedbackNotes,
           },
         }).catch((e) => console.warn('Admission email dispatch notice:', e));
@@ -1754,6 +1843,7 @@ END $$;`;
       const token = getStaffAuthToken();
       const res = await fetch('/api/admissions/review', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1826,12 +1916,17 @@ END $$;`;
     setAdminReplyText('');
 
     try {
+      const staffToken = getStaffAuthToken();
       await Promise.allSettled([
         appendApplicantChatMessageToSupabase(refCode, adminMsg, updatedThread),
         saveApplicantChatToFirebase(updatedThread),
         fetch(`/api/chats/${encodeURIComponent(refCode)}/messages`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(staffToken ? { Authorization: `Bearer ${staffToken}` } : {}),
+          },
           body: JSON.stringify({
             sender: 'admin',
             senderName,
@@ -1847,10 +1942,10 @@ END $$;`;
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
               <h3 style="color: #1e3a8a;">Mugina Hope Primary & Nursery Academy</h3>
-              <p>Dear ${updatedThread.parentName},</p>
-              <p>Administration reply regarding applicant <strong>${updatedThread.studentName}</strong> (${refCode}):</p>
-              <blockquote style="background: #f8fafc; padding: 12px 16px; border-left: 4px solid #1e3a8a; margin: 12px 0;">${cleanText}</blockquote>
-              <p style="font-size: 12px; color: #64748b;">Sent by ${senderName}</p>
+              <p>Dear ${escHtml(updatedThread.parentName)},</p>
+              <p>Administration reply regarding applicant <strong>${escHtml(updatedThread.studentName)}</strong> (${escHtml(refCode)}):</p>
+              <blockquote style="background: #f8fafc; padding: 12px 16px; border-left: 4px solid #1e3a8a; margin: 12px 0;">${escHtml(cleanText)}</blockquote>
+              <p style="font-size: 12px; color: #64748b;">Sent by ${escHtml(senderName)}</p>
             </div>
           `,
           type: 'contact_inquiry',
@@ -1899,11 +1994,16 @@ END $$;`;
 
     // Send notifications to absent parents via backend /api/attendance/notify
     let notifiedCount = 0;
+    const staffToken = getStaffAuthToken();
     for (const item of absentStudentsToNotify) {
       try {
-        await fetch('/api/attendance/notify', {
+        const res = await fetch('/api/attendance/notify', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(staffToken ? { Authorization: `Bearer ${staffToken}` } : {}),
+          },
           body: JSON.stringify({
             studentName: item.student.fullName,
             studentId: item.student.regNumber,
@@ -1915,7 +2015,10 @@ END $$;`;
             notes: item.notes,
           }),
         });
-        notifiedCount++;
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.success !== false) {
+          notifiedCount++;
+        }
       } catch (err) {
         console.error('Attendance email error:', err);
       }
@@ -2232,7 +2335,7 @@ END $$;`;
               </div>
             )}
 
-            {/* Password-Protected Security Gate OR Forgot Password Flow */}
+            {/* Password-Protected Security Gate OR Forgot Password OR First-Run Admin Setup */}
             {showForgotPassword ? (
               <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
                 <div className="space-y-1">
@@ -2302,6 +2405,121 @@ END $$;`;
                   className="w-full py-2 text-xs font-semibold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
                 >
                   Back to Portal Sign In
+                </button>
+              </form>
+            ) : needsBootstrap && showBootstrapForm ? (
+              <form onSubmit={handleBootstrapAdminSubmit} className="space-y-3.5">
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl space-y-1">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Initial Administrator Setup
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Create your school administrator credentials for first-time deployment. This setup locks automatically once saved.
+                  </p>
+                </div>
+
+                {bootstrapError && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{bootstrapError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                    Administrator Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bootstrapName}
+                    onChange={(e) => setBootstrapName(e.target.value)}
+                    placeholder="School Chief Administrator"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                    Official Admin Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={bootstrapEmail}
+                    onChange={(e) => setBootstrapEmail(e.target.value)}
+                    placeholder="admin@yourschool.org"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                    Admin Username (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={bootstrapUsername}
+                    onChange={(e) => setBootstrapUsername(e.target.value)}
+                    placeholder="Defaults to admin email"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                    Admin Password (Min 8 chars) *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={bootstrapPassword}
+                    onChange={(e) => setBootstrapPassword(e.target.value)}
+                    placeholder="Create a strong password"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1">
+                    Confirm Password *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={bootstrapConfirmPassword}
+                    onChange={(e) => setBootstrapConfirmPassword(e.target.value)}
+                    placeholder="Re-enter password"
+                    className="w-full text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isBootstrapping}
+                  className="w-full py-3 px-4 bg-blue-950 hover:bg-blue-900 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-75"
+                >
+                  {isBootstrapping ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                      <span>Setting Up Admin...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4 text-amber-400" />
+                      <span>Create Admin Account &amp; Sign In</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowBootstrapForm(false)}
+                  className="w-full py-2 text-xs font-semibold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
+                >
+                  Already have an account? Back to Sign In
                 </button>
               </form>
             ) : (
@@ -2383,6 +2601,7 @@ END $$;`;
                             try {
                               localStorage.setItem('mha_remember_password', 'false');
                               localStorage.removeItem('mha_saved_credentials_v1');
+                              localStorage.removeItem('mha_remembered_username_v2');
                               setHasSavedCredentials(false);
                             } catch {}
                           }
@@ -2466,6 +2685,16 @@ END $$;`;
                   </svg>
                   <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
                 </button>
+
+                {needsBootstrap && (
+                  <button
+                    type="button"
+                    onClick={() => setShowBootstrapForm(true)}
+                    className="w-full py-2 text-xs font-semibold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    First-time setup? Create Initial Administrator Account
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -3261,7 +3490,7 @@ END $$;`;
                         patch.studentUsername = slug || st.regNumber.toLowerCase();
                       }
                       if (!hasAnyPw) {
-                        patch.studentPassword = 'student@2026';
+                        patch.studentPassword = generateTemporaryPortalPassword();
                       }
                       if (needsActive) {
                         patch.studentAccountActive = true;
@@ -3373,7 +3602,7 @@ END $$;`;
                     parentPhone: '+250 78',
                     parentEmail: '',
                     studentUsername: '',
-                    studentPassword: 'student@2026',
+                    studentPassword: generateTemporaryPortalPassword(),
                     studentAccountActive: true,
                     status: 'Active',
                   });
@@ -3508,7 +3737,7 @@ END $$;`;
                           type="button"
                           onClick={() => {
                             setResetPasswordStudent(st);
-                            setResetPasswordInput(st.studentPassword || '');
+                            setResetPasswordInput(generateTemporaryPortalPassword());
                           }}
                           className="p-1.5 text-slate-500 hover:text-amber-600 rounded-lg hover:bg-amber-50 transition-colors cursor-pointer"
                           title="Reset Student Portal Password"
@@ -3534,7 +3763,7 @@ END $$;`;
                               parentPhone: st.parentPhone,
                               parentEmail: st.parentEmail || '',
                               studentUsername: st.studentUsername,
-                              studentPassword: st.studentPassword,
+                              studentPassword: '',
                               studentAccountActive: st.studentAccountActive !== false,
                               status: st.status,
                             });
@@ -3963,7 +4192,7 @@ END $$;`;
                           onClick={() => {
                             setConfirmAppTarget(app);
                             setConfirmStudentUser(`stu.${app.studentName.toLowerCase().replace(/\s+/g, '')}`);
-                            setConfirmStudentPass('mugina@2026');
+                            setConfirmStudentPass(generateTemporaryPortalPassword());
                           }}
                           className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
                         >
@@ -4093,7 +4322,7 @@ END $$;`;
                               onClick={() => {
                                 setConfirmAppTarget(linkedApp);
                                 setConfirmStudentUser(`stu.${linkedApp.studentName.toLowerCase().replace(/\s+/g, '')}`);
-                                setConfirmStudentPass('mugina@2026');
+                                setConfirmStudentPass(generateTemporaryPortalPassword());
                               }}
                               className="px-3 py-1.5 bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs rounded-xl shadow-xs transition-colors shrink-0"
                             >
@@ -6976,7 +7205,7 @@ END $$;`;
                       setStudentFormData((prev) => ({
                         ...prev,
                         studentUsername: slug ? `${slug}` : `stu.${suffix}`,
-                        studentPassword: `Mha@${Math.floor(1000 + Math.random() * 9000)}`,
+                        studentPassword: generateTemporaryPortalPassword(),
                       }));
                     }}
                     className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] rounded-lg cursor-pointer"
@@ -7000,6 +7229,7 @@ END $$;`;
                     <label className="text-[10px] font-bold text-amber-800">Student Password:</label>
                     <input
                       type="text"
+                      placeholder={editingStudent ? 'Leave blank to keep existing password' : 'Auto-generated if blank'}
                       value={studentFormData.studentPassword}
                       onChange={(e) => setStudentFormData({ ...studentFormData, studentPassword: e.target.value })}
                       className="w-full bg-white border border-amber-300 p-2 rounded-lg font-mono text-xs"

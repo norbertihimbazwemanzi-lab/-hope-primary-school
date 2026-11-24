@@ -626,9 +626,8 @@ export const saveEnrolledStudentToFirebase = async (student: any): Promise<boole
       updatedAt: student.updatedAt || new Date().toISOString(),
       serverTimestamp: Timestamp.now(),
     };
-    if (!String(payload.studentPassword || '').trim() || payload.studentPassword === '••••••') {
-      delete payload.studentPassword;
-    }
+    delete payload.studentPassword;
+    delete payload.password;
     if (!String(payload.studentUsername || '').trim()) {
       delete payload.studentUsername;
     }
@@ -654,7 +653,10 @@ export const fetchEnrolledStudentsFromFirebase = async (): Promise<any[]> => {
     if (!snapshot) return [];
     const items: any[] = [];
     snapshot.forEach((docSnap: any) => {
-      items.push({ id: docSnap.id, ...docSnap.data() });
+      const data = { ...(docSnap.data() || {}) };
+      delete data.studentPassword;
+      delete data.password;
+      items.push({ id: docSnap.id, ...data });
     });
     return items;
   } catch (err) {
@@ -690,9 +692,8 @@ export const saveStaffMemberToFirebase = async (staff: any): Promise<boolean> =>
       updatedAt: staff.updatedAt || new Date().toISOString(),
       serverTimestamp: Timestamp.now(),
     };
-    if (!String(payload.password || '').trim() || payload.password === '••••••') {
-      delete payload.password;
-    }
+    delete payload.password;
+    delete payload.studentPassword;
     Object.keys(payload).forEach((k) => {
       if (payload[k] === undefined) delete payload[k];
     });
@@ -729,7 +730,10 @@ export const fetchStaffMembersFromFirebase = async (): Promise<any[]> => {
     if (!snapshot) return [];
     const items: any[] = [];
     snapshot.forEach((docSnap: any) => {
-      items.push({ id: docSnap.id, ...docSnap.data() });
+      const data = { ...(docSnap.data() || {}) };
+      delete data.password;
+      delete data.studentPassword;
+      items.push({ id: docSnap.id, ...data });
     });
     return items;
   } catch (err) {

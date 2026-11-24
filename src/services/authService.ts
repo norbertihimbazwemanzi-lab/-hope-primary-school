@@ -214,29 +214,27 @@ export const emailPasswordSignIn = async (
     const cred = await signInWithEmailAndPassword(auth, email, pass);
     return { user: cred.user };
   } catch (err: any) {
-    // If user not registered in Firebase Auth or provider not enabled, check staff registry
     console.warn('Firebase email auth notice:', err?.code || err?.message);
     const allStaff = getStaffMembers();
     const cleanUser = email.trim().toLowerCase();
-    const match = allStaff.find(
-      (s) =>
-        (s.username.toLowerCase() === cleanUser || s.email.toLowerCase() === cleanUser) &&
-        s.password === pass &&
-        s.status === 'Active'
-    );
-    if (match) {
-      const staffSession: CurrentSessionUser = {
-        id: match.id,
-        name: match.name,
-        role: match.role as UserRole,
-        username: match.username,
-        email: match.email,
-        phone: match.phone,
-        photoUrl: match.photoUrl,
-        bio: match.bio,
-        assignedSubjectOrGrade: match.assignedSubjectOrGrade,
-      };
-      return { user: null, fallbackStaff: staffSession };
+    for (const s of allStaff) {
+      if (s.status !== 'Active') continue;
+      if (s.username.toLowerCase() !== cleanUser && s.email.toLowerCase() !== cleanUser) continue;
+      const storedHash = s.clientPasswordHash || (s as any).passwordHash;
+      if (await verifyPortalSecret(pass, storedHash)) {
+        const staffSession: CurrentSessionUser = {
+          id: s.id,
+          name: s.name,
+          role: s.role as UserRole,
+          username: s.username,
+          email: s.email,
+          phone: s.phone,
+          photoUrl: s.photoUrl,
+          bio: s.bio,
+          assignedSubjectOrGrade: s.assignedSubjectOrGrade,
+        };
+        return { user: null, fallbackStaff: staffSession };
+      }
     }
     throw err;
   }
@@ -357,13 +355,12 @@ export const resolveStaffRoleForFirebaseUser = (firebaseUser: User): RoleResolut
 };
 
 /**
- * Credential authentication for Parents (Parent Email/Phone + Student Reg# or 'parent2026')
- * and Students (Student Username or Reg# + Student Password)
+ * Credential authentication for Parents (Registered Parent Email/Phone + Child's Student Reg# or hashed portal password)
  */
-export const authenticateParentAccount = (
+export const authenticateParentAccount = async (
   identifier: string,
   secret: string
-): CurrentSessionUser | null => {
+): Promise<CurrentSessionUser | null> => {
   const cleanId = identifier.trim().toLowerCase();
   const cleanPhone = cleanId.replace(/\s+/g, '');
   const cleanSecret = secret.trim();
@@ -378,14 +375,18 @@ export const authenticateParentAccount = (
 
   if (matchedChildren.length === 0) return null;
 
-  // Parent verifies using child's registration number, child's studentPassword, or shared guardian PIN 'parent2026'
-  const isSecretValid =
-    cleanSecret.toLowerCase() === 'parent2026' ||
-    matchedChildren.some(
-      (c) =>
-        c.regNumber.toLowerCase() === cleanSecret.toLowerCase() ||
-        c.studentPassword === cleanSecret
-    );
+  let isSecretValid = false;
+  for (const c of matchedChildren) {
+    if (c.regNumber.toLowerCase() === cleanSecret.toLowerCase()) {
+      isSecretValid = true;
+      break;
+    }
+    const storedHash = c.clientPasswordHash || (c as any).passwordHash;
+    if (await verifyPortalSecret(cleanSecret, storedHash)) {
+      isSecretValid = true;
+      break;
+    }
+  }
 
   if (!isSecretValid) return null;
 
@@ -446,43 +447,16 @@ const findMatchingStaffLocally = async (
   cleanSecret: string
 ): Promise<StaffMember | undefined> => {
   const cleanLower = cleanId.toLowerCase();
-  if (cleanLower) {
-    for (const s of allStaff) {
-      const uname = String(s.username || '').trim().toLowerCase();
-      const email = String(s.email || '').trim().toLowerCase();
-      if (uname !== cleanLower && email !== cleanLower) continue;
-      if (String(s.password || '').trim() === cleanSecret) return s;
-      if (await verifyPortalSecret(cleanSecret, s.clientPasswordHash || (s as any).passwordHash)) {
-        return s;
-      }
+  if (!cleanLower || !cleanSecret) return undefined;
+  for (const s of allStaff) {
+    const uname = String(s.username || '').trim().toLowerCase();
+    const email = String(s.email || '').trim().toLowerCase();
+    if (uname !== cleanLower && email !== cleanLower) continue;
+    const storedHash = s.clientPasswordHash || (s as any).passwordHash;
+    if (await verifyPortalSecret(cleanSecret, storedHash)) {
+      return s;
     }
   }
-
-  if (cleanLower === 'norbertihimbazwemanzi@gmail.com' && cleanSecret === '@0798744704') {
-    return (
-      allStaff.find(
-        (s) => String(s.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
-      ) || {
-        id: 'staff-admin-norbert',
-        name: 'Norbert Ihimbazwe Manzi (Chief Administrator)',
-        role: 'SuperAdmin',
-        email: 'norbertihimbazwemanzi@gmail.com',
-        phone: '+250 798 744 704',
-        username: 'norbertihimbazwemanzi@gmail.com',
-        password: '@0798744704',
-        assignedSubjectOrGrade: 'Chief Administrator & Portal Controller',
-        enrolledAt: '2026-01-01',
-        status: 'Active' as const,
-      }
-    );
-  }
-
-  if ((!cleanLower || cleanLower === 'admin') && cleanSecret === 'mugina2026') {
-    return allStaff.find(
-      (s) => String(s.username || '').trim().toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
-    );
-  }
-
   return undefined;
 };
 
@@ -536,7 +510,7 @@ export const authenticateStaffWithBackend = async (
 ): Promise<StaffLoginResult> => {
   const cleanId = identifier.trim();
   const cleanSecret = secret.trim();
-  if (!cleanSecret && !cleanId) {
+  if (!cleanSecret || !cleanId) {
     return { authorized: false, reason: 'Please enter your username/email and password.' };
   }
 
@@ -547,6 +521,7 @@ export const authenticateStaffWithBackend = async (
   try {
     const res = await fetch('/api/auth/staff-login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
     });
@@ -560,45 +535,29 @@ export const authenticateStaffWithBackend = async (
         return { authorized: true, session: data.session as CurrentSessionUser };
       }
 
-      if (res.status === 403) {
+      if (res.status === 403 || res.status === 429) {
         return {
           authorized: false,
           reason:
             data.error ||
-            'This staff account is currently deactivated. Contact School Administration.',
+            'Authentication blocked or account deactivated. Contact School Administration.',
         };
       }
       serverErrorMsg = data.error || '';
     }
   } catch {
-    // Fall back to synced cloud/vault verification when server offline or SPA rewrite returns HTML
+    // Fall back to synced cloud/vault verification only when Express server is unreachable
+  }
+
+  if (backendHasJson) {
+    return {
+      authorized: false,
+      reason: serverErrorMsg || 'Invalid staff username, email, or password.',
+    };
   }
 
   const cloudFallback = await authenticateStaffLocallyOrFromCloud(cleanId, cleanSecret, true);
   if (cloudFallback.authorized) {
-    if (backendHasJson && cloudFallback.matchedStaff) {
-      try {
-        const listForServer = getStaffMembers().map((s) =>
-          s.id === cloudFallback.matchedStaff!.id ? { ...s, password: cleanSecret } : s
-        );
-        await fetch('/api/staff', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: listForServer }),
-        });
-        const tokenRes = await fetch('/api/auth/staff-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
-        });
-        if (tokenRes.ok && (tokenRes.headers.get('content-type') || '').includes('application/json')) {
-          const td = await tokenRes.json().catch(() => ({}));
-          if (td.token) setStaffAuthToken(td.token);
-        }
-      } catch {
-        // non-fatal
-      }
-    }
     return { authorized: true, session: cloudFallback.session };
   }
 
@@ -613,6 +572,85 @@ export const authenticateStaffWithBackend = async (
   };
 };
 
+export const fetchActiveServerSession = async (): Promise<CurrentSessionUser | null> => {
+  try {
+    const staffToken = getStaffAuthToken();
+    const studentToken = getStudentAuthToken();
+    const token = staffToken || studentToken;
+    const res = await fetch('/api/auth/session', {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return null;
+    const data = await res.json().catch(() => ({}));
+    if (data.authenticated && data.session) {
+      return data.session as CurrentSessionUser;
+    }
+  } catch {
+    // ignore offline/static mode
+  }
+  return null;
+};
+
+export const logoutServerSession = async (): Promise<void> => {
+  setStudentAuthToken(null);
+  setStaffAuthToken(null);
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // non-fatal
+  }
+};
+
+export const getBootstrapStatus = async (): Promise<{ needsBootstrap: boolean }> => {
+  try {
+    const res = await fetch('/api/auth/bootstrap-status', { credentials: 'include' });
+    if (!res.ok) return { needsBootstrap: false };
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) return { needsBootstrap: false };
+    const data = await res.json().catch(() => ({}));
+    return { needsBootstrap: Boolean(data.needsBootstrap) };
+  } catch {
+    return { needsBootstrap: false };
+  }
+};
+
+export const bootstrapFirstAdmin = async (payload: {
+  name: string;
+  email: string;
+  username?: string;
+  password: string;
+}): Promise<StaffLoginResult> => {
+  try {
+    const res = await fetch('/api/auth/bootstrap-admin', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success && data.session) {
+      if (data.token) setStaffAuthToken(data.token);
+      return { authorized: true, session: data.session as CurrentSessionUser };
+    }
+    return {
+      authorized: false,
+      reason: data.error || 'Failed to complete initial administrator setup.',
+    };
+  } catch {
+    return {
+      authorized: false,
+      networkError: true,
+      reason: 'Could not reach server to initialize administrator account.',
+    };
+  }
+};
+
 export const exchangeFirebaseTokenForStaffSession = async (
   firebaseUser: User
 ): Promise<{ success: boolean; session?: CurrentSessionUser }> => {
@@ -620,6 +658,7 @@ export const exchangeFirebaseTokenForStaffSession = async (
     const idToken = await firebaseUser.getIdToken();
     const res = await fetch('/api/auth/staff-firebase-session', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
     });
@@ -717,34 +756,29 @@ export const submitPasswordReset = async (
   }
 };
 
-export const authenticateStudentAccount = (
+export const authenticateStudentAccount = async (
   identifier: string,
   secret: string
-): CurrentSessionUser | null => {
+): Promise<CurrentSessionUser | null> => {
   const cleanId = identifier.trim().toLowerCase();
   const cleanSecret = secret.trim();
   if (!cleanId || !cleanSecret) return null;
 
   const students = getEnrolledStudents();
-  const student = students.find(
-    (s) =>
-      ((s.studentUsername || '').toLowerCase() === cleanId || (s.regNumber || '').toLowerCase() === cleanId) &&
-      s.studentPassword === cleanSecret
-  );
-
-  if (!student) return null;
-  if (student.studentAccountActive === false || student.status !== 'Active') {
+  const matched = await findMatchingStudentLocally(students, cleanId, cleanSecret);
+  if (!matched) return null;
+  if (matched.studentAccountActive === false || matched.status !== 'Active') {
     return null;
   }
 
   return {
-    id: student.id,
-    name: student.fullName,
+    id: matched.id,
+    name: matched.fullName,
     role: 'Student',
-    username: student.studentUsername || student.regNumber,
-    email: student.parentEmail || '',
-    assignedSubjectOrGrade: `${student.gradeCode} (${student.stream || 'Stream A'})`,
-    linkedStudentIds: [student.id],
+    username: matched.studentUsername || matched.regNumber,
+    email: matched.parentEmail || '',
+    assignedSubjectOrGrade: `${matched.gradeCode} (${matched.stream || 'Stream A'})`,
+    linkedStudentIds: [matched.id],
   };
 };
 
@@ -763,8 +797,8 @@ const findMatchingStudentLocally = async (
     const reg = String(s.regNumber || '').trim().toLowerCase();
     const email = String(s.email || '').trim().toLowerCase();
     if (uname !== cleanLower && reg !== cleanLower && email !== cleanLower) continue;
-    if (String(s.studentPassword || '').trim() === cleanSecret) return s;
-    if (await verifyPortalSecret(cleanSecret, s.clientPasswordHash || (s as any).passwordHash)) {
+    const storedHash = s.clientPasswordHash || (s as any).passwordHash;
+    if (await verifyPortalSecret(cleanSecret, storedHash)) {
       return s;
     }
   }
@@ -783,36 +817,47 @@ export const authenticateStudentWithBackend = async (
 
   await waitForCredentialSync();
 
-  // 1. Try server-verified login endpoint first when Express API is reachable
+  // 1. Verify against Express API first when reachable
   let backendHasJson = false;
+  let serverErrorMsg = '';
   try {
     const res = await fetch('/api/auth/student-login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
     });
     const ct = res.headers.get('content-type') || '';
     if (ct.includes('application/json')) {
       backendHasJson = true;
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.session) {
-          if (data.token) setStudentAuthToken(data.token);
-          return { authorized: true, session: data.session as CurrentSessionUser };
-        }
-      } else if (res.status === 403) {
-        const errData = await res.json().catch(() => ({}));
+      const errOrData = await res.json().catch(() => ({}));
+      if (res.ok && errOrData.success && errOrData.session) {
+        if (errOrData.token) setStudentAuthToken(errOrData.token);
+        return { authorized: true, session: errOrData.session as CurrentSessionUser };
+      } else if (res.status === 403 || res.status === 429) {
         return {
           authorized: false,
-          reason: errData.error || 'This student account is currently deactivated. Contact School Administration.',
+          reason:
+            errOrData.error ||
+            'Student account access blocked or deactivated. Contact School Administration.',
         };
       }
+      serverErrorMsg = errOrData.error || '';
     }
   } catch {
-    // Fall back to synced cloud client check if server offline
+    // Fall back to synced cloud client check only when Express server is unreachable
   }
 
-  // 2. Check synced Supabase / Auth Vault / Firebase / cached student directory
+  if (backendHasJson) {
+    return {
+      authorized: false,
+      reason:
+        serverErrorMsg ||
+        'Invalid Student ID / Username or password. Contact the DOS or School Administration office.',
+    };
+  }
+
+  // 2. Offline / static mode fallback: check synced hashed student directory
   let students = getEnrolledStudents();
   let matched = await findMatchingStudentLocally(students, cleanId, cleanSecret);
   if (!matched) {
@@ -846,31 +891,6 @@ export const authenticateStudentWithBackend = async (
     linkedStudentIds: [matched.id],
   };
 
-  // Sync student into backend if server API is live so server token endpoints recognize them too
-  if (backendHasJson) {
-    try {
-      const payloadList = students.map((st) =>
-        st.id === matched!.id ? { ...st, studentPassword: cleanSecret } : st
-      );
-      await fetch('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: payloadList }),
-      });
-      const tokenRes = await fetch('/api/auth/student-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: cleanId, password: cleanSecret }),
-      });
-      if (tokenRes.ok && (tokenRes.headers.get('content-type') || '').includes('application/json')) {
-        const td = await tokenRes.json();
-        if (td.token) setStudentAuthToken(td.token);
-      }
-    } catch {
-      // non-fatal
-    }
-  }
-
   return { authorized: true, session };
 };
 
@@ -896,6 +916,7 @@ export const changeStudentOwnPassword = async (
   try {
     const res = await fetch('/api/student/change-password', {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -911,13 +932,13 @@ export const changeStudentOwnPassword = async (
       verifiedByBackend = true;
     }
   } catch {
-    // Offline/static fallback below verifies against stored plaintext or salted hash
+    // Offline/static fallback below verifies against stored salted hash
   }
 
   if (!verifiedByBackend) {
-    const plainMatch = String(target.studentPassword || '').trim() === cleanCur;
-    const hashMatch = await verifyPortalSecret(cleanCur, target.clientPasswordHash);
-    if (!plainMatch && !hashMatch) {
+    const storedHash = target.clientPasswordHash || (target as any).passwordHash;
+    const hashMatch = await verifyPortalSecret(cleanCur, storedHash);
+    if (!hashMatch) {
       return { success: false, message: 'Current password is incorrect.' };
     }
   }
@@ -932,8 +953,7 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const logoutGoogle = async () => {
-  setStudentAuthToken(null);
-  setStaffAuthToken(null);
+  await logoutServerSession();
   await signOut(auth);
   cachedAccessToken = null;
 };

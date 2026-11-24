@@ -26,7 +26,7 @@ interface ContactPageProps {
 export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate, onOpenTour }) => {
   const [submitted, setSubmitted] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<{ adminNotified: boolean; senderNotified: boolean } | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{ adminNotified: boolean; senderNotified: boolean; error?: string } | null>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -39,6 +39,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate, onOpenTour
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSending(true);
+    setEmailStatus(null);
 
     const adminEmail = getAdminNotificationEmail();
 
@@ -51,9 +52,13 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate, onOpenTour
       message: formData.message,
     });
 
+    let adminNotified = false;
+    let senderNotified = false;
+    let errorMsg: string | undefined;
+
     // 2. Dispatch to backend Nodemailer API (/api/contact)
     try {
-      await fetch('/api/contact', {
+      const apiRes = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -64,25 +69,39 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate, onOpenTour
           message: formData.message,
         }),
       });
-    } catch (backendErr) {
-      console.warn('Backend /api/contact dispatch notice:', backendErr);
+      const apiData = await apiRes.json().catch(() => ({}));
+      if (apiRes.ok && apiData.success) {
+        adminNotified = true;
+        senderNotified = Boolean(apiData.feedbackSent);
+      } else {
+        errorMsg = apiData.error || `Email gateway unavailable (HTTP ${apiRes.status})`;
+      }
+    } catch (backendErr: any) {
+      errorMsg = backendErr?.message || 'Could not reach mail server.';
     }
 
-    // 3. Dispatch real Gmail notification and automated parent feedback
-    try {
-      const emailResult = await handleInquiryNotification({
-        name: formData.name,
-        phone: formData.phone,
-        email: formData.email,
-        subject: formData.subject,
-        message: formData.message,
-        adminEmail: adminEmail,
-      });
-      setEmailStatus(emailResult);
-    } catch (err) {
-      console.error('Email sending error:', err);
+    // 3. Fallback to Google Workspace Gmail API only if backend SMTP did not succeed
+    if (!adminNotified) {
+      try {
+        const gmailResult = await handleInquiryNotification({
+          name: formData.name,
+          phone: formData.phone,
+          email: formData.email,
+          subject: formData.subject,
+          message: formData.message,
+          adminEmail,
+        });
+        adminNotified = gmailResult.adminNotified;
+        senderNotified = gmailResult.senderNotified;
+        if (!adminNotified && gmailResult.error && !errorMsg) {
+          errorMsg = gmailResult.error;
+        }
+      } catch (err: any) {
+        if (!errorMsg) errorMsg = err?.message || 'Email notification failed.';
+      }
     }
 
+    setEmailStatus({ adminNotified, senderNotified, error: errorMsg });
     setIsSending(false);
     setSubmitted(true);
   };
@@ -362,13 +381,26 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate, onOpenTour
               <div className="bg-white p-4 rounded-xl border border-slate-200 max-w-md mx-auto text-left space-y-2 text-xs">
                 <div className="flex items-center gap-2 text-emerald-700 font-semibold">
                   <Check className="w-4 h-4 text-emerald-600" />
-                  <span>Admin notification logged to school inbox</span>
+                  <span>
+                    {emailStatus?.adminNotified
+                      ? 'Admin notification delivered to school inbox'
+                      : 'Inquiry saved to Administration Portal inbox'}
+                  </span>
                 </div>
                 {formData.email && (
-                  <div className="flex items-center gap-2 text-blue-700 font-semibold">
-                    <Mail className="w-4 h-4 text-blue-600" />
-                    <span>Automated feedback confirmation sent to {formData.email}</span>
-                  </div>
+                  emailStatus?.senderNotified ? (
+                    <div className="flex items-center gap-2 text-blue-700 font-semibold">
+                      <Mail className="w-4 h-4 text-blue-600" />
+                      <span>Automated feedback confirmation sent to {formData.email}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-amber-700 font-semibold">
+                      <Mail className="w-4 h-4 text-amber-600" />
+                      <span>
+                        Email delivery could not be completed ({emailStatus?.error || 'SMTP not configured'}), but your inquiry is recorded for staff review.
+                      </span>
+                    </div>
+                  )
                 )}
                 <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
                   Duty officer will call you at <strong>{formData.phone}</strong>.

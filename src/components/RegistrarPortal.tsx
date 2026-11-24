@@ -4,6 +4,7 @@ import {
   enrollStudentByDOS,
   updateEnrolledStudent,
   promoteStudentsBatch,
+  generateTemporaryPortalPassword,
   getCurrentSessionUser,
 } from '../services/adminStore';
 import { uploadSchoolAsset } from '../services/storageService';
@@ -151,7 +152,7 @@ export const RegistrarPortal: React.FC<RegistrarPortalProps> = ({ students, onSt
       parentPhone: onboardForm.parentPhone.trim(),
       parentEmail: onboardForm.parentEmail.trim() || `${cleanName}.parent@gmail.com`,
       studentUsername: cleanName,
-      studentPassword: 'student@2026',
+      studentPassword: generateTemporaryPortalPassword(),
       enrolledBy: `${sessionUser?.name || 'Registrar'}`,
       status: 'Active',
       feedbackNotes: onboardForm.feedbackNotes.trim() || undefined,

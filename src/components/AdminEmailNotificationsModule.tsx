@@ -90,9 +90,9 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
     setLoadingLogs(true);
     try {
       const [logsRes, tplRes, statusRes] = await Promise.all([
-        fetch('/api/admin/email-logs', { headers }),
-        fetch('/api/admin/email-templates', { headers }),
-        fetch('/api/admin/email-status', { headers }),
+        fetch('/api/admin/email-logs', { credentials: 'include', headers }),
+        fetch('/api/admin/email-templates', { credentials: 'include', headers }),
+        fetch('/api/admin/email-status', { credentials: 'include', headers }),
       ]);
       if (logsRes.ok) {
         const data = await logsRes.json();
@@ -124,6 +124,7 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
     try {
       const res = await fetch('/api/admin/email-test', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -158,6 +159,7 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
     try {
       const res = await fetch(`/api/admin/email-logs/${encodeURIComponent(logId)}/retry`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -184,6 +186,7 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
     try {
       const res = await fetch('/api/admissions/resend-code', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -213,6 +216,7 @@ export const AdminEmailNotificationsModule: React.FC<AdminEmailNotificationsModu
     try {
       const res = await fetch('/api/admin/email-templates', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),

@@ -17,8 +17,17 @@ export interface EmailDispatchOptions {
 export interface EmailDispatchResult {
   success: boolean;
   message: string;
-  provider: 'vercel-serverless' | 'local-express' | 'simulated-logged' | 'mailto-fallback';
+  provider: 'vercel-serverless' | 'local-express' | 'error' | 'mailto-fallback';
 }
+
+const getStaffHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (typeof window !== 'undefined') {
+    const staffToken = sessionStorage.getItem('mugina_staff_bearer_token');
+    if (staffToken) headers.Authorization = `Bearer ${staffToken}`;
+  }
+  return headers;
+};
 
 /**
  * Dispatches an email notification via Vercel serverless /api/email or backend Express /api endpoints
@@ -27,12 +36,14 @@ export const dispatchOfficialEmail = async (
   options: EmailDispatchOptions
 ): Promise<EmailDispatchResult> => {
   const { to, subject, html, type, details } = options;
+  let lastError = 'SMTP mail server is unavailable or not configured.';
 
-  // 1. Try Vercel Serverless /api/email or Express endpoint
+  // 1. Try /api/email endpoint
   try {
     const res = await fetch('/api/email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: getStaffHeaders(),
       body: JSON.stringify({
         to,
         subject,
@@ -42,16 +53,17 @@ export const dispatchOfficialEmail = async (
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success !== false) {
       return {
         success: true,
         message: 'Email dispatched successfully via hosted mail gateway.',
         provider: 'vercel-serverless',
       };
     }
-  } catch (err) {
-    console.warn('[Email Service] /api/email notice, trying fallback routes:', err);
+    if (data?.error) lastError = data.error;
+  } catch (err: any) {
+    lastError = err?.message || lastError;
   }
 
   // 2. Try type-specific fallback endpoints if available
@@ -59,44 +71,44 @@ export const dispatchOfficialEmail = async (
     try {
       const res = await fetch('/api/admissions/confirm', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStaffHeaders(),
         body: JSON.stringify(details || {}),
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
         return {
           success: true,
           message: 'Admission confirmation dispatched successfully.',
           provider: 'local-express',
         };
       }
+      if (data?.error) lastError = data.error;
     } catch {}
   } else if (type === 'attendance_alert') {
     try {
       const res = await fetch('/api/attendance/notify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: getStaffHeaders(),
         body: JSON.stringify(details || {}),
       });
-      if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
         return {
           success: true,
           message: 'Attendance notice dispatched successfully.',
           provider: 'local-express',
         };
       }
+      if (data?.error) lastError = data.error;
     } catch {}
   }
 
-  // 3. Resilient Fallback: Safe simulated dispatch with console trace
-  // Guaranteed never to break user UI or block admissions / enrollment workflows
-  console.info(
-    `[Email Service Notice] Stored notification for ${to} regarding "${subject}". To enable live SMTP on Vercel, set SMTP_USER and SMTP_PASS in Vercel Environment Variables.`
-  );
-
   return {
-    success: true,
-    message: `Notification recorded for ${to}.`,
-    provider: 'simulated-logged',
+    success: false,
+    message: lastError,
+    provider: 'error',
   };
 };
 

@@ -262,19 +262,35 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
       // ignore
     }
 
-    // Notify via Gmail if email configured
+    // Notify via Gmail OAuth if staff is signed in (primary SMTP dispatch runs via /api/admissions/register)
+    const escHtml = (v: unknown) =>
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    const safeGenId = escHtml(generatedId);
+    const safeStuName = escHtml(formData.studentFullName);
+    const safeGrade = escHtml(formData.gradeCode);
+    const safeParentName = escHtml(formData.parentFullName);
+    const safeParentPhone = escHtml(formData.parentPhone);
+    const safeSector = escHtml(formData.sectorAddress);
+    const cleanSubjectStudent = String(formData.studentFullName || '').replace(/[\r\n]+/g, ' ');
+    const cleanSubjectGrade = String(formData.gradeCode || '').replace(/[\r\n]+/g, ' ');
+
     const adminEmail = getAdminNotificationEmail();
     sendGmailMessage({
       to: adminEmail,
-      subject: `[Mugina Hope Academy] New Admission Application: ${formData.studentFullName} (${formData.gradeCode})`,
+      subject: `[Mugina Hope Academy] New Admission Application: ${cleanSubjectStudent} (${cleanSubjectGrade})`,
       htmlBody: `
         <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
           <h2 style="color: #1e3a8a;">New Pupil Admission Application Received</h2>
-          <p><strong>Ref Code:</strong> ${generatedId}</p>
-          <p><strong>Student Name:</strong> ${formData.studentFullName}</p>
-          <p><strong>Grade Level:</strong> ${formData.gradeCode}</p>
-          <p><strong>Parent Name:</strong> ${formData.parentFullName} (${formData.parentPhone})</p>
-          <p><strong>Sector:</strong> ${formData.sectorAddress}</p>
+          <p><strong>Ref Code:</strong> ${safeGenId}</p>
+          <p><strong>Student Name:</strong> ${safeStuName}</p>
+          <p><strong>Grade Level:</strong> ${safeGrade}</p>
+          <p><strong>Parent Name:</strong> ${safeParentName} (${safeParentPhone})</p>
+          <p><strong>Sector:</strong> ${safeSector}</p>
           <p style="color: #d97706; font-weight: bold;">Status: Awaiting Admin / DOS Confirmation & Feedback</p>
         </div>
       `,
@@ -286,14 +302,14 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
         subject: `Mugina Hope Academy - Admission Application ${generatedId} Received (Awaiting Confirmation)`,
         htmlBody: `
           <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-            <h2 style="color: #1e3a8a;">Muraho ${formData.parentFullName},</h2>
-            <p>Thank you for submitting an admission registration for <strong>${formData.studentFullName}</strong> to <strong>Mugina Hope Primary & Nursery Academy</strong>.</p>
-            <p>Your application reference code is: <strong>${generatedId}</strong>.</p>
+            <h2 style="color: #1e3a8a;">Muraho ${safeParentName},</h2>
+            <p>Thank you for submitting an admission registration for <strong>${safeStuName}</strong> to <strong>Mugina Hope Primary & Nursery Academy</strong>.</p>
+            <p>Your application reference code is: <strong>${safeGenId}</strong>.</p>
             <div style="background-color: #fef3c7; border: 1px solid #fde68a; padding: 12px; border-radius: 6px; margin: 15px 0;">
               <strong style="color: #92400e;">Status: Awaiting Admin & DOS Confirmation</strong>
               <p style="margin: 4px 0 0 0; color: #78350f; font-size: 13px;">Our Director of Studies (DOS) and Administration Board will review your application and send you official confirmation feedback along with student credentials.</p>
             </div>
-            <p>Our admissions desk located adjacent to Mugina Police Station in Kamonyi will also follow up at ${formData.parentPhone}.</p>
+            <p>Our admissions desk located adjacent to Mugina Police Station in Kamonyi will also follow up at ${safeParentPhone}.</p>
             <p style="color: #64748b; font-size: 13px;">School Motto: "We learn for our better future"</p>
           </div>
         `,

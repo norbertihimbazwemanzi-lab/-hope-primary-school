@@ -859,27 +859,26 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
         bio: profileForm.bio.trim(),
         assignedSubjectOrGrade: profileForm.assignedSubjectOrGrade.trim() || sessionUser.assignedSubjectOrGrade,
       };
-      if (token) {
-        const res = await fetch('/api/staff/profile', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(updatedSessionFields),
-        }).catch(() => null);
-        if (res?.ok) {
-          const data = await res.json().catch(() => null);
-          if (data?.session) {
-            updatedSessionFields = {
-              name: data.session.name,
-              email: data.session.email,
-              phone: data.session.phone || '',
-              photoUrl: data.session.photoUrl || '',
-              bio: data.session.bio || '',
-              assignedSubjectOrGrade: data.session.assignedSubjectOrGrade || '',
-            };
-          }
+      const res = await fetch('/api/staff/profile', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(updatedSessionFields),
+      }).catch(() => null);
+      if (res?.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.session) {
+          updatedSessionFields = {
+            name: data.session.name,
+            email: data.session.email,
+            phone: data.session.phone || '',
+            photoUrl: data.session.photoUrl || '',
+            bio: data.session.bio || '',
+            assignedSubjectOrGrade: data.session.assignedSubjectOrGrade || '',
+          };
         }
       }
       updateStaffMember(sessionUser.id, updatedSessionFields);

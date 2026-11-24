@@ -61,9 +61,20 @@ export const sendGmailMessage = async (payload: SendEmailPayload): Promise<{ suc
   }
 };
 
+const escapeHtml = (value: unknown): string =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const sanitizeHeaderText = (value: unknown): string =>
+  String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+
 /**
  * Sends two emails when someone gets in touch:
- * 1. Admin Alert to the school admin (norbertihimbazwemanzi@gmail.com / school admin)
+ * 1. Admin Alert to the school admin (school notification email)
  * 2. Automated Feedback & Acknowledgement to the sender
  */
 export const handleInquiryNotification = async (inquiry: {
@@ -78,6 +89,15 @@ export const handleInquiryNotification = async (inquiry: {
   let senderNotified = false;
   let lastError: string | undefined;
 
+  const safeName = escapeHtml(inquiry.name);
+  const safePhone = escapeHtml(inquiry.phone);
+  const safeEmail = escapeHtml(inquiry.email || 'Not provided');
+  const safeSubject = escapeHtml(inquiry.subject);
+  const safeMessage = escapeHtml(inquiry.message);
+  const safeTelHref = escapeHtml(String(inquiry.phone || '').replace(/[^\d+]/g, ''));
+  const safeSchoolPhone = escapeHtml(SCHOOL_INFO.contact.phone);
+  const safeWebsite = escapeHtml(SCHOOL_INFO.contact.website);
+
   // 1. Notify School Admin
   const adminHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; color: #1e293b;">
@@ -91,37 +111,37 @@ export const handleInquiryNotification = async (inquiry: {
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">
         <tr>
           <td style="padding: 8px; font-weight: bold; width: 120px; border-bottom: 1px solid #f1f5f9;">Sender:</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${inquiry.name}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${safeName}</td>
         </tr>
         <tr>
           <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #f1f5f9;">Phone:</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;"><a href="tel:${inquiry.phone}">${inquiry.phone}</a></td>
+          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;"><a href="tel:${safeTelHref}">${safePhone}</a></td>
         </tr>
         <tr>
           <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #f1f5f9;">Email:</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${inquiry.email || 'Not provided'}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${safeEmail}</td>
         </tr>
         <tr>
           <td style="padding: 8px; font-weight: bold; border-bottom: 1px solid #f1f5f9;">Subject:</td>
-          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${inquiry.subject}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${safeSubject}</td>
         </tr>
       </table>
 
       <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 16px; margin: 16px 0; border-radius: 4px;">
         <strong style="display: block; margin-bottom: 6px; font-size: 13px; color: #475569;">Message:</strong>
-        <p style="margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${inquiry.message}</p>
+        <p style="margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${safeMessage}</p>
       </div>
 
       <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
         <p>Location: Next to Mugina Police Station, Kamonyi District, Southern Province, Rwanda.</p>
-        <p>School Phone: ${SCHOOL_INFO.contact.phone}</p>
+        <p>School Phone: ${safeSchoolPhone}</p>
       </div>
     </div>
   `;
 
   const adminResult = await sendGmailMessage({
-    to: inquiry.adminEmail,
-    subject: `[Mugina Hope Academy] New Inquiry from ${inquiry.name}: ${inquiry.subject}`,
+    to: sanitizeHeaderText(inquiry.adminEmail),
+    subject: sanitizeHeaderText(`[Mugina Hope Academy] New Inquiry from ${inquiry.name}: ${inquiry.subject}`),
     htmlBody: adminHtml,
   });
 
@@ -139,12 +159,12 @@ export const handleInquiryNotification = async (inquiry: {
           <p style="margin: 4px 0 0 0; font-size: 13px; color: #fde047; font-style: italic;">&ldquo;We learn for our better future&rdquo;</p>
         </div>
 
-        <h3 style="color: #0f172a; margin-top: 0;">Muraho, ${inquiry.name}!</h3>
+        <h3 style="color: #0f172a; margin-top: 0;">Muraho, ${safeName}!</h3>
         <p style="font-size: 14px; line-height: 1.6;">
-          Thank you for getting in touch with Mugina Hope Primary & Nursery Academy. We have successfully received your inquiry regarding <strong>&ldquo;${inquiry.subject}&rdquo;</strong>.
+          Thank you for getting in touch with Mugina Hope Primary & Nursery Academy. We have successfully received your inquiry regarding <strong>&ldquo;${safeSubject}&rdquo;</strong>.
         </p>
         <p style="font-size: 14px; line-height: 1.6;">
-          Our administration office is reviewing your message and our team will get in touch with you shortly at <strong>${inquiry.phone}</strong>.
+          Our administration office is reviewing your message and our team will get in touch with you shortly at <strong>${safePhone}</strong>.
         </p>
 
         <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0;">
@@ -155,19 +175,19 @@ export const handleInquiryNotification = async (inquiry: {
         </div>
 
         <p style="font-size: 13px; color: #475569;">
-          If you have urgent questions, you may also reach our Head of Admissions directly via phone or WhatsApp at <strong>${SCHOOL_INFO.contact.phone}</strong>.
+          If you have urgent questions, you may also reach our Head of Admissions directly via phone or WhatsApp at <strong>${safeSchoolPhone}</strong>.
         </p>
 
         <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b;">
           <p style="margin: 0 0 4px 0; font-weight: bold;">Administration Office</p>
           <p style="margin: 0 0 4px 0;">Mugina Hope Primary & Nursery Academy</p>
-          <p style="margin: 0;">Kamonyi, Southern Province, Rwanda · <a href="https://${SCHOOL_INFO.contact.website}" style="color: #2563eb;">${SCHOOL_INFO.contact.website}</a></p>
+          <p style="margin: 0;">Kamonyi, Southern Province, Rwanda · ${safeWebsite}</p>
         </div>
       </div>
     `;
 
     const feedbackResult = await sendGmailMessage({
-      to: inquiry.email,
+      to: sanitizeHeaderText(inquiry.email),
       subject: `Thank you for contacting Mugina Hope Academy - We received your message`,
       htmlBody: feedbackHtml,
     });

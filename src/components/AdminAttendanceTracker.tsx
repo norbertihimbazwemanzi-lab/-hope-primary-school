@@ -10,9 +10,11 @@ import {
   clearAttendanceForDate,
   deleteAttendanceRecord,
   enrollStudentByDOS,
+  generateTemporaryPortalPassword,
   getCurrentSessionUser,
   getAdminNotificationEmail,
 } from '../services/adminStore';
+import { getStaffAuthToken } from '../services/authService';
 import { ACADEMIC_GRADES, SCHOOL_INFO } from '../data/schoolData';
 import { extractGradesFromAssignment } from '../services/rbac';
 import { getTeacherAssignments } from '../services/smsStore';
@@ -356,11 +358,26 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
     const isAbsent = status === 'Absent';
     const isLate = status === 'Late';
 
+    const escHtml = (v: unknown) =>
+      String(v ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
     // 1. Dispatch via backend Nodemailer endpoint (/api/attendance/notify)
+    let backendDelivered = false;
+    let backendError = '';
     try {
-      await fetch('/api/attendance/notify', {
+      const staffToken = getStaffAuthToken();
+      const res = await fetch('/api/attendance/notify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(staffToken ? { Authorization: `Bearer ${staffToken}` } : {}),
+        },
         body: JSON.stringify({
           studentName: student.fullName,
           studentId: student.regNumber,
@@ -372,16 +389,35 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
           notes,
         }),
       });
-    } catch (err) {
-      console.warn('Backend /api/attendance/notify notice:', err);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success !== false) {
+        backendDelivered = true;
+      } else {
+        backendError = data?.error || `Email service returned HTTP ${res.status}`;
+      }
+    } catch (err: any) {
+      backendError = err?.message || 'Could not reach attendance notification endpoint.';
     }
 
-    // 2. Dispatch via client-side Gmail API (OAuth) if available
+    if (backendDelivered) {
+      return { success: true };
+    }
+
+    // 2. Dispatch via client-side Gmail API (OAuth) only if backend SMTP did not succeed
+    const cleanSubjectName = String(student.fullName || '').replace(/[\r\n]+/g, ' ');
     const emailSubject = isAbsent
-      ? `[ATTENDANCE ALERT] ${student.fullName} Marked ABSENT on ${selectedDate} - Mugina Hope Academy`
+      ? `[ATTENDANCE ALERT] ${cleanSubjectName} Marked ABSENT on ${selectedDate} - Mugina Hope Academy`
       : isLate
-      ? `[Attendance Notice] ${student.fullName} Marked LATE on ${selectedDate} - Mugina Hope Academy`
-      : `[Attendance Notice] Daily Record for ${student.fullName} (${selectedDate})`;
+      ? `[Attendance Notice] ${cleanSubjectName} Marked LATE on ${selectedDate} - Mugina Hope Academy`
+      : `[Attendance Notice] Daily Record for ${cleanSubjectName} (${selectedDate})`;
+
+    const safeParentName = escHtml(student.parentName || 'Parent / Guardian');
+    const safeStudentName = escHtml(student.fullName);
+    const safeRegNumber = escHtml(student.regNumber);
+    const safeGradeCode = escHtml(student.gradeCode);
+    const safeDate = escHtml(selectedDate);
+    const safeStatus = escHtml(status.toUpperCase());
+    const safeNotes = notes ? escHtml(notes) : '';
 
     const emailHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 24px; border: 1px solid ${isAbsent ? '#fca5a5' : '#e2e8f0'}; border-radius: 12px; color: #1e293b;">
@@ -392,9 +428,9 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
           </p>
         </div>
 
-        <h3 style="color: #0f172a; margin-top: 20px;">Dear ${student.parentName || 'Parent / Guardian'},</h3>
+        <h3 style="color: #0f172a; margin-top: 20px;">Dear ${safeParentName},</h3>
         <p style="font-size: 14px; line-height: 1.6;">
-          This official notice confirms the recorded attendance for <strong>${student.fullName}</strong> (Reg No: <code>${student.regNumber}</code>, Grade: <strong>${student.gradeCode}</strong>) on <strong>${selectedDate}</strong>.
+          This official notice confirms the recorded attendance for <strong>${safeStudentName}</strong> (Reg No: <code>${safeRegNumber}</code>, Grade: <strong>${safeGradeCode}</strong>) on <strong>${safeDate}</strong>.
         </p>
 
         <div style="background-color: ${isAbsent ? '#fef2f2' : isLate ? '#fffbeb' : '#f0fdf4'}; border: 1px solid ${isAbsent ? '#fecaca' : isLate ? '#fde68a' : '#bbf7d0'}; border-radius: 8px; padding: 16px; margin: 20px 0;">
@@ -402,9 +438,9 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
             Recorded Status
           </span>
           <span style="font-size: 20px; font-weight: 900; color: ${isAbsent ? '#b91c1c' : isLate ? '#b45309' : '#15803d'};">
-            ${status.toUpperCase()}
+            ${safeStatus}
           </span>
-          ${notes ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #475569;"><strong>Teacher Note:</strong> ${notes}</p>` : ''}
+          ${safeNotes ? `<p style="margin: 8px 0 0 0; font-size: 13px; color: #475569;"><strong>Teacher Note:</strong> ${safeNotes}</p>` : ''}
         </div>
 
         ${isAbsent ? `
@@ -420,14 +456,17 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
     `;
 
     try {
-      await sendGmailMessage({
+      const gmailRes = await sendGmailMessage({
         to: student.parentEmail,
         subject: emailSubject,
         htmlBody: emailHtml,
       });
-      return { success: true };
-    } catch {
-      return { success: true }; // Backend endpoint acts as reliable transporter
+      if (gmailRes.success) {
+        return { success: true };
+      }
+      return { success: false, error: backendError || gmailRes.error || 'Email delivery failed.' };
+    } catch (err: any) {
+      return { success: false, error: backendError || err?.message || 'Email delivery failed.' };
     }
   };
 
@@ -738,11 +777,28 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
     setIsProcessingExcel(true);
 
     try {
+      if (file.size > 5 * 1024 * 1024) {
+        setExcelError('Excel file exceeds 5 MB limit. Please upload a smaller spreadsheet.');
+        setIsProcessingExcel(false);
+        return;
+      }
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
+      const workbook = XLSX.read(buffer, {
+        type: 'array',
+        cellFormula: false,
+        cellHTML: false,
+        cellNF: false,
+      });
       const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rawRows: Record<string, any>[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+      const worksheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
+      if (!worksheet) {
+        setExcelError('The uploaded Excel workbook contains no readable sheets.');
+        setIsProcessingExcel(false);
+        return;
+      }
+      const rawRows: Record<string, any>[] = XLSX.utils
+        .sheet_to_json<Record<string, any>>(worksheet, { defval: '' })
+        .slice(0, 2000);
 
       if (rawRows.length === 0) {
         setExcelError('The uploaded Excel document has no data rows.');
@@ -754,6 +810,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
         const getVal = (...keys: string[]) => {
           for (const k of keys) {
             for (const rowKey of Object.keys(row)) {
+              if (rowKey === '__proto__' || rowKey === 'constructor' || rowKey === 'prototype') continue;
               if (rowKey.trim().toLowerCase() === k.toLowerCase()) {
                 return String(row[rowKey]).trim();
               }
@@ -831,7 +888,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
           parentPhone: row.parentPhone || '+250 78',
           parentEmail: row.parentEmail || '',
           studentUsername: row.fullName.toLowerCase().replace(/\s+/g, '.'),
-          studentPassword: 'student@2026',
+          studentPassword: generateTemporaryPortalPassword(),
           enrolledBy: sessionUser?.name || 'Excel Import',
           status: 'Active',
         });
@@ -924,7 +981,7 @@ export const AdminAttendanceTracker: React.FC<AdminAttendanceTrackerProps> = ({
       parentPhone: newLearnerData.parentPhone.trim() || '+250 788 000 000',
       parentEmail: newLearnerData.parentEmail.trim() || '',
       studentUsername: `stu.${newLearnerData.fullName.toLowerCase().replace(/\s+/g, '')}`,
-      studentPassword: 'mugina@student',
+      studentPassword: generateTemporaryPortalPassword(),
       enrolledBy: sessionUser?.name || 'Staff Administrator',
       status: 'Active',
     });

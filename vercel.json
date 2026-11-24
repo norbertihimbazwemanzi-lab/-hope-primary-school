@@ -2,10 +2,23 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "{staff_store.json,students_store.json}"
+    }
+  },
   "routes": [
     {
+      "src": "^/api/sitemap$",
+      "dest": "/api/sitemap.ts"
+    },
+    {
+      "src": "^/sitemap\\.xml$",
+      "dest": "/api/sitemap.ts"
+    },
+    {
       "src": "^/api/(.*)$",
-      "dest": "/api/$1"
+      "dest": "/api/index.ts"
     },
     {
       "handle": "filesystem"
