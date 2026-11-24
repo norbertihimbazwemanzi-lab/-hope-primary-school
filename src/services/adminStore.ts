@@ -1174,14 +1174,16 @@ export const getStaffMembers = (): StaffMember[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.STAFF);
     if (raw) {
-      const parsed: StaffMember[] = filterStaffAgainstTombstones(JSON.parse(raw));
-      // Guarantee primary admin & headteacher records exist by username without clobbering reset passwords
-      const hasNorbert = parsed.some(
-        (s) => s.username && s.username.toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
-      );
-      const hasHeadteacher = parsed.some(
-        (s) => s.username && s.username.toLowerCase() === 'hopeprimaryschool'
-      );
+      const rawParsed = JSON.parse(raw);
+      if (Array.isArray(rawParsed)) {
+        const parsed: StaffMember[] = filterStaffAgainstTombstones(rawParsed);
+        // Guarantee primary admin & headteacher records exist by username without clobbering reset passwords
+        const hasNorbert = parsed.some(
+          (s) => s?.username && String(s.username).toLowerCase() === 'norbertihimbazwemanzi@gmail.com'
+        );
+        const hasHeadteacher = parsed.some(
+          (s) => s?.username && String(s.username).toLowerCase() === 'hopeprimaryschool'
+        );
       if (!hasNorbert || !hasHeadteacher) {
         const fixed = [...parsed];
         if (!hasNorbert) {
@@ -1192,8 +1194,9 @@ export const getStaffMembers = (): StaffMember[] => {
         }
         localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(fixed));
         return fixed;
+        }
+        return parsed;
       }
-      return parsed;
     }
   } catch (e) {
     console.error(e);
@@ -2462,11 +2465,13 @@ export const getWebsiteSettings = (): WebsiteSettings => {
 
       // Clean up staff showcase if present
       if (Array.isArray(merged.staffShowcase)) {
-        merged.staffShowcase = merged.staffShowcase.map((m) =>
-          m.name.toLowerCase().includes('enos')
-            ? { ...m, name: 'HAKIZIMANA Protais' }
-            : m
-        );
+        merged.staffShowcase = merged.staffShowcase
+          .filter((m) => m && typeof m === 'object')
+          .map((m) =>
+            String(m.name || '').toLowerCase().includes('enos')
+              ? { ...m, name: 'HAKIZIMANA Protais' }
+              : m
+          );
       }
 
       return merged;
@@ -3192,7 +3197,10 @@ export const syncServerTourBookings = async (): Promise<AdminTourBooking[]> => {
 export const getAnnouncements = (): SchoolAnnouncement[] => {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.ANNOUNCEMENTS);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
   } catch (e) {
     console.error(e);
   }
