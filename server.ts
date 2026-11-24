@@ -2591,11 +2591,17 @@ app.post('/api/student/homework-submit', (req, res) => {
   }
 
   const now = new Date().toISOString();
-  let autoGradedResult: { score: number; maxMarks: number; answers: any[] } | null = null;
+  let autoGradedResult: {
+    score: number;
+    maxMarks: number;
+    answers: any[];
+    hasPendingManualGrading: boolean;
+  } | null = null;
   if (hasStructuredQuestions) {
     const respMap = questionResponses && typeof questionResponses === 'object' ? questionResponses : {};
     let totalScore = 0;
     let totalMax = 0;
+    let hasPendingManualGrading = false;
     const answers = hw.questions.map((q: any) => {
       const qMax = Math.max(1, Number(q.marks) || 1);
       totalMax += qMax;
@@ -2607,6 +2613,26 @@ app.post('/api/student/homework-submit', (req, res) => {
       ]
         .map(normalizeQuizAnswer)
         .filter(Boolean);
+
+      if (q.type === 'open') {
+        const exactMatch = Boolean(normResp) && acceptedList.includes(normResp);
+        if (!exactMatch) hasPendingManualGrading = true;
+        const earnedMarks = exactMatch ? qMax : 0;
+        totalScore += earnedMarks;
+        return {
+          questionId: q.id,
+          type: 'open',
+          prompt: q.prompt,
+          studentAnswer: rawResp,
+          correctAnswer: q.correctAnswer,
+          isCorrect: exactMatch,
+          needsManualGrading: !exactMatch,
+          earnedMarks,
+          maxMarks: qMax,
+          explanation: q.explanation,
+        };
+      }
+
       const isCorrect = Boolean(normResp) && acceptedList.includes(normResp);
       const earnedMarks = isCorrect ? qMax : 0;
       totalScore += earnedMarks;
@@ -2617,6 +2643,7 @@ app.post('/api/student/homework-submit', (req, res) => {
         studentAnswer: rawResp,
         correctAnswer: q.correctAnswer,
         isCorrect,
+        needsManualGrading: false,
         earnedMarks,
         maxMarks: qMax,
         explanation: q.explanation,
@@ -2626,6 +2653,7 @@ app.post('/api/student/homework-submit', (req, res) => {
       score: totalScore,
       maxMarks: totalMax > 0 ? totalMax : hw.maxMarks || 20,
       answers,
+      hasPendingManualGrading,
     };
   }
 
@@ -2656,13 +2684,12 @@ app.post('/api/student/homework-submit', (req, res) => {
     updatedAt: now,
     ...(autoGradedResult
       ? {
-          autoGraded: true,
-          status: 'Graded',
+          autoGraded: !autoGradedResult.hasPendingManualGrading,
+          status: autoGradedResult.hasPendingManualGrading ? 'Submitted' : 'Graded',
           score: autoGradedResult.score,
           maxMarks: autoGradedResult.maxMarks,
           answers: autoGradedResult.answers,
-          gradedBy: 'Auto-Graded',
-          gradedAt: now,
+          ...(autoGradedResult.hasPendingManualGrading ? {} : { gradedBy: 'Auto-Graded', gradedAt: now }),
         }
       : {
           autoGraded: false,

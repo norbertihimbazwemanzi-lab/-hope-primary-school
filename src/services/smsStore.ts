@@ -3,6 +3,7 @@ import {
   saveSmsDomainToSupabase,
   fetchSmsDomainFromFirebase,
   saveSmsDomainToFirebase,
+  deleteSmsDomainItemFromCloud,
   SmsTableDomain,
 } from './smsSupabase';
 import { getCurrentSessionUser, persistToServer } from './adminStore';
@@ -149,7 +150,7 @@ export interface LearningMaterialItem {
 
 export interface QuizQuestion {
   id: string;
-  type: 'mcq' | 'closed';
+  type: 'mcq' | 'closed' | 'open';
   prompt: string;
   options?: string[];
   correctAnswer: string;
@@ -160,11 +161,12 @@ export interface QuizQuestion {
 
 export interface SubmissionQuestionResult {
   questionId: string;
-  type: 'mcq' | 'closed';
+  type: 'mcq' | 'closed' | 'open';
   prompt: string;
   studentAnswer: string;
   correctAnswer: string;
   isCorrect: boolean;
+  needsManualGrading?: boolean;
   earnedMarks: number;
   maxMarks: number;
   explanation?: string;
@@ -188,6 +190,7 @@ export interface HomeworkAssignment {
   teacherName: string;
   status: 'Active' | 'Closed';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface HomeworkSubmission {
@@ -765,6 +768,20 @@ export const getHomeworkSubmissions = (): HomeworkSubmission[] =>
 export const saveHomeworkSubmissions = (items: HomeworkSubmission[]): HomeworkSubmission[] =>
   writeSmsDomain('homework_submissions', items);
 
+export const deleteHomeworkAssignment = (homeworkId: string): HomeworkAssignment[] => {
+  const next = getHomeworkAssignments().filter((h) => h.id !== homeworkId);
+  writeSmsDomain('homework_assignments', next);
+  deleteSmsDomainItemFromCloud('homework_assignments', homeworkId).catch(() => {});
+  return next;
+};
+
+export const deleteHomeworkSubmission = (submissionId: string): HomeworkSubmission[] => {
+  const next = getHomeworkSubmissions().filter((s) => s.id !== submissionId);
+  writeSmsDomain('homework_submissions', next);
+  deleteSmsDomainItemFromCloud('homework_submissions', submissionId).catch(() => {});
+  return next;
+};
+
 export const normalizeAnswerValue = (val: string): string =>
   String(val || '')
     .trim()
@@ -782,10 +799,16 @@ export const formatDurationMMSS = (seconds?: number | null): string => {
 export const gradeStructuredAnswers = (
   hw: HomeworkAssignment,
   studentResponses: Record<string, string>
-): { score: number; maxMarks: number; answers: SubmissionQuestionResult[] } => {
+): {
+  score: number;
+  maxMarks: number;
+  answers: SubmissionQuestionResult[];
+  hasPendingManualGrading: boolean;
+} => {
   const questions = Array.isArray(hw.questions) ? hw.questions : [];
   let totalScore = 0;
   let totalMax = 0;
+  let hasPendingManualGrading = false;
   const answers: SubmissionQuestionResult[] = questions.map((q) => {
     const qMax = Math.max(1, Number(q.marks) || 1);
     totalMax += qMax;
@@ -797,6 +820,28 @@ export const gradeStructuredAnswers = (
     ]
       .map(normalizeAnswerValue)
       .filter(Boolean);
+
+    if (q.type === 'open') {
+      const exactMatch = Boolean(normResp) && acceptedList.includes(normResp);
+      if (!exactMatch) {
+        hasPendingManualGrading = true;
+      }
+      const earnedMarks = exactMatch ? qMax : 0;
+      totalScore += earnedMarks;
+      return {
+        questionId: q.id,
+        type: 'open',
+        prompt: q.prompt,
+        studentAnswer: rawResp,
+        correctAnswer: q.correctAnswer,
+        isCorrect: exactMatch,
+        needsManualGrading: !exactMatch,
+        earnedMarks,
+        maxMarks: qMax,
+        explanation: q.explanation,
+      };
+    }
+
     const isCorrect = Boolean(normResp) && acceptedList.includes(normResp);
     const earnedMarks = isCorrect ? qMax : 0;
     totalScore += earnedMarks;
@@ -807,6 +852,7 @@ export const gradeStructuredAnswers = (
       studentAnswer: rawResp,
       correctAnswer: q.correctAnswer,
       isCorrect,
+      needsManualGrading: false,
       earnedMarks,
       maxMarks: qMax,
       explanation: q.explanation,
@@ -816,6 +862,7 @@ export const gradeStructuredAnswers = (
     score: totalScore,
     maxMarks: totalMax > 0 ? totalMax : hw.maxMarks,
     answers,
+    hasPendingManualGrading,
   };
 };
 
@@ -844,7 +891,10 @@ export const submitStudentHomework = (
       ? current[existingEditableIdx].attemptNumber || 1
       : priorAttempts.length + 1);
 
+  const hasOpenPending = Boolean(input.answers?.some((a) => a.needsManualGrading));
   const isAutoGraded = Boolean(input.autoGraded || (input.answers && input.answers.length > 0));
+  const resolvedStatus: 'Submitted' | 'Graded' =
+    input.status || (hasOpenPending ? 'Submitted' : isAutoGraded ? 'Graded' : 'Submitted');
   const record: HomeworkSubmission = {
     ...input,
     id:
@@ -853,9 +903,9 @@ export const submitStudentHomework = (
         : `hwsub-${Date.now()}-${Math.floor(Math.random() * 999)}`,
     attemptNumber,
     submittedAt: now,
-    status: isAutoGraded ? 'Graded' : input.status || 'Submitted',
-    gradedBy: isAutoGraded ? 'Auto-Graded' : input.gradedBy,
-    gradedAt: isAutoGraded ? now : input.gradedAt,
+    status: resolvedStatus,
+    gradedBy: resolvedStatus === 'Graded' ? (input.gradedBy || (isAutoGraded ? 'Auto-Graded' : undefined)) : input.gradedBy,
+    gradedAt: resolvedStatus === 'Graded' ? (input.gradedAt || now) : input.gradedAt,
     updatedAt: now,
   };
   const next =
@@ -1088,6 +1138,17 @@ const ALL_SMS_DOMAINS: SmsTableDomain[] = [
   'fee_structures',
 ];
 
+const getMaxTimestamp = (items: any[] | null): number => {
+  if (!Array.isArray(items) || items.length === 0) return -1;
+  let maxMs = 0;
+  for (const item of items) {
+    const raw = item?.updatedAt || item?.submittedAt || item?.gradedAt || item?.createdAt || item?.awardedAt || '';
+    const ms = raw ? Date.parse(raw) : 0;
+    if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
+  }
+  return maxMs;
+};
+
 export const syncAllSmsDomains = async (): Promise<void> => {
   await Promise.allSettled(
     ALL_SMS_DOMAINS.map(async (domain) => {
@@ -1099,12 +1160,25 @@ export const syncAllSmsDomains = async (): Promise<void> => {
             .then(async (r) => (r.ok ? (await r.json()).items : null))
             .catch(() => null),
         ]);
-        const authoritative =
-          (Array.isArray(sbItems) && sbItems.length > 0 && sbItems) ||
-          (Array.isArray(fbItems) && fbItems.length > 0 && fbItems) ||
-          (Array.isArray(serverRes) && serverRes.length > 0 && serverRes) ||
-          null;
-        if (authoritative) {
+        const candidates: Array<{ items: any[]; ts: number; rank: number }> = [];
+        if (Array.isArray(serverRes) && serverRes.length > 0) {
+          candidates.push({ items: serverRes, ts: getMaxTimestamp(serverRes), rank: 3 });
+        }
+        if (Array.isArray(sbItems) && sbItems.length > 0) {
+          candidates.push({ items: sbItems, ts: getMaxTimestamp(sbItems), rank: 2 });
+        }
+        if (Array.isArray(fbItems) && fbItems.length > 0) {
+          candidates.push({ items: fbItems, ts: getMaxTimestamp(fbItems), rank: 1 });
+        }
+        let authoritative: any[] | null = null;
+        if (candidates.length > 0) {
+          candidates.sort((a, b) => (b.ts !== a.ts ? b.ts - a.ts : b.rank - a.rank));
+          authoritative = candidates[0].items;
+        } else if (Array.isArray(serverRes) && serverRes.length === 0) {
+          // Server explicitly holds an empty array after deletions
+          authoritative = [];
+        }
+        if (authoritative !== null) {
           localStorage.setItem(SMS_STORAGE_KEYS[domain], JSON.stringify(authoritative));
           emitSmsUpdate(domain, authoritative);
         }

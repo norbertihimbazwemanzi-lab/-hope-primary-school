@@ -41,7 +41,7 @@ interface FinancePortalProps {
 export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransactionsUpdated }) => {
   const sessionUser = getCurrentSessionUser();
   const [transactions, setTransactions] = useState<PaymentTransaction[]>(getPaymentTransactions());
-  const [feeStructures] = useState(() => getFeeStructures());
+  const [feeStructures, setFeeStructures] = useState(() => getFeeStructures());
   const [activeSubTab, setActiveSubTab] = useState<'billing' | 'balances' | 'ledger' | 'refunds'>('billing');
 
   // Search & Selection for Billing Form
@@ -70,8 +70,15 @@ export const FinancePortal: React.FC<FinancePortalProps> = ({ students, onTransa
         setTransactions(getPaymentTransactions());
       }
     };
+    const smsSyncHandler = () => {
+      setFeeStructures(getFeeStructures());
+    };
     window.addEventListener('mugina-payments-updated', syncHandler);
-    return () => window.removeEventListener('mugina-payments-updated', syncHandler);
+    window.addEventListener('mugina-sms-updated', smsSyncHandler);
+    return () => {
+      window.removeEventListener('mugina-payments-updated', syncHandler);
+      window.removeEventListener('mugina-sms-updated', smsSyncHandler);
+    };
   }, []);
 
   useEffect(() => {

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import {
   EnrolledStudent,
   getCurrentSessionUser,
@@ -21,6 +22,7 @@ import {
   saveLearningMaterials,
   getHomeworkAssignments,
   saveHomeworkAssignments,
+  deleteHomeworkAssignment,
   getHomeworkSubmissions,
   gradeHomeworkSubmission,
   formatDurationMMSS,
@@ -33,6 +35,7 @@ import {
   getParentTeacherMessages,
   sendParentTeacherMessage,
   getExamMarks,
+  syncAllSmsDomains,
 } from '../services/smsStore';
 import { getStaffAuthToken } from '../services/authService';
 import { extractGradesFromAssignment } from '../services/rbac';
@@ -139,8 +142,20 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
       setMessages(getParentTeacherMessages());
     };
     window.addEventListener('mugina-sms-updated', sync);
+    syncAllSmsDomains().catch(() => {});
     return () => window.removeEventListener('mugina-sms-updated', sync);
   }, []);
+
+  useEffect(() => {
+    if (activeSubTab === 'homework') {
+      syncAllSmsDomains().catch(() => {});
+      const onFocus = () => {
+        syncAllSmsDomains().catch(() => {});
+      };
+      window.addEventListener('focus', onFocus);
+      return () => window.removeEventListener('focus', onFocus);
+    }
+  }, [activeSubTab]);
 
   const flash = (msg: string) => {
     setNotice(msg);
@@ -194,6 +209,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
   });
   const [uploadingMat, setUploadingMat] = useState(false);
 
+  const [editingHwId, setEditingHwId] = useState<string | null>(null);
   const [hwForm, setHwForm] = useState({
     title: '',
     workType: 'homework' as 'homework' | 'quiz',
@@ -207,7 +223,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
   });
   const [hwQuestions, setHwQuestions] = useState<QuizQuestion[]>([]);
   const [questionDraft, setQuestionDraft] = useState<{
-    type: 'mcq' | 'closed';
+    type: 'mcq' | 'closed' | 'open';
     prompt: string;
     options: string[];
     correctOptionIdx: number;
@@ -351,7 +367,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
 
   const handleAddQuestionToDraft = () => {
     const prompt = questionDraft.prompt.trim();
-    if (!prompt) return;
+    if (!prompt) {
+      flash('Please enter the question prompt.');
+      return;
+    }
     if (questionDraft.type === 'mcq') {
       const cleanedOpts = questionDraft.options.map((o) => o.trim()).filter(Boolean);
       if (cleanedOpts.length < 2) {
@@ -373,7 +392,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
     } else {
       const correctAns = questionDraft.closedCorrectAnswer.trim();
       if (!correctAns) {
-        flash('Please specify the official correct answer for this Closed question.');
+        flash(
+          questionDraft.type === 'open'
+            ? 'Please enter the official Model / Correct Answer to show students after submission.'
+            : 'Please specify the official correct answer for this Closed question.'
+        );
         return;
       }
       const variants = questionDraft.acceptedVariants
@@ -382,7 +405,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
         .filter(Boolean);
       const newQ: QuizQuestion = {
         id: `q-${Date.now()}-${Math.floor(Math.random() * 999)}`,
-        type: 'closed',
+        type: questionDraft.type,
         prompt,
         correctAnswer: correctAns,
         acceptedAnswers: variants.length > 0 ? variants : undefined,
@@ -402,6 +425,47 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
     }));
   };
 
+  const toLocalDateTimeInput = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const handleEditHomework = (hw: HomeworkAssignment) => {
+    setEditingHwId(hw.id);
+    setHwForm({
+      title: hw.title,
+      workType: hw.workType || 'homework',
+      subjectName: hw.subjectName,
+      instructions: hw.instructions,
+      dueDate: hw.dueDate,
+      availableUntil: toLocalDateTimeInput(hw.availableUntil),
+      timeLimitMinutes: hw.timeLimitMinutes ?? 0,
+      maxAttempts: hw.maxAttempts ?? 1,
+      maxMarks: hw.maxMarks,
+    });
+    setHwQuestions(Array.isArray(hw.questions) ? hw.questions : []);
+    flash(`Editing "${hw.title}". Update the end time, duration, or questions on the left and save.`);
+  };
+
+  const handleCancelEditHomework = () => {
+    setEditingHwId(null);
+    setHwForm({
+      title: '',
+      workType: 'homework',
+      subjectName: 'Mathematics',
+      instructions: '',
+      dueDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+      availableUntil: '',
+      timeLimitMinutes: 20,
+      maxAttempts: 2,
+      maxMarks: 20,
+    });
+    setHwQuestions([]);
+  };
+
   const handleAddHomework = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hwForm.title.trim()) return;
@@ -409,6 +473,33 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
       hwQuestions.length > 0
         ? hwQuestions.reduce((acc, q) => acc + (Number(q.marks) || 1), 0)
         : Math.max(1, Number(hwForm.maxMarks) || 20);
+    const nowIso = new Date().toISOString();
+
+    if (editingHwId) {
+      const next = homework.map((x) =>
+        x.id === editingHwId
+          ? {
+              ...x,
+              title: hwForm.title.trim(),
+              workType: hwForm.workType,
+              subjectName: hwForm.subjectName,
+              instructions: hwForm.instructions.trim() || 'Answer all questions carefully before the timer ends.',
+              dueDate: hwForm.dueDate,
+              availableUntil: hwForm.availableUntil ? new Date(hwForm.availableUntil).toISOString() : undefined,
+              timeLimitMinutes: Math.max(0, Number(hwForm.timeLimitMinutes) || 0),
+              maxAttempts: Math.max(0, Number(hwForm.maxAttempts)),
+              maxMarks: computedMaxMarks,
+              questions: hwQuestions.length > 0 ? hwQuestions : undefined,
+              updatedAt: nowIso,
+            }
+          : x
+      );
+      setHomework(saveHomeworkAssignments(next));
+      flash(`Updated "${hwForm.title.trim()}" successfully.`);
+      handleCancelEditHomework();
+      return;
+    }
+
     const item: HomeworkAssignment = {
       id: `hw-${Date.now()}`,
       title: hwForm.title.trim(),
@@ -426,7 +517,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
       teacherId: sessionUser?.id || 'teacher',
       teacherName: sessionUser?.name || 'Teacher',
       status: 'Active',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: nowIso.split('T')[0],
+      updatedAt: nowIso,
     };
     const next = saveHomeworkAssignments([item, ...homework]);
     setHomework(next);
@@ -450,59 +542,56 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
 
   const handleToggleHomeworkStatus = (hw: HomeworkAssignment) => {
     const nextStatus = hw.status === 'Active' ? 'Closed' : 'Active';
-    const next = homework.map((x) => (x.id === hw.id ? { ...x, status: nextStatus as 'Active' | 'Closed' } : x));
+    const next = homework.map((x) =>
+      x.id === hw.id ? { ...x, status: nextStatus as 'Active' | 'Closed', updatedAt: new Date().toISOString() } : x
+    );
     setHomework(saveHomeworkAssignments(next));
     flash(`"${hw.title}" marked as ${nextStatus}.`);
   };
 
   const handleUpdateHomeworkRetakes = (hw: HomeworkAssignment, nextAttempts: number) => {
     const clamped = Math.max(0, Math.min(25, nextAttempts));
-    const next = homework.map((x) => (x.id === hw.id ? { ...x, maxAttempts: clamped } : x));
+    const next = homework.map((x) =>
+      x.id === hw.id ? { ...x, maxAttempts: clamped, updatedAt: new Date().toISOString() } : x
+    );
     setHomework(saveHomeworkAssignments(next));
     flash(`Updated retake limit for "${hw.title}" to ${clamped === 0 ? 'Unlimited' : `${clamped} attempt(s)`}.`);
   };
 
-  const handleExportWorkRecordsCSV = (targetHw?: HomeworkAssignment) => {
+  const handleExportWorkRecordsExcel = (targetHw?: HomeworkAssignment) => {
     const gradeSubs = submissions.filter((s) => s.gradeCode === activeGrade);
     const filteredSubs = targetHw ? gradeSubs.filter((s) => s.homeworkId === targetHw.id) : gradeSubs;
     const hwLookup = new Map<string, HomeworkAssignment>();
     homework.forEach((h) => hwLookup.set(h.id, h));
 
-    const headerRows = [
-      ['"MUGINA HOPE PRIMARY & NURSERY ACADEMY"'],
-      [`"HOMEWORK & QUIZ PERFORMANCE RECORDS (${activeGrade})"`],
-      [
-        `"Work Filter: ${targetHw ? targetHw.title : 'All Class Homework & Quizzes'}"`,
-        `"Teacher: ${sessionUser?.name || 'Teacher'}"`,
-        `"Exported: ${new Date().toLocaleString()}"`,
-      ],
-      [
-        '"No."',
-        '"Reg Number"',
-        '"Student Name"',
-        '"Class"',
-        '"Assignment / Quiz Title"',
-        '"Work Type"',
-        '"Subject"',
-        '"Attempt #"',
-        '"Marks Earned"',
-        '"Max Marks"',
-        '"Percentage"',
-        '"Time Limit"',
-        '"Time Remaining"',
-        '"Time Spent"',
-        '"Timed Out"',
-        '"Submitted At"',
-        '"Status"',
-        '"Teacher Feedback"',
-      ],
+    const attemptHeaders = [
+      'No.',
+      'Reg Number',
+      'Student Name',
+      'Class',
+      'Assignment / Quiz Title',
+      'Work Type',
+      'Subject',
+      'Attempt #',
+      'Marks Earned',
+      'Max Marks',
+      'Percentage (%)',
+      'Time Limit',
+      'Time Remaining',
+      'Time Spent',
+      'Timed Out',
+      'Quiz Closing Time',
+      'Submitted At',
+      'Status',
+      'Graded By',
+      'Teacher Feedback',
     ];
 
-    const rows = filteredSubs.map((sub, idx) => {
+    const attemptRows = filteredSubs.map((sub, idx) => {
       const hwObj = hwLookup.get(sub.homeworkId);
       const maxM = sub.maxMarks || hwObj?.maxMarks || 20;
       const earned = sub.score !== undefined ? sub.score : '';
-      const pct = sub.score !== undefined && maxM > 0 ? `${Math.round((sub.score / maxM) * 100)}%` : 'Pending';
+      const pct = sub.score !== undefined && maxM > 0 ? Math.round((sub.score / maxM) * 100) : 'Pending';
       const limitLabel = sub.timeLimitSeconds
         ? formatDurationMMSS(sub.timeLimitSeconds)
         : hwObj?.timeLimitMinutes
@@ -516,39 +605,228 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
           : '—';
       const spentLabel = sub.timeSpentSeconds !== undefined ? formatDurationMMSS(sub.timeSpentSeconds) : '—';
       return [
-        `"${idx + 1}"`,
-        `"${sub.regNumber}"`,
-        `"${sub.studentName.replace(/"/g, '""')}"`,
-        `"${sub.gradeCode}"`,
-        `"${(hwObj?.title || sub.subjectName).replace(/"/g, '""')}"`,
-        `"${hwObj?.workType === 'quiz' ? 'Quiz' : 'Homework'}"`,
-        `"${sub.subjectName}"`,
-        `"${sub.attemptNumber || 1}"`,
-        `"${earned}"`,
-        `"${maxM}"`,
-        `"${pct}"`,
-        `"${limitLabel}"`,
-        `"${remainingLabel}"`,
-        `"${spentLabel}"`,
-        `"${sub.timedOut ? 'Yes' : 'No'}"`,
-        `"${new Date(sub.submittedAt).toLocaleString()}"`,
-        `"${sub.status}"`,
-        `"${(sub.teacherFeedback || '').replace(/"/g, '""')}"`,
+        idx + 1,
+        sub.regNumber,
+        sub.studentName,
+        sub.gradeCode,
+        hwObj?.title || sub.subjectName,
+        hwObj?.workType === 'quiz' ? 'Quiz' : 'Homework',
+        sub.subjectName,
+        sub.attemptNumber || 1,
+        earned,
+        maxM,
+        pct,
+        limitLabel,
+        remainingLabel,
+        spentLabel,
+        sub.timedOut ? 'Yes' : 'No',
+        hwObj?.availableUntil ? new Date(hwObj.availableUntil).toLocaleString() : 'No Deadline Time',
+        new Date(sub.submittedAt).toLocaleString(),
+        sub.status,
+        sub.gradedBy || '—',
+        sub.teacherFeedback || '',
       ];
     });
 
-    const csvContent = '\uFEFF' + [...headerRows, ...rows].map((r) => r.join(',')).join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const attemptsAoA: any[][] = [
+      ['MUGINA HOPE PRIMARY & NURSERY ACADEMY'],
+      [`QUIZ & HOMEWORK ATTEMPT RECORDS (${activeGrade})`],
+      [
+        `Filter: ${targetHw ? targetHw.title : 'All Class Quizzes & Homework'}`,
+        `Teacher: ${sessionUser?.name || 'Teacher'}`,
+        `Total Attempt Records: ${filteredSubs.length}`,
+        `Exported: ${new Date().toLocaleString()}`,
+      ],
+      [],
+      attemptHeaders,
+      ...(attemptRows.length > 0
+        ? attemptRows
+        : [['', '', 'No student attempts recorded yet for this selection', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']]),
+    ];
+
+    const responseHeaders = [
+      'Reg Number',
+      'Student Name',
+      'Quiz / Homework Title',
+      'Attempt #',
+      'Question #',
+      'Question Type',
+      'Question Prompt',
+      'Student Answer',
+      'Official Correct / Model Answer',
+      'Auto-Result',
+      'Marks Earned',
+      'Max Marks',
+    ];
+    const responseRows: any[][] = [];
+    filteredSubs.forEach((sub) => {
+      const hwObj = hwLookup.get(sub.homeworkId);
+      const qTitle = hwObj?.title || sub.subjectName;
+      if (Array.isArray(sub.answers) && sub.answers.length > 0) {
+        sub.answers.forEach((ans, qIdx) => {
+          responseRows.push([
+            sub.regNumber,
+            sub.studentName,
+            qTitle,
+            sub.attemptNumber || 1,
+            `Q${qIdx + 1}`,
+            ans.type === 'mcq' ? 'Multiple Choice' : ans.type === 'open' ? 'Open Question' : 'Closed Question',
+            ans.prompt,
+            ans.studentAnswer || '(Blank)',
+            ans.correctAnswer,
+            ans.needsManualGrading ? 'Open (Review)' : ans.isCorrect ? 'Correct' : 'Incorrect',
+            ans.earnedMarks,
+            ans.maxMarks,
+          ]);
+        });
+      } else if (sub.answerText) {
+        responseRows.push([
+          sub.regNumber,
+          sub.studentName,
+          qTitle,
+          sub.attemptNumber || 1,
+          'Written',
+          'Written Work',
+          hwObj?.instructions || '',
+          sub.answerText,
+          'Teacher Reviewed',
+          sub.status,
+          sub.score ?? '',
+          sub.maxMarks || hwObj?.maxMarks || 20,
+        ]);
+      }
+    });
+
+    const summaryMap = new Map<
+      string,
+      {
+        regNumber: string;
+        studentName: string;
+        attempts: number;
+        bestScore: number;
+        maxMarks: number;
+        latestScore: number | string;
+        latestTimeRemaining: string;
+        lastSubmittedAt: string;
+      }
+    >();
+    filteredSubs.forEach((sub) => {
+      const hwObj = hwLookup.get(sub.homeworkId);
+      const maxM = sub.maxMarks || hwObj?.maxMarks || 20;
+      const key = `${sub.studentId || sub.regNumber}::${sub.homeworkId}`;
+      const existing = summaryMap.get(key);
+      const scoreVal = typeof sub.score === 'number' ? sub.score : 0;
+      const remStr =
+        sub.timeRemainingSeconds !== undefined
+          ? sub.timedOut
+            ? '00:00 (Expired)'
+            : formatDurationMMSS(sub.timeRemainingSeconds)
+          : '—';
+      if (!existing) {
+        summaryMap.set(key, {
+          regNumber: sub.regNumber,
+          studentName: sub.studentName,
+          attempts: 1,
+          bestScore: scoreVal,
+          maxMarks: maxM,
+          latestScore: sub.score ?? 'Pending',
+          latestTimeRemaining: remStr,
+          lastSubmittedAt: sub.submittedAt,
+        });
+      } else {
+        existing.attempts += 1;
+        existing.bestScore = Math.max(existing.bestScore, scoreVal);
+        if (Date.parse(sub.submittedAt) >= Date.parse(existing.lastSubmittedAt)) {
+          existing.latestScore = sub.score ?? 'Pending';
+          existing.latestTimeRemaining = remStr;
+          existing.lastSubmittedAt = sub.submittedAt;
+        }
+      }
+    });
+
+    const summaryAoA: any[][] = [
+      ['MUGINA HOPE PRIMARY & NURSERY ACADEMY'],
+      [`STUDENT QUIZ SUMMARY (${activeGrade})`],
+      [],
+      ['Reg Number', 'Student Name', 'Total Attempts', 'Best Score', 'Max Marks', 'Best %', 'Latest Score', 'Latest Time Remaining', 'Last Attempt At'],
+      ...Array.from(summaryMap.values()).map((row) => [
+        row.regNumber,
+        row.studentName,
+        row.attempts,
+        row.bestScore,
+        row.maxMarks,
+        row.maxMarks > 0 ? `${Math.round((row.bestScore / row.maxMarks) * 100)}%` : '—',
+        row.latestScore,
+        row.latestTimeRemaining,
+        new Date(row.lastSubmittedAt).toLocaleString(),
+      ]),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const wsAttempts = XLSX.utils.aoa_to_sheet(attemptsAoA);
+    wsAttempts['!cols'] = [
+      { wch: 5 },
+      { wch: 15 },
+      { wch: 24 },
+      { wch: 8 },
+      { wch: 28 },
+      { wch: 10 },
+      { wch: 16 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 13 },
+      { wch: 11 },
+      { wch: 18 },
+      { wch: 11 },
+      { wch: 10 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 12 },
+      { wch: 16 },
+      { wch: 28 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsAttempts, 'Quiz_Attempt_Records');
+
+    const wsResponses = XLSX.utils.aoa_to_sheet([
+      ['MUGINA HOPE PRIMARY & NURSERY ACADEMY — PER-QUESTION RESPONSES'],
+      [],
+      responseHeaders,
+      ...(responseRows.length > 0 ? responseRows : [['', '', 'No detailed question responses recorded yet', '', '', '', '', '', '', '', '', '']]),
+    ]);
+    wsResponses['!cols'] = [
+      { wch: 15 },
+      { wch: 22 },
+      { wch: 24 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 36 },
+      { wch: 30 },
+      { wch: 30 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 10 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsResponses, 'Question_Responses');
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoA);
+    wsSummary['!cols'] = [
+      { wch: 16 },
+      { wch: 25 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 22 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Student_Summary');
+
     const safeTitle = (targetHw ? targetHw.title : activeGrade).replace(/[^a-zA-Z0-9_-]/g, '_');
-    a.download = `Mugina_Work_Records_${safeTitle}_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    flash(`Exported ${filteredSubs.length} work record(s) with student names, marks, and time remaining.`);
+    XLSX.writeFile(wb, `Mugina_Quiz_Records_${safeTitle}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    flash(`Downloaded Excel (.xlsx) workbook with ${filteredSubs.length} quiz attempt record(s).`);
   };
 
   const handleUploadProfilePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1239,9 +1517,20 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
             className="xl:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4 h-fit"
           >
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Create Homework or Quiz ({activeGrade})
-              </h3>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {editingHwId ? `Edit Quiz / Homework (${activeGrade})` : `Create Homework or Quiz (${activeGrade})`}
+                </h3>
+                {editingHwId && (
+                  <button
+                    type="button"
+                    onClick={handleCancelEditHomework}
+                    className="text-[11px] font-semibold text-amber-700 hover:underline cursor-pointer"
+                  >
+                    Cancel Editing
+                  </button>
+                )}
+              </div>
               <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-950 text-[11px] font-semibold">
                 <button
                   type="button"
@@ -1343,18 +1632,19 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
               </div>
             </div>
             <p className="text-[11px] text-slate-500 -mt-1">
-              Set Time Limit = <code className="font-mono">0</code> for untimed work. Set Allowed Retakes = <code className="font-mono">1</code> for single attempt, <code className="font-mono">2–25</code> for limited retakes, or <code className="font-mono">0</code> for unlimited retakes.
+              Set Time Limit = <code className="font-mono">0</code> for untimed work. Set Allowed Retakes = <code className="font-mono">1</code> for single attempt, <code className="font-mono">2–25</code> for retakes, or <code className="font-mono">0</code> for unlimited.
             </p>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                Optional Work Close Date &amp; Time (Auto-ends availability)
+              <label className="block text-[11px] font-semibold text-blue-900 dark:text-amber-400 mb-1">
+                Quiz / Work End Date &amp; Time (Time to End — Auto-closes availability)
               </label>
               <input
                 type="datetime-local"
+                aria-label="Quiz End Date and Time"
                 value={hwForm.availableUntil}
                 onChange={(e) => setHwForm({ ...hwForm, availableUntil: e.target.value })}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 tabular-nums"
+                className="w-full px-3 py-2 text-xs rounded-lg border border-blue-200 dark:border-slate-700 bg-white dark:bg-slate-950 tabular-nums"
               />
             </div>
 
@@ -1366,11 +1656,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
               className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"
             />
 
-            {/* Interactive Question Builder (Multiple Choice + Closed Questions) */}
+            {/* Interactive Question Builder (Multiple Choice + Open Question + Closed Question) */}
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-blue-950 dark:text-amber-400">
-                  Add Question (Auto-Graded)
+                  Add Question
                 </span>
                 <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-white dark:bg-slate-900 text-[11px] font-semibold">
                   <button
@@ -1384,19 +1674,32 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                   </button>
                   <button
                     type="button"
+                    onClick={() => setQuestionDraft({ ...questionDraft, type: 'open' })}
+                    className={`px-2 py-1 rounded cursor-pointer ${
+                      questionDraft.type === 'open' ? 'bg-blue-900 text-white' : 'text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    Open Question
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setQuestionDraft({ ...questionDraft, type: 'closed' })}
                     className={`px-2 py-1 rounded cursor-pointer ${
                       questionDraft.type === 'closed' ? 'bg-blue-900 text-white' : 'text-slate-600 dark:text-slate-300'
                     }`}
                   >
-                    Closed Question
+                    Closed Short
                   </button>
                 </div>
               </div>
 
               <input
                 type="text"
-                placeholder="Enter question prompt..."
+                placeholder={
+                  questionDraft.type === 'open'
+                    ? 'Enter open-ended question prompt (e.g. Explain two causes of soil erosion...)'
+                    : 'Enter question prompt...'
+                }
                 value={questionDraft.prompt}
                 onChange={(e) => setQuestionDraft({ ...questionDraft, prompt: e.target.value })}
                 className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
@@ -1429,6 +1732,26 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                       />
                     </div>
                   ))}
+                </div>
+              ) : questionDraft.type === 'open' ? (
+                <div className="space-y-2">
+                  <label className="block text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                    Official Model / Correct Answer (Shown to student right after submitting):
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Write the official model correct answer..."
+                    value={questionDraft.closedCorrectAnswer}
+                    onChange={(e) => setQuestionDraft({ ...questionDraft, closedCorrectAnswer: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Optional exact match variations (comma-separated)"
+                    value={questionDraft.acceptedVariants}
+                    onChange={(e) => setQuestionDraft({ ...questionDraft, acceptedVariants: e.target.value })}
+                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1485,10 +1808,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                     >
                       <div className="min-w-0">
                         <p className="font-bold text-slate-900 dark:text-white">
-                          Q{i + 1} ({q.type === 'mcq' ? 'MCQ' : 'Closed'} · {q.marks} pts): {q.prompt}
+                          Q{i + 1} ({q.type === 'mcq' ? 'MCQ' : q.type === 'open' ? 'Open Question' : 'Closed'} · {q.marks} pts): {q.prompt}
                         </p>
                         <p className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                          Correct Answer: {q.correctAnswer}
+                          {q.type === 'open' ? 'Model Answer:' : 'Correct Answer:'} {q.correctAnswer}
                         </p>
                       </div>
                       <button
@@ -1508,24 +1831,35 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
               type="submit"
               className="w-full py-2.5 bg-blue-900 hover:bg-blue-950 text-white text-xs font-semibold rounded-lg cursor-pointer"
             >
-              Publish {hwForm.workType === 'quiz' ? 'Timed Quiz' : 'Homework'} to {activeGrade}
+              {editingHwId
+                ? `Save Changes to "${hwForm.title || 'Work'}"`
+                : `Publish ${hwForm.workType === 'quiz' ? 'Timed Quiz' : 'Homework'} to ${activeGrade}`}
             </button>
           </form>
 
-          {/* Right Column: Published Work + Retakes + Submissions + Records CSV Export */}
+          {/* Right Column: Published Work + Retakes + Submissions + Records Excel (.xlsx) Export */}
           <div className="xl:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-5">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   Assigned Class Work &amp; Quizzes ({activeGrade})
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => handleExportWorkRecordsCSV()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
-                >
-                  <Download size={13} /> Export All Work Records CSV
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => syncAllSmsDomains().then(() => flash('Synced latest quiz attempts & submissions.'))}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-600 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    <RotateCcw size={13} /> Refresh Records
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportWorkRecordsExcel()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded-lg cursor-pointer"
+                  >
+                    <FileSpreadsheet size={13} /> Download Excel (.xlsx)
+                  </button>
+                </div>
               </div>
 
               {homework.filter((h) => h.gradeCode === activeGrade).length === 0 ? (
@@ -1560,20 +1894,28 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                             <p className="text-xs text-slate-600 dark:text-slate-300">{hw.instructions}</p>
                             <p className="text-[11px] text-slate-500 tabular-nums">
                               Due {hw.dueDate}
-                              {hw.availableUntil ? ` · Closes ${new Date(hw.availableUntil).toLocaleString()}` : ''}
+                              {hw.availableUntil ? ` · Ends ${new Date(hw.availableUntil).toLocaleString()}` : ''}
                               {' · '}Status: <strong>{isExpiredWindow ? 'Ended' : hw.status}</strong>
-                              {' · '}Submissions: <strong>{hwSubCount}</strong>
+                              {' · '}Attempts Recorded: <strong>{hwSubCount}</strong>
                             </p>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => handleExportWorkRecordsCSV(hw)}
-                              title="Export student names, marks & time remaining for this work"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-600 text-[11px] font-semibold rounded-lg cursor-pointer"
+                              onClick={() => handleExportWorkRecordsExcel(hw)}
+                              title="Download Excel (.xlsx) workbook with student names, marks, time remaining & question responses"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 text-[11px] font-bold rounded-lg cursor-pointer"
                             >
-                              <Download size={12} /> Export Records
+                              <FileSpreadsheet size={12} /> Excel (.xlsx)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditHomework(hw)}
+                              title="Edit quiz end time, time limit, or questions"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-semibold rounded-lg cursor-pointer"
+                            >
+                              <Edit3 size={12} /> Edit
                             </button>
                             <button
                               type="button"
@@ -1585,7 +1927,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                             </button>
                             <button
                               type="button"
-                              onClick={() => setHomework(saveHomeworkAssignments(homework.filter((x) => x.id !== hw.id)))}
+                              aria-label={`Delete ${hw.title}`}
+                              onClick={() => setHomework(deleteHomeworkAssignment(hw.id))}
                               className="text-red-500 hover:text-red-700 p-1.5 cursor-pointer"
                             >
                               <Trash2 size={14} />
@@ -1702,20 +2045,20 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                               className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 dark:text-amber-400 hover:underline cursor-pointer"
                             >
                               <Eye size={12} />
-                              <span>{isExpanded ? 'Hide Answer Breakdown' : `View Question Answers (${sub.answers.filter((a) => a.isCorrect).length}/${sub.answers.length} correct)`}</span>
+                              <span>{isExpanded ? 'Hide Answer Breakdown' : `View Question Answers (${sub.answers.filter((a) => a.isCorrect).length}/${sub.answers.length} auto-matched)`}</span>
                             </button>
                             {isExpanded && (
                               <div className="mt-2 space-y-1.5 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
                                 {sub.answers.map((ans, idx) => (
                                   <div key={ans.questionId} className="text-[11px] pb-1.5 border-b last:border-0 border-slate-100 dark:border-slate-800">
                                     <p className="font-semibold text-slate-900 dark:text-white">
-                                      Q{idx + 1}: {ans.prompt}
+                                      Q{idx + 1} ({ans.type === 'mcq' ? 'MCQ' : ans.type === 'open' ? 'Open Question' : 'Closed'}): {ans.prompt}
                                     </p>
-                                    <p className={ans.isCorrect ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                                      Student Answer: <strong>{ans.studentAnswer || '(Blank)'}</strong> · {ans.earnedMarks}/{ans.maxMarks} pts
-                                      {!ans.isCorrect && (
+                                    <p className={ans.needsManualGrading ? 'text-amber-700 dark:text-amber-300' : ans.isCorrect ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                                      Student Answer: <strong>{ans.studentAnswer || '(Blank)'}</strong> · {ans.needsManualGrading ? `Pending Teacher Review (/${ans.maxMarks} pts)` : `${ans.earnedMarks}/${ans.maxMarks} pts`}
+                                      {(!ans.isCorrect || ans.type === 'open') && (
                                         <span className="ml-2 text-emerald-700 dark:text-emerald-400">
-                                          | Correct: <strong>{ans.correctAnswer}</strong>
+                                          | {ans.type === 'open' ? 'Model Answer:' : 'Correct:'} <strong>{ans.correctAnswer}</strong>
                                         </span>
                                       )}
                                     </p>

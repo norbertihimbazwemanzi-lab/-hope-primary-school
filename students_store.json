@@ -37,8 +37,7 @@
     "enrolledAt": "2026-11-20",
     "status": "Active",
     "updatedAt": "2026-11-20T15:20:32.628+00:00",
-    "hasPasswordHash": true,
-    "passwordHash": "scrypt$922692aa4eb15a91fbd0f02a426ef893$b2ee167b56e8fc02cd880b8cca4cac708453d7657a1f2ac1455684251377ce7e22f954e33fad145c934754be87ddd3fce07cf707e401ba326f35c4dfd42ed0f0"
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-436",
@@ -118,8 +117,7 @@
     "enrolledAt": "2026-11-11",
     "status": "Active",
     "updatedAt": "2026-11-11T17:17:08.224+00:00",
-    "hasPasswordHash": true,
-    "passwordHash": "scrypt$9afe4b35cd441005241d9837481beabd$d1221e8beabb3b0c3cdc62ea1795456456367f39209906adb8b582bd19a2be106bcb287e2ad3aec8c7e3b0adea56017e77666fe6a4eb2d527e2b56de016ecc84"
+    "hasPasswordHash": false
   },
   {
     "id": "stu-1794417426603-428",

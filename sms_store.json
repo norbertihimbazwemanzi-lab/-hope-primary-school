@@ -1,15 +1,221 @@
 {
   "audit_logs": [
     {
-      "id": "aud-1795422103082-152",
-      "timestamp": "2026-11-23T08:21:43.082Z",
+      "id": "aud-1795505556950-841",
+      "timestamp": "2026-11-24T07:32:36.950Z",
+      "actorId": "stu-e2e-quiz-student",
+      "actorName": "E2E Quiz Learner",
+      "actorRole": "Student",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "stu-e2e-quiz-student",
+      "summary": "E2E Quiz Learner signed into Student Portal"
+    },
+    {
+      "id": "aud-1795505545899-745",
+      "timestamp": "2026-11-24T07:32:25.899Z",
+      "actorId": "staff-e2e-quiz-teacher",
+      "actorName": "E2E Quiz Teacher",
+      "actorRole": "Teacher",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-e2e-quiz-teacher",
+      "summary": "E2E Quiz Teacher (Teacher) signed in"
+    },
+    {
+      "id": "aud-1795505526690-870",
+      "timestamp": "2026-11-24T07:32:06.690Z",
       "actorId": "staff-admin-norbert",
-      "actorName": "ihimbazwe manzi norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (Chief Administrator)",
       "actorRole": "SuperAdmin",
       "action": "LOGIN",
       "entityType": "Auth",
       "entityId": "staff-admin-norbert",
-      "summary": "ihimbazwe manzi norbert (SuperAdmin) signed in"
+      "summary": "Norbert Ihimbazwe Manzi (Chief Administrator) (SuperAdmin) signed in"
+    },
+    {
+      "id": "aud-1795505493352-940",
+      "timestamp": "2026-11-24T07:31:33.352Z",
+      "actorId": "stu-e2e-quiz-student",
+      "actorName": "E2E Quiz Learner",
+      "actorRole": "Student",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "stu-e2e-quiz-student",
+      "summary": "E2E Quiz Learner signed into Student Portal"
+    },
+    {
+      "id": "aud-1795505481834-164",
+      "timestamp": "2026-11-24T07:31:21.834Z",
+      "actorId": "staff-e2e-quiz-teacher",
+      "actorName": "E2E Quiz Teacher",
+      "actorRole": "Teacher",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-e2e-quiz-teacher",
+      "summary": "E2E Quiz Teacher (Teacher) signed in"
+    },
+    {
+      "id": "aud-1795505459255-531",
+      "timestamp": "2026-11-24T07:30:59.255Z",
+      "actorId": "staff-admin-norbert",
+      "actorName": "Norbert Ihimbazwe Manzi (Chief Administrator)",
+      "actorRole": "SuperAdmin",
+      "action": "LOGIN",
+      "entityType": "Auth",
+      "entityId": "staff-admin-norbert",
+      "summary": "Norbert Ihimbazwe Manzi (Chief Administrator) (SuperAdmin) signed in"
     }
-  ]
+  ],
+  "learning_materials": [
+    {
+      "id": "mat-1795504688988",
+      "title": "ICT NOTES",
+      "gradeCode": "P1",
+      "stream": "Stream A",
+      "subjectName": "ICT",
+      "materialType": "Lesson Notes",
+      "description": "read and write this notes",
+      "content": "full note of ict",
+      "fileUrl": "/uploads/1795504640771_L_O_1_SKILLS_docx.docx",
+      "fileName": "L.O.1.SKILLS.docx",
+      "uploadedBy": "irakoze jd",
+      "uploadedById": "staff-1795359294382",
+      "createdAt": "2026-11-24"
+    },
+    {
+      "id": "mat-1",
+      "title": "P4 Mathematics Unit 3: Fractions & Decimals Revision Notes",
+      "gradeCode": "P4",
+      "stream": "Stream A",
+      "subjectName": "Mathematics",
+      "materialType": "Revision Guide",
+      "description": "Step-by-step worked examples aligned with REB Competency-Based Curriculum.",
+      "uploadedBy": "Marie Claire Uwimana",
+      "uploadedById": "staff-teacher-1",
+      "createdAt": "2026-02-10"
+    },
+    {
+      "id": "mat-2",
+      "title": "P1 Kinyarwanda & English Reading Phonics Booklet",
+      "gradeCode": "P1",
+      "stream": "Stream A",
+      "subjectName": "English Language & Literacy",
+      "materialType": "Lesson Notes",
+      "description": "Home reading practice sheets for parents and P1 pupils.",
+      "uploadedBy": "Jean Paul Habimana",
+      "uploadedById": "staff-teacher-2",
+      "createdAt": "2026-02-12"
+    }
+  ],
+  "student_notifications": [
+    {
+      "studentId": "GRADE:P4",
+      "gradeCode": "P4",
+      "title": "New Quiz: Mathematics",
+      "message": "\"E2E Science Mixed Quiz\" (20 mins timed, 2 attempt(s)) is due on 2026-11-27.",
+      "category": "Homework",
+      "relatedTab": "homework",
+      "id": "notif-1795505548837-42",
+      "createdAt": "2026-11-24T07:32:28.837Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:32:28.837Z"
+    },
+    {
+      "studentId": "GRADE:P4",
+      "gradeCode": "P4",
+      "title": "New Quiz: Mathematics",
+      "message": "\"E2E Science Mixed Quiz\" (20 mins timed, 2 attempt(s)) is due on 2026-11-27.",
+      "category": "Homework",
+      "relatedTab": "homework",
+      "id": "notif-1795505484522-493",
+      "createdAt": "2026-11-24T07:31:24.522Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:31:24.522Z"
+    },
+    {
+      "studentId": "GRADE:P4",
+      "gradeCode": "P4",
+      "title": "New Quiz: Mathematics",
+      "message": "\"E2E Science Mixed Quiz\" (20 mins timed, 2 attempt(s)) is due on 2026-11-27.",
+      "category": "Homework",
+      "relatedTab": "homework",
+      "id": "notif-1795505368126-340",
+      "createdAt": "2026-11-24T07:29:28.126Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:29:28.126Z"
+    },
+    {
+      "studentId": "GRADE:P4",
+      "gradeCode": "P4",
+      "title": "New Quiz: Mathematics",
+      "message": "\"E2E Science Mixed Quiz\" (20 mins timed, 2 attempt(s)) is due on 2026-11-27.",
+      "category": "Homework",
+      "relatedTab": "homework",
+      "id": "notif-1795505283019-979",
+      "createdAt": "2026-11-24T07:28:03.019Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:28:03.019Z"
+    },
+    {
+      "studentId": "GRADE:P4",
+      "gradeCode": "P4",
+      "title": "New Quiz: Mathematics",
+      "message": "\"E2E Science Mixed Quiz\" (20 mins timed, 2 attempt(s)) is due on 2026-11-27.",
+      "category": "Homework",
+      "relatedTab": "homework",
+      "id": "notif-1795505167821-292",
+      "createdAt": "2026-11-24T07:26:07.821Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:26:07.821Z"
+    },
+    {
+      "studentId": "GRADE:P4",
+      "gradeCode": "P4",
+      "title": "New Quiz: Mathematics",
+      "message": "\"E2E Science Mixed Quiz\" (20 mins timed, 2 attempt(s)) is due on 2026-11-27.",
+      "category": "Homework",
+      "relatedTab": "homework",
+      "id": "notif-1795505105835-706",
+      "createdAt": "2026-11-24T07:25:05.835Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:25:05.835Z"
+    },
+    {
+      "studentId": "GRADE:P1",
+      "gradeCode": "P1",
+      "title": "New Learning Material: ICT",
+      "message": "irakoze jd published \"ICT NOTES\" (Lesson Notes).",
+      "category": "Materials",
+      "relatedTab": "materials",
+      "id": "notif-1795504688989-441",
+      "createdAt": "2026-11-24T07:18:08.989Z",
+      "readByIds": [],
+      "isRead": false,
+      "updatedAt": "2026-11-24T07:18:08.989Z"
+    }
+  ],
+  "homework_assignments": [
+    {
+      "id": "hw-1",
+      "title": "Fractions Practice Set #4 (Questions 1–10)",
+      "gradeCode": "P4",
+      "stream": "Stream A",
+      "subjectName": "Mathematics",
+      "instructions": "Complete exercises on page 42 of your Mathematics workbook. Show all working steps neatly.",
+      "dueDate": "2026-11-27",
+      "maxMarks": 20,
+      "teacherId": "staff-teacher-1",
+      "teacherName": "Marie Claire Uwimana",
+      "status": "Active",
+      "createdAt": "2026-11-24"
+    }
+  ],
+  "homework_submissions": []
 }

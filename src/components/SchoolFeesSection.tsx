@@ -5,6 +5,7 @@ import {
   getCurrentSessionUser,
   WebsiteSettings,
 } from '../services/adminStore';
+import { isAdminOrExecutive } from '../services/rbac';
 import { Check, X, Edit3, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { ReadMorePanel } from './ReadMoreBlock';
 
@@ -24,6 +25,7 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   const [settings, setSettings] = useState<WebsiteSettings>(getWebsiteSettings());
   const [sessionUser, setSessionUser] = useState(getCurrentSessionUser());
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingFees, setIsSavingFees] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   // Form State
@@ -78,10 +80,17 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
   }, []);
 
   useEffect(() => {
-    setSessionUser(getCurrentSessionUser());
+    const syncSession = () => setSessionUser(getCurrentSessionUser());
+    syncSession();
+    window.addEventListener('mugina-session-updated', syncSession);
+    return () => window.removeEventListener('mugina-session-updated', syncSession);
   }, []);
 
-  const isAdmin = sessionUser?.role === 'Admin' || sessionUser?.role === 'Finance' || sessionUser?.role === 'DOS';
+  const isAdmin =
+    isAdminOrExecutive(sessionUser?.role) ||
+    sessionUser?.role === 'Finance' ||
+    sessionUser?.role === 'Accountant' ||
+    sessionUser?.role === 'DOS';
 
   const handleOpenEdit = () => {
     const current = getWebsiteSettings();
@@ -116,27 +125,33 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
     setNotIncludedList(notIncludedList.filter((_, i) => i !== idx));
   };
 
-  const handleSaveFees = (e: React.FormEvent) => {
+  const handleSaveFees = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedSettings: WebsiteSettings = {
-      ...settings,
-      feesBadge,
-      feesSubtitle,
-      feesFirstTerm: firstTermPrice,
-      feesSecondTerm: secondTermPrice,
-      feesThirdTerm: thirdTermPrice,
-      feesCurrency: currency,
-      feesPeriod: period,
-      feesIncluded: includedList.filter((item) => item.trim().length > 0),
-      feesNotIncluded: notIncludedList.filter((item) => item.trim().length > 0),
-    };
-    saveWebsiteSettings(updatedSettings);
-    setSettings(updatedSettings);
-    setSaveSuccessMsg('School fees updated and saved permanently to database!');
-    setTimeout(() => {
-      setSaveSuccessMsg(null);
-      setIsEditModalOpen(false);
-    }, 1200);
+    setIsSavingFees(true);
+    try {
+      const latest = getWebsiteSettings();
+      const updatedSettings: WebsiteSettings = {
+        ...latest,
+        feesBadge: feesBadge.trim() || 'OFFICIAL FEE SCHEDULE',
+        feesSubtitle: feesSubtitle.trim(),
+        feesFirstTerm: firstTermPrice.trim(),
+        feesSecondTerm: secondTermPrice.trim(),
+        feesThirdTerm: thirdTermPrice.trim(),
+        feesCurrency: currency.trim() || 'Rwf',
+        feesPeriod: period.trim() || '/ Term',
+        feesIncluded: includedList.map((i) => i.trim()).filter((item) => item.length > 0),
+        feesNotIncluded: notIncludedList.map((i) => i.trim()).filter((item) => item.length > 0),
+      };
+      setSettings(updatedSettings);
+      await saveWebsiteSettings(updatedSettings);
+      setSaveSuccessMsg('School fees updated and published to all visitor browsers!');
+      setTimeout(() => {
+        setSaveSuccessMsg(null);
+        setIsEditModalOpen(false);
+      }, 1000);
+    } finally {
+      setIsSavingFees(false);
+    }
   };
 
   const activeFirstTerm = settings.feesFirstTerm || '92000.0';
@@ -344,32 +359,75 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
             <form onSubmit={handleSaveFees} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 1 Rate (Rwf)</label>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 1 Rate</label>
                   <input
                     type="text"
                     value={firstTermPrice}
                     onChange={(e) => setFirstTermPrice(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden tabular-nums"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 2 Rate (Rwf)</label>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 2 Rate</label>
                   <input
                     type="text"
                     value={secondTermPrice}
                     onChange={(e) => setSecondTermPrice(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden tabular-nums"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 3 Rate (Rwf)</label>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Term 3 Rate</label>
                   <input
                     type="text"
                     value={thirdTermPrice}
                     onChange={(e) => setThirdTermPrice(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden tabular-nums"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Currency Label</label>
+                  <input
+                    type="text"
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    placeholder="Rwf"
                     className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
                   />
                 </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Period Label</label>
+                  <input
+                    type="text"
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                    placeholder="/ Term"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Schedule Badge</label>
+                  <input
+                    type="text"
+                    value={feesBadge}
+                    onChange={(e) => setFeesBadge(e.target.value)}
+                    placeholder="OFFICIAL FEE SCHEDULE"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Schedule Subtitle</label>
+                <input
+                  type="text"
+                  value={feesSubtitle}
+                  onChange={(e) => setFeesSubtitle(e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-hidden"
+                />
               </div>
 
               {/* Inclusions */}
@@ -459,10 +517,11 @@ export const SchoolFeesSection: React.FC<SchoolFeesSectionProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-md transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
+                  disabled={isSavingFees}
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-900 hover:bg-blue-950 disabled:opacity-60 rounded-md transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Save Fees</span>
+                  <span>{isSavingFees ? 'Saving...' : 'Save Fees'}</span>
                 </button>
               </div>
             </form>

@@ -42,6 +42,7 @@ import {
   ClassAnnouncement,
   StudentAchievement,
   StudentNotification,
+  syncAllSmsDomains,
 } from '../services/smsStore';
 import { getCachedProgressLogs, StudentProgressLog } from '../services/firebaseStore';
 import { uploadSchoolDocument } from '../services/storageService';
@@ -224,6 +225,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
     window.addEventListener('mugina-attendance-updated', bump);
     window.addEventListener('mugina-discipline-updated', bump);
     window.addEventListener('mugina-announcements-updated', bump);
+    syncAllSmsDomains().catch(() => {});
     return () => {
       window.removeEventListener('mugina-sms-updated', bump);
       window.removeEventListener('mugina-students-updated', bump);
@@ -587,10 +589,19 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
     setRunnerResponses({});
     setHwAttachmentFile(null);
     setHwAnswerText(!hasQuestions && maxAttempts === 1 && attemptsForHw[0]?.status === 'Submitted' ? attemptsForHw[0].answerText || '' : '');
-    if (hw.timeLimitMinutes && hw.timeLimitMinutes > 0) {
-      const totalSecs = Math.round(hw.timeLimitMinutes * 60);
-      setRunnerTotalSeconds(totalSecs);
-      setRunnerSecondsLeft(totalSecs);
+    const limitSecs = hw.timeLimitMinutes && hw.timeLimitMinutes > 0 ? Math.round(hw.timeLimitMinutes * 60) : null;
+    const endMs = hw.availableUntil ? Date.parse(hw.availableUntil) : NaN;
+    const windowSecs = !Number.isNaN(endMs) ? Math.max(0, Math.floor((endMs - Date.now()) / 1000)) : null;
+    const effectiveTotalSecs =
+      limitSecs !== null && windowSecs !== null
+        ? Math.min(limitSecs, windowSecs)
+        : limitSecs !== null
+        ? limitSecs
+        : windowSecs;
+
+    if (effectiveTotalSecs !== null) {
+      setRunnerTotalSeconds(limitSecs ?? effectiveTotalSecs);
+      setRunnerSecondsLeft(effectiveTotalSecs);
     } else {
       setRunnerTotalSeconds(null);
       setRunnerSecondsLeft(null);
@@ -698,8 +709,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
             maxMarks: graded.maxMarks,
             score: graded.score,
             answers: graded.answers,
-            autoGraded: true,
-            status: 'Graded',
+            autoGraded: !graded.hasPendingManualGrading,
+            status: graded.hasPendingManualGrading ? 'Submitted' : 'Graded',
           });
         } else {
           savedSub = submitStudentHomework(basePayload);
@@ -718,8 +729,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
 
       const timeoutPrefix = isTimeout ? 'Time expired — auto-submitted! ' : '';
       const marksLabel =
-        savedSub?.status === 'Graded' && savedSub.score !== undefined
-          ? ` Your Score: ${savedSub.score} / ${savedSub.maxMarks || hw.maxMarks}. Review your correct answers below.`
+        savedSub?.score !== undefined
+          ? savedSub.status === 'Graded'
+            ? ` Your Score: ${savedSub.score} / ${savedSub.maxMarks || hw.maxMarks}. Review your correct answers below.`
+            : ` Auto-graded Score: ${savedSub.score} / ${savedSub.maxMarks || hw.maxMarks} (Open questions pending teacher review). Official answers are shown below.`
           : ` Sent to ${hw.teacherName}.`;
       setHwNotice({
         type: 'ok',
@@ -1704,6 +1717,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                                     <div className="flex items-start justify-between gap-2">
                                       <p className="text-xs font-bold text-slate-900 dark:text-white">
                                         {qIdx + 1}. {q.prompt}
+                                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                          {q.type === 'mcq' ? 'Multiple Choice' : q.type === 'open' ? 'Open Question' : 'Closed'}
+                                        </span>
                                       </p>
                                       <span className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 shrink-0 tabular-nums">
                                         {q.marks} mark{q.marks === 1 ? '' : 's'}
@@ -1744,6 +1760,21 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                                             </button>
                                           );
                                         })}
+                                      </div>
+                                    ) : q.type === 'open' ? (
+                                      <div>
+                                        <textarea
+                                          rows={3}
+                                          value={curChoice}
+                                          onChange={(e) =>
+                                            setRunnerResponses((prev) => ({
+                                              ...prev,
+                                              [q.id]: e.target.value,
+                                            }))
+                                          }
+                                          placeholder="Write your full open answer here..."
+                                          className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white"
+                                        />
                                       </div>
                                     ) : (
                                       <div>
@@ -1843,13 +1874,14 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                                 )}
                               </div>
                             </div>
-                            {sub.status === 'Graded' && sub.score !== undefined && (
+                            {sub.score !== undefined && (
                               <div className="text-right tabular-nums">
                                 <span className="text-sm font-extrabold text-emerald-700 dark:text-emerald-400">
                                   Marks: {sub.score} / {sub.maxMarks || hw.maxMarks}
                                 </span>
                                 <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                                   {Math.round(((sub.score || 0) / Math.max(1, sub.maxMarks || hw.maxMarks)) * 100)}%
+                                  {sub.status !== 'Graded' ? ' (Open Qs pending review)' : ''}
                                 </p>
                               </div>
                             )}
@@ -1864,14 +1896,18 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                                 <div
                                   key={`${sub.id}-q-${ans.questionId}-${aIdx}`}
                                   className={`p-2.5 rounded-lg border space-y-1 ${
-                                    ans.isCorrect
+                                    ans.needsManualGrading
+                                      ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                                      : ans.isCorrect
                                       ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                                       : 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800'
                                   }`}
                                 >
                                   <div className="flex items-start justify-between gap-2">
                                     <p className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                      {ans.isCorrect ? (
+                                      {ans.needsManualGrading ? (
+                                        <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                      ) : ans.isCorrect ? (
                                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                       ) : (
                                         <XCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
@@ -1881,18 +1917,28 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                                       </span>
                                     </p>
                                     <span className="font-mono font-bold text-[11px] shrink-0 tabular-nums text-slate-700 dark:text-slate-200">
-                                      {ans.earnedMarks} / {ans.maxMarks}
+                                      {ans.needsManualGrading ? `Pending / ${ans.maxMarks}` : `${ans.earnedMarks} / ${ans.maxMarks}`}
                                     </span>
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pl-5">
                                     <p className="text-slate-700 dark:text-slate-300">
                                       <span className="font-semibold">Your Answer:</span>{' '}
-                                      <span className={ans.isCorrect ? 'text-emerald-700 dark:text-emerald-300 font-bold' : 'text-rose-700 dark:text-rose-300 font-bold'}>
+                                      <span
+                                        className={
+                                          ans.needsManualGrading
+                                            ? 'text-slate-900 dark:text-white font-semibold'
+                                            : ans.isCorrect
+                                            ? 'text-emerald-700 dark:text-emerald-300 font-bold'
+                                            : 'text-rose-700 dark:text-rose-300 font-bold'
+                                        }
+                                      >
                                         {ans.studentAnswer || '(No answer)'}
                                       </span>
                                     </p>
                                     <p className="text-slate-700 dark:text-slate-300">
-                                      <span className="font-semibold">Correct Answer:</span>{' '}
+                                      <span className="font-semibold">
+                                        {ans.type === 'open' ? 'Model Correct Answer:' : 'Correct Answer:'}
+                                      </span>{' '}
                                       <span className="text-emerald-800 dark:text-emerald-300 font-bold">{ans.correctAnswer}</span>
                                     </p>
                                   </div>

@@ -41,6 +41,7 @@ import {
   mergeStudentRecords,
 } from './services/adminStore';
 import { syncAllSmsDomains } from './services/smsStore';
+import { subscribeToSmsSupabaseDomain } from './services/smsSupabase';
 import { initAuth, resolveStaffRoleForFirebaseUser } from './services/authService';
 import {
   fetchSchoolLogoFromFirebase,
@@ -465,6 +466,22 @@ export default function App() {
       }
     });
 
+    const unsubSupabaseHomework = subscribeToSmsSupabaseDomain('homework_assignments', (items) => {
+      if (Array.isArray(items)) {
+        localStorage.setItem('mugina_sms_homework_v1', JSON.stringify(items));
+        window.dispatchEvent(new CustomEvent('mugina-sms-homework_assignments', { detail: items }));
+        window.dispatchEvent(new CustomEvent('mugina-sms-updated', { detail: { domain: 'homework_assignments', items } }));
+      }
+    });
+
+    const unsubSupabaseHomeworkSubs = subscribeToSmsSupabaseDomain('homework_submissions', (items) => {
+      if (Array.isArray(items)) {
+        localStorage.setItem('mugina_sms_homework_submissions_v1', JSON.stringify(items));
+        window.dispatchEvent(new CustomEvent('mugina-sms-homework_submissions', { detail: items }));
+        window.dispatchEvent(new CustomEvent('mugina-sms-updated', { detail: { domain: 'homework_submissions', items } }));
+      }
+    });
+
     return () => {
       window.removeEventListener('mugina-announcements-updated', handleLocalAnnUpdate);
       unsubLogo();
@@ -491,6 +508,8 @@ export default function App() {
       unsubInquiries();
       unsubSupabaseInquiries();
       unsubSupabaseTours();
+      unsubSupabaseHomework();
+      unsubSupabaseHomeworkSubs();
     };
   }, []);
 

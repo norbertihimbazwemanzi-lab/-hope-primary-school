@@ -125,6 +125,7 @@ import {
   hasPermission,
   getRoleDisplayLabel,
   isFullAdmin,
+  isAdminOrExecutive,
   normalizeUserRole,
   extractGradesFromAssignment,
 } from '../services/rbac';
@@ -2937,7 +2938,7 @@ END $$;`;
       {activeTab === 'academics' && canManageAcademics && (
         <AcademicManagementModule
           canConfigureExam={canConfigureExams}
-          canManageFees={isFullAdmin(currentUser.role) || canAccessFinance}
+          canManageFees={isAdminOrExecutive(currentUser.role) || canAccessFinance}
         />
       )}
 
@@ -5103,18 +5104,154 @@ END $$;`;
             </div>
 
             {/* 4. Tuition & Fee Schedule */}
-            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-4">
-              <div className="border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <Coins className="w-4 h-4 text-amber-500" />
-                  <span>4. School Fees & Tuition Structure (Publicly Displayed)</span>
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Displayed on the admissions page and fee estimator for prospective parents.
-                </p>
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-2xs space-y-5">
+              <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-amber-500" />
+                    <span>4. School Fees & Tuition Structure (Publicly Displayed)</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Controls the public School Fees page, Admissions schedule, and interactive Parent Fee Estimator across all devices.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('fees')}
+                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold rounded-xl border border-blue-200 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>View School Fees Page</span>
+                  </button>
+                  {canManageAcademics && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('academics')}
+                      className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-xl border border-amber-200 transition-colors cursor-pointer"
+                    >
+                      Per-Grade Fee Schedule
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    First Term Fee
+                  </label>
+                  <input
+                    type="text"
+                    value={websiteSettings.feesFirstTerm || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, feesFirstTerm: e.target.value })}
+                    placeholder="e.g. 92000.0"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 tabular-nums focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Second Term Fee
+                  </label>
+                  <input
+                    type="text"
+                    value={websiteSettings.feesSecondTerm || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, feesSecondTerm: e.target.value })}
+                    placeholder="e.g. 92000.0"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 tabular-nums focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Third Term Fee
+                  </label>
+                  <input
+                    type="text"
+                    value={websiteSettings.feesThirdTerm || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, feesThirdTerm: e.target.value })}
+                    placeholder="e.g. 92000.0"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 tabular-nums focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Currency Label
+                  </label>
+                  <input
+                    type="text"
+                    value={websiteSettings.feesCurrency || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, feesCurrency: e.target.value })}
+                    placeholder="e.g. RWF"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Billing Period Label
+                  </label>
+                  <input
+                    type="text"
+                    value={websiteSettings.feesPeriod || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, feesPeriod: e.target.value })}
+                    placeholder="e.g. /term"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Fees Page Subtitle
+                  </label>
+                  <input
+                    type="text"
+                    value={websiteSettings.feesSubtitle || ''}
+                    onChange={(e) => setWebsiteSettings({ ...websiteSettings, feesSubtitle: e.target.value })}
+                    placeholder="e.g. Clear and accessible term-based fees."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    What Is Included (One item per line)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(websiteSettings.feesIncluded || []).join('\n')}
+                    onChange={(e) =>
+                      setWebsiteSettings({
+                        ...websiteSettings,
+                        feesIncluded: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                      })
+                    }
+                    placeholder="Full-day quality instruction&#10;Interactive classroom learning materials&#10;Continuous academic assessments"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Not Included (One item per line)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={(websiteSettings.feesNotIncluded || []).join('\n')}
+                    onChange={(e) =>
+                      setWebsiteSettings({
+                        ...websiteSettings,
+                        feesNotIncluded: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean),
+                      })
+                    }
+                    placeholder="School uniforms&#10;Personal stationery&#10;Optional school lunch and transport"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2 border-t border-slate-100">
                 <div>
                   <label className="block font-bold text-slate-700 uppercase tracking-wider mb-1">
                     Nursery Tuition Fee (Per Term)

@@ -1,6 +1,32 @@
 import { getSupabaseClient, isMissingTableError } from './supabaseClient';
 import { db } from './firebaseStore';
-import { collection, doc, getDocs, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
+
+const withSmsTimeout = <T,>(promise: Promise<T>, fallback: T, ms = 1800): Promise<T> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    promise
+      .then((val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(fallback);
+        }
+      });
+  });
 
 export type SmsTableDomain =
   | 'academic_years_terms'
@@ -60,7 +86,7 @@ export const saveSmsDomainToSupabase = async <T extends { id: string }>(
     const rows = items.map((item) => ({
       id: item.id,
       data: { ...item, updatedAt: (item as any).updatedAt || now },
-      updated_at: now,
+      updated_at: (item as any).updatedAt || now,
     }));
     const { error } = await client.from(domain).upsert(rows, { onConflict: 'id' });
     if (!error) return true;
@@ -73,12 +99,33 @@ export const saveSmsDomainToSupabase = async <T extends { id: string }>(
   return false;
 };
 
+export const deleteSmsDomainItemFromCloud = async (
+  domain: SmsTableDomain,
+  itemId: string
+): Promise<void> => {
+  const client = getSupabaseClient();
+  if (client && domain !== 'fee_structures') {
+    try {
+      await client.from(domain).delete().eq('id', itemId);
+    } catch {
+      // ignore if missing table
+    }
+  }
+  try {
+    const colRef = collection(db, `sms_${domain}`);
+    await withSmsTimeout(deleteDoc(doc(colRef, itemId)), undefined, 1500);
+  } catch {
+    // quiet fallback
+  }
+};
+
 export const fetchSmsDomainFromFirebase = async <T = any>(domain: SmsTableDomain): Promise<T[] | null> => {
   try {
     const colRef = collection(db, `sms_${domain}`);
-    const snap = await getDocs(colRef);
+    const snap = await withSmsTimeout(getDocs(colRef), null as any, 1800);
+    if (!snap) return null;
     const items: T[] = [];
-    snap.forEach((docSnap) => {
+    snap.forEach((docSnap: any) => {
       items.push({ ...(docSnap.data() as any), id: docSnap.id });
     });
     return items.length > 0 ? items : null;
@@ -94,13 +141,17 @@ export const saveSmsDomainToFirebase = async <T extends { id: string }>(
   try {
     const colRef = collection(db, `sms_${domain}`);
     const chunk = items.slice(0, 60);
-    await Promise.all(
-      chunk.map((item) =>
-        setDoc(doc(colRef, item.id), {
-          ...item,
-          updatedAt: new Date().toISOString(),
-        })
-      )
+    await withSmsTimeout(
+      Promise.all(
+        chunk.map((item) =>
+          setDoc(doc(colRef, item.id), {
+            ...item,
+            updatedAt: (item as any).updatedAt || new Date().toISOString(),
+          })
+        )
+      ),
+      undefined,
+      1800
     );
   } catch {
     // quiet fallback

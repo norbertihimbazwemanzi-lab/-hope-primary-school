@@ -1,13 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TUITION_STRUCTURE } from '../data/schoolData';
+import { getWebsiteSettings, WebsiteSettings } from '../services/adminStore';
+import { getFeeStructures, ClassFeeStructure } from '../services/smsStore';
 import { Coins, Check, FileDown, ArrowRight } from 'lucide-react';
 
 interface FeeEstimatorProps {
   onOpenApply: () => void;
 }
 
+const parseRwfAmount = (raw?: string): number | null => {
+  if (!raw) return null;
+  const digits = raw.replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
   const [selectedLevelIdx, setSelectedLevelIdx] = useState<number>(0);
+  const [feeStructures, setFeeStructures] = useState<ClassFeeStructure[]>(() => getFeeStructures());
+  const [webSettings, setWebSettings] = useState<WebsiteSettings>(() => getWebsiteSettings());
   const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({
     lunch: true,
     transport_local: false,
@@ -15,7 +27,58 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
     uniform_pack: true,
   });
 
-  const currentLevel = TUITION_STRUCTURE.levels[selectedLevelIdx];
+  useEffect(() => {
+    const syncSms = () => setFeeStructures(getFeeStructures());
+    const syncSettings = () => setWebSettings(getWebsiteSettings());
+    window.addEventListener('mugina-sms-updated', syncSms);
+    window.addEventListener('mugina-settings-updated', syncSettings);
+    return () => {
+      window.removeEventListener('mugina-sms-updated', syncSms);
+      window.removeEventListener('mugina-settings-updated', syncSettings);
+    };
+  }, []);
+
+  const dynamicLevels = useMemo(() => {
+    const nurseryRow = feeStructures.find((f) => f.gradeCode === 'N-BABY') || feeStructures.find((f) => f.gradeCode === 'N-MID');
+    const lowerPrimaryRow = feeStructures.find((f) => f.gradeCode === 'P1') || feeStructures.find((f) => f.gradeCode === 'P2');
+    const upperPrimaryRow = feeStructures.find((f) => f.gradeCode === 'P4') || feeStructures.find((f) => f.gradeCode === 'P6');
+    const webNursery = parseRwfAmount(webSettings.nurseryTuition);
+    const webPrimary = parseRwfAmount(webSettings.primaryTuition);
+
+    return TUITION_STRUCTURE.levels.map((lvl, idx) => {
+      if (idx === 0) {
+        return {
+          ...lvl,
+          tuitionPerTerm: webNursery ?? nurseryRow?.tuitionFee ?? lvl.tuitionPerTerm,
+          materialsFee: nurseryRow?.materialsFee ?? lvl.materialsFee,
+        };
+      }
+      if (idx === 1) {
+        return {
+          ...lvl,
+          tuitionPerTerm: webPrimary ?? lowerPrimaryRow?.tuitionFee ?? lvl.tuitionPerTerm,
+          materialsFee: lowerPrimaryRow?.materialsFee ?? lvl.materialsFee,
+        };
+      }
+      return {
+        ...lvl,
+        tuitionPerTerm: webPrimary ?? upperPrimaryRow?.tuitionFee ?? lvl.tuitionPerTerm,
+        materialsFee: upperPrimaryRow?.materialsFee ?? lvl.materialsFee,
+      };
+    });
+  }, [feeStructures, webSettings]);
+
+  const dynamicAddons = useMemo(() => {
+    const webLunch = parseRwfAmount(webSettings.lunchFee);
+    const webTransport = parseRwfAmount(webSettings.transportFee);
+    return TUITION_STRUCTURE.optionalAddons.map((addon) => {
+      if (addon.id === 'lunch' && webLunch) return { ...addon, feePerTerm: webLunch };
+      if (addon.id === 'transport_local' && webTransport) return { ...addon, feePerTerm: webTransport };
+      return addon;
+    });
+  }, [webSettings]);
+
+  const currentLevel = dynamicLevels[selectedLevelIdx] || dynamicLevels[0];
 
   const handleToggleAddon = (id: string) => {
     setSelectedAddons((prev) => {
@@ -40,7 +103,7 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
   let termAddonsTotal = 0;
   let oneTimeUniformFee = 0;
 
-  TUITION_STRUCTURE.optionalAddons.forEach((addon) => {
+  dynamicAddons.forEach((addon) => {
     if (selectedAddons[addon.id]) {
       if (addon.id === 'uniform_pack') {
         oneTimeUniformFee += addon.feePerTerm;
@@ -99,7 +162,7 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
               1. Choose Grade Level
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {TUITION_STRUCTURE.levels.map((lvl, idx) => {
+              {dynamicLevels.map((lvl, idx) => {
                 const isSelected = selectedLevelIdx === idx;
                 return (
                   <button
@@ -131,7 +194,7 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
               2. Optional School Services & Programs
             </label>
             <div className="space-y-2">
-              {TUITION_STRUCTURE.optionalAddons.map((addon) => {
+              {dynamicAddons.map((addon) => {
                 const isChecked = !!selectedAddons[addon.id];
                 return (
                   <label
@@ -187,7 +250,7 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
               <div className="flex justify-between text-amber-300">
                 <span>Hot Lunch & Milk Program:</span>
                 <span className="font-mono font-semibold">
-                  {formatRwf(TUITION_STRUCTURE.optionalAddons.find(a => a.id === 'lunch')?.feePerTerm || 0)}
+                  {formatRwf(dynamicAddons.find(a => a.id === 'lunch')?.feePerTerm || 0)}
                 </span>
               </div>
             )}
@@ -196,7 +259,7 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
               <div className="flex justify-between text-amber-300">
                 <span>School Van (Mugina Zone):</span>
                 <span className="font-mono font-semibold">
-                  {formatRwf(TUITION_STRUCTURE.optionalAddons.find(a => a.id === 'transport_local')?.feePerTerm || 0)}
+                  {formatRwf(dynamicAddons.find(a => a.id === 'transport_local')?.feePerTerm || 0)}
                 </span>
               </div>
             )}
@@ -205,7 +268,7 @@ export const FeeEstimator: React.FC<FeeEstimatorProps> = ({ onOpenApply }) => {
               <div className="flex justify-between text-amber-300">
                 <span>School Van (Kamonyi Extended):</span>
                 <span className="font-mono font-semibold">
-                  {formatRwf(TUITION_STRUCTURE.optionalAddons.find(a => a.id === 'transport_extended')?.feePerTerm || 0)}
+                  {formatRwf(dynamicAddons.find(a => a.id === 'transport_extended')?.feePerTerm || 0)}
                 </span>
               </div>
             )}
