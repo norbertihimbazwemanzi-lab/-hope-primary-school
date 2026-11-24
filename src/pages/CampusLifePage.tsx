@@ -5,12 +5,8 @@ import { ReadMoreText } from '../components/ReadMoreBlock';
 import {
   getGalleryItems,
   syncServerGalleryItems,
-  saveGalleryItems,
   filterGalleryAgainstTombstones,
-  isGalleryInitialized,
 } from '../services/adminStore';
-import { fetchSchoolGalleryFromFirebase } from '../services/firebaseStore';
-import { fetchSchoolGalleryFromSupabase } from '../services/supabaseClient';
 import {
   Maximize2,
   Image as ImageIcon,
@@ -35,28 +31,13 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
     // 1. Load initial cache
     setFacilities(getGalleryItems());
 
-    // 2. Sync from Firebase Firestore, Supabase & server with tombstone filtering
+    // 2. Authoritative tombstone- and timestamp-aware cloud sync (Supabase + Firebase + Express)
     let isMounted = true;
-    Promise.all([
-      fetchSchoolGalleryFromFirebase(),
-      fetchSchoolGalleryFromSupabase(),
-      syncServerGalleryItems(),
-    ]).then(([firestoreItems, supabaseItems, serverItems]) => {
-      if (!isMounted) return;
-      let authoritative: FacilityItem[] = [];
-      if (Array.isArray(supabaseItems) && supabaseItems.length > 0) {
-        authoritative = supabaseItems;
-      } else if (Array.isArray(firestoreItems) && firestoreItems.length > 0) {
-        authoritative = firestoreItems;
-      } else if (Array.isArray(serverItems) && serverItems.length > 0) {
-        authoritative = serverItems;
-      }
-      const cleaned = filterGalleryAgainstTombstones(authoritative);
-      if (cleaned.length > 0 || isGalleryInitialized()) {
-        setFacilities(cleaned);
-        saveGalleryItems(cleaned);
-      }
-    }).catch((err) => console.warn('Gallery sync notice:', err));
+    syncServerGalleryItems()
+      .then((cleaned) => {
+        if (isMounted) setFacilities(cleaned);
+      })
+      .catch((err) => console.warn('Gallery sync notice:', err));
 
     const galleryHandler = (e: any) => {
       if (Array.isArray(e.detail)) {
@@ -65,11 +46,16 @@ export const CampusLifePage: React.FC<CampusLifePageProps> = ({
         setFacilities(getGalleryItems());
       }
     };
+    const settingsHandler = () => {
+      setFacilities(getGalleryItems());
+    };
     window.addEventListener('mugina-gallery-updated', galleryHandler);
+    window.addEventListener('mugina-settings-updated', settingsHandler);
 
     return () => {
       isMounted = false;
       window.removeEventListener('mugina-gallery-updated', galleryHandler);
+      window.removeEventListener('mugina-settings-updated', settingsHandler);
     };
   }, []);
 

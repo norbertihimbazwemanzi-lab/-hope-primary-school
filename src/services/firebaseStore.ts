@@ -21,6 +21,35 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 
+const FB_READ_TIMEOUT_MS = 1400;
+const FB_WRITE_TIMEOUT_MS = 1800;
+
+const withFbTimeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
+  new Promise<T>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallback);
+      }
+    }, ms);
+    promise
+      .then((val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      })
+      .catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(fallback);
+        }
+      });
+  });
+
 export interface StudentProgressLog {
   id: string;
   studentId: string;
@@ -112,10 +141,11 @@ export const fetchStudentProgressLogs = async (
 
   try {
     const colRef = collection(db, 'student_progress_logs');
-    const querySnapshot = await getDocs(colRef);
+    const querySnapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!querySnapshot) throw new Error('Firestore read timeout');
     const firestoreLogs: StudentProgressLog[] = [];
 
-    querySnapshot.forEach((docSnap) => {
+    querySnapshot.forEach((docSnap: any) => {
       const data = docSnap.data();
       firestoreLogs.push({
         id: docSnap.id,
@@ -192,18 +222,24 @@ export const deleteStudentProgressLogInFirebase = async (id: string): Promise<vo
 export const saveSchoolLogoToFirebase = async (logoUrl: string): Promise<boolean> => {
   try {
     const docRef = doc(db, 'school_settings', 'branding');
-    await setDoc(
-      docRef,
-      {
-        schoolLogoUrl: logoUrl,
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'Norbert Ihimbazwe Manzi (School Administrator)',
-        serverTimestamp: Timestamp.now(),
-      },
-      { merge: true }
+    const saved = await withFbTimeout(
+      setDoc(
+        docRef,
+        {
+          schoolLogoUrl: logoUrl,
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'Norbert Ihimbazwe Manzi (School Administrator)',
+          serverTimestamp: Timestamp.now(),
+        },
+        { merge: true }
+      ).then(() => true),
+      FB_WRITE_TIMEOUT_MS,
+      false
     );
-    console.log('[Firebase Store] School Logo saved to Firestore branding doc');
-    return true;
+    if (saved) {
+      console.log('[Firebase Store] School Logo saved to Firestore branding doc');
+    }
+    return saved;
   } catch (err) {
     console.warn('[Firebase Store] Notice saving school logo to Firestore:', err);
     return false;
@@ -216,8 +252,8 @@ export const saveSchoolLogoToFirebase = async (logoUrl: string): Promise<boolean
 export const fetchSchoolLogoFromFirebase = async (): Promise<string | null> => {
   try {
     const docRef = doc(db, 'school_settings', 'branding');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists() && docSnap.data().schoolLogoUrl) {
+    const docSnap = await withFbTimeout<any>(getDoc(docRef), FB_READ_TIMEOUT_MS, null);
+    if (docSnap?.exists() && docSnap.data().schoolLogoUrl) {
       return docSnap.data().schoolLogoUrl;
     }
   } catch (err) {
@@ -257,18 +293,24 @@ export const saveSchoolGalleryItemToFirebase = async (item: any): Promise<boolea
   try {
     const itemId = item.id || `fac-${Date.now()}`;
     const docRef = doc(db, 'school_gallery', itemId);
-    await setDoc(
-      docRef,
-      {
-        ...item,
-        id: itemId,
-        updatedAt: new Date().toISOString(),
-        serverTimestamp: Timestamp.now(),
-      },
-      { merge: true }
+    const saved = await withFbTimeout(
+      setDoc(
+        docRef,
+        {
+          ...item,
+          id: itemId,
+          updatedAt: item.updatedAt || new Date().toISOString(),
+          serverTimestamp: Timestamp.now(),
+        },
+        { merge: true }
+      ).then(() => true),
+      FB_WRITE_TIMEOUT_MS,
+      false
     );
-    console.log('[Firebase Store] Gallery photo synced to Firestore:', itemId);
-    return true;
+    if (saved) {
+      console.log('[Firebase Store] Gallery photo synced to Firestore:', itemId);
+    }
+    return saved;
   } catch (err) {
     console.warn('[Firebase Store] Firestore gallery write notice:', err);
     return false;
@@ -281,9 +323,10 @@ export const saveSchoolGalleryItemToFirebase = async (item: any): Promise<boolea
 export const fetchSchoolGalleryFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'school_gallery');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -363,9 +406,10 @@ export const saveSchoolDocumentToFirebase = async (documentItem: any): Promise<b
 export const fetchSchoolDocumentsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'school_documents');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items.sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -447,9 +491,10 @@ export const saveSchoolAnnouncementToFirebase = async (announcement: any): Promi
 export const fetchSchoolAnnouncementsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'school_announcements');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -506,17 +551,23 @@ export const deleteSchoolAnnouncementFromFirebase = async (id: string): Promise<
 export const saveWebsiteSettingsToFirebase = async (settings: any): Promise<boolean> => {
   try {
     const docRef = doc(db, 'school_settings', 'general');
-    await setDoc(
-      docRef,
-      {
-        ...settings,
-        updatedAt: new Date().toISOString(),
-        serverTimestamp: Timestamp.now(),
-      },
-      { merge: true }
+    const saved = await withFbTimeout(
+      setDoc(
+        docRef,
+        {
+          ...settings,
+          updatedAt: settings?.updatedAt || new Date().toISOString(),
+          serverTimestamp: Timestamp.now(),
+        },
+        { merge: true }
+      ).then(() => true),
+      FB_WRITE_TIMEOUT_MS,
+      false
     );
-    console.log('[Firebase Store] Website settings synced to Firestore');
-    return true;
+    if (saved) {
+      console.log('[Firebase Store] Website settings synced to Firestore');
+    }
+    return saved;
   } catch (err) {
     console.warn('[Firebase Store] Firestore settings write notice:', err);
     return false;
@@ -529,8 +580,8 @@ export const saveWebsiteSettingsToFirebase = async (settings: any): Promise<bool
 export const fetchWebsiteSettingsFromFirebase = async (): Promise<any | null> => {
   try {
     const docRef = doc(db, 'school_settings', 'general');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
+    const docSnap = await withFbTimeout<any>(getDoc(docRef), FB_READ_TIMEOUT_MS, null);
+    if (docSnap?.exists()) {
       return docSnap.data();
     }
   } catch (err) {
@@ -599,9 +650,10 @@ export const saveEnrolledStudentToFirebase = async (student: any): Promise<boole
 export const fetchEnrolledStudentsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'enrolled_students');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -673,9 +725,10 @@ export const saveStaffMembersBatchToFirebase = async (staffList: any[]): Promise
 export const fetchStaffMembersFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'staff_members');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -780,9 +833,10 @@ export const savePaymentTransactionToFirebase = async (tx: any): Promise<boolean
 export const fetchPaymentTransactionsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'payment_transactions');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -848,9 +902,10 @@ export const saveApplicationToFirebase = async (appData: any): Promise<boolean> 
 export const fetchApplicationsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'admissions_applications');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -917,9 +972,10 @@ export const saveAttendanceBatchToFirebase = async (records: any[]): Promise<boo
 export const fetchAttendanceRecordsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'attendance_records');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -958,9 +1014,10 @@ export const saveDisciplineRecordToFirebase = async (record: any): Promise<boole
 export const fetchDisciplineRecordsFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'discipline_records');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -999,9 +1056,10 @@ export const saveInquiryToFirebase = async (inquiry: any): Promise<boolean> => {
 export const fetchInquiriesFromFirebase = async (): Promise<any[]> => {
   try {
     const colRef = collection(db, 'visitor_inquiries');
-    const snapshot = await getDocs(colRef);
+    const snapshot = await withFbTimeout<any>(getDocs(colRef), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => {
+    snapshot.forEach((docSnap: any) => {
       items.push({ id: docSnap.id, ...docSnap.data() });
     });
     return items;
@@ -1200,9 +1258,10 @@ export const saveTeacherAttendanceBatchToFirebase = async (records: any[]): Prom
  */
 export const fetchTeacherAttendanceFromFirebase = async (): Promise<any[]> => {
   try {
-    const snapshot = await getDocs(collection(db, 'teacher_attendance_records'));
+    const snapshot = await withFbTimeout<any>(getDocs(collection(db, 'teacher_attendance_records')), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach((docSnap: any) => items.push({ id: docSnap.id, ...docSnap.data() }));
     return items;
   } catch (err) {
     console.warn('[Firebase Store] Teacher attendance fetch notice:', err);
@@ -1246,9 +1305,10 @@ export const saveTourBookingToFirebase = async (tour: any): Promise<boolean> => 
  */
 export const fetchTourBookingsFromFirebase = async (): Promise<any[]> => {
   try {
-    const snapshot = await getDocs(collection(db, 'campus_tour_bookings'));
+    const snapshot = await withFbTimeout<any>(getDocs(collection(db, 'campus_tour_bookings')), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => items.push({ id: docSnap.id, ...docSnap.data() }));
+    snapshot.forEach((docSnap: any) => items.push({ id: docSnap.id, ...docSnap.data() }));
     return items;
   } catch (err) {
     console.warn('[Firebase Store] Tour booking fetch notice:', err);
@@ -1280,9 +1340,10 @@ export const saveApplicantChatToFirebase = async (thread: any): Promise<boolean>
  */
 export const fetchApplicantChatsFromFirebase = async (): Promise<any[]> => {
   try {
-    const snapshot = await getDocs(collection(db, 'applicant_chats'));
+    const snapshot = await withFbTimeout<any>(getDocs(collection(db, 'applicant_chats')), FB_READ_TIMEOUT_MS, null);
+    if (!snapshot) return [];
     const items: any[] = [];
-    snapshot.forEach((docSnap) => items.push({ ...docSnap.data(), refCode: docSnap.id }));
+    snapshot.forEach((docSnap: any) => items.push({ ...docSnap.data(), refCode: docSnap.id }));
     return items;
   } catch (err) {
     console.warn('[Firebase Store] Applicant chats fetch notice:', err);
@@ -1297,14 +1358,14 @@ export const fetchApplicantChatByRefFromFirebase = async (refCode: string): Prom
   if (!refCode) return null;
   try {
     const cleanRef = refCode.trim().toUpperCase();
-    const snap = await getDoc(doc(db, 'applicant_chats', cleanRef));
-    if (snap.exists()) {
+    const snap = await withFbTimeout<any>(getDoc(doc(db, 'applicant_chats', cleanRef)), FB_READ_TIMEOUT_MS, null);
+    if (snap?.exists()) {
       return { ...snap.data(), refCode: snap.id };
     }
     if (refCode.includes('@')) {
       const q = query(collection(db, 'applicant_chats'), where('parentEmail', '==', refCode.trim().toLowerCase()));
-      const qs = await getDocs(q);
-      if (!qs.empty) {
+      const qs = await withFbTimeout<any>(getDocs(q), FB_READ_TIMEOUT_MS, null);
+      if (qs && !qs.empty) {
         const d = qs.docs[0];
         return { ...d.data(), refCode: d.id };
       }

@@ -19,7 +19,6 @@ import { ArrowUp } from 'lucide-react';
 import {
   getAnnouncements,
   getWebsiteSettings,
-  saveGalleryItems,
   syncServerGalleryItems,
   syncServerDocuments,
   saveAnnouncements,
@@ -45,10 +44,8 @@ import { syncAllSmsDomains } from './services/smsStore';
 import { initAuth, resolveStaffRoleForFirebaseUser } from './services/authService';
 import {
   fetchSchoolLogoFromFirebase,
-  fetchSchoolGalleryFromFirebase,
   fetchSchoolDocumentsFromFirebase,
   fetchSchoolAnnouncementsFromFirebase,
-  fetchWebsiteSettingsFromFirebase,
   subscribeToSchoolLogo,
   subscribeToSchoolGallery,
   subscribeToSchoolDocuments,
@@ -62,8 +59,6 @@ import {
   subscribeToInquiries,
 } from './services/firebaseStore';
 import {
-  fetchWebsiteSettingsFromSupabase,
-  fetchSchoolGalleryFromSupabase,
   subscribeToSupabaseWebsiteSettings,
   subscribeToSupabaseGallery,
   subscribeToSupabaseStaffMembers,
@@ -185,41 +180,30 @@ export default function App() {
       window.dispatchEvent(new CustomEvent(eventName, { detail: data }));
     };
 
-    const getMaxTimestampMs = (items: any[] | null | undefined): number => {
-      if (!Array.isArray(items) || items.length === 0) return 0;
-      let maxMs = 0;
-      for (const item of items) {
-        const raw = item?.updatedAt || item?.updated_at || item?.recordedAt;
-        if (raw) {
-          const ms = Date.parse(raw);
-          if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
-        }
-      }
-      return maxMs;
-    };
-
     const applyLiveWebsiteSettings = (liveSettings: any) => {
-      if (!liveSettings) return;
+      if (!liveSettings || typeof liveSettings !== 'object') return;
+      const { staff: _ignoreStaff, students: _ignoreStudents, ...cleanLive } = liveSettings;
+      const rawLocal = localStorage.getItem('mugina_website_settings_v3');
       const current = getWebsiteSettings();
-      const currentMs = current.updatedAt ? Date.parse(current.updatedAt) : 0;
-      const liveMs = liveSettings.updatedAt ? Date.parse(liveSettings.updatedAt) : 0;
+      const currentMs = rawLocal && current.updatedAt ? Date.parse(current.updatedAt) : 0;
+      const liveMs = cleanLive.updatedAt ? Date.parse(cleanLive.updatedAt) : 0;
       if (!Number.isNaN(currentMs) && currentMs > 0 && (!liveMs || Number.isNaN(liveMs) || liveMs < currentMs)) {
         return;
       }
       const mergedDeletedGallery = Array.from(
-        new Set([...(current.deletedGalleryIds || []), ...(liveSettings.deletedGalleryIds || [])])
+        new Set([...(current.deletedGalleryIds || []), ...(cleanLive.deletedGalleryIds || [])])
       );
       const mergedDeletedStaff = Array.from(
-        new Set([...(current.deletedStaffIds || []), ...(liveSettings.deletedStaffIds || [])])
+        new Set([...(current.deletedStaffIds || []), ...(cleanLive.deletedStaffIds || [])])
       );
       const mergedDeletedStudents = Array.from(
-        new Set([...(current.deletedStudentIds || []), ...(liveSettings.deletedStudentIds || [])])
+        new Set([...(current.deletedStudentIds || []), ...(cleanLive.deletedStudentIds || [])])
       );
       const updated = {
         ...current,
-        ...liveSettings,
+        ...cleanLive,
         deletedGalleryIds: mergedDeletedGallery,
-        galleryInitialized: Boolean(liveSettings.galleryInitialized || current.galleryInitialized),
+        galleryInitialized: Boolean(cleanLive.galleryInitialized || current.galleryInitialized),
         deletedStaffIds: mergedDeletedStaff,
         deletedStudentIds: mergedDeletedStudents,
       };
@@ -255,7 +239,7 @@ export default function App() {
     // Sync settings (and deletion tombstones) first, then sync all stores
     const settingsReady = syncServerWebsiteSettings()
       .then((s) => {
-        if (s) syncTombstonesFromSettings(s);
+        if (s) applyLiveWebsiteSettings(s);
         return s;
       })
       .catch(() => null);
@@ -263,8 +247,12 @@ export default function App() {
     syncAllStoresWithServerDatabase().catch((e) => console.warn('Global store sync notice:', e));
     syncAllSmsDomains().catch((e) => console.warn('SMS domain sync notice:', e));
 
-    // 1. School Logo Fallback Fetch & Real-time Subscription
-    fetchSchoolLogoFromFirebase()
+    // 1. School Logo Fallback Fetch (only if no synced logo/settings) & Real-time Subscription
+    settingsReady
+      .then((syncedSettings) => {
+        if (syncedSettings?.updatedAt || getWebsiteSettings().schoolLogoUrl) return null;
+        return fetchSchoolLogoFromFirebase();
+      })
       .then((firebaseLogoUrl) => {
         if (firebaseLogoUrl) {
           const settings = getWebsiteSettings();
@@ -279,7 +267,7 @@ export default function App() {
     const unsubLogo = subscribeToSchoolLogo((newLogoUrl) => {
       if (newLogoUrl) {
         const settings = getWebsiteSettings();
-        if (settings.schoolLogoUrl !== newLogoUrl) {
+        if (!settings.schoolLogoUrl && settings.schoolLogoUrl !== newLogoUrl) {
           const updated = { ...settings, schoolLogoUrl: newLogoUrl };
           applyLocalMirror('mugina_website_settings_v3', 'mugina-settings-updated', updated);
         }
@@ -297,42 +285,17 @@ export default function App() {
       return item;
     };
 
-    // 2. Gallery Sync (tombstone- & timestamp-aware between Supabase & Firebase) + Realtime
+    // 2. Gallery Sync (tombstone- & timestamp-aware across Supabase, Firebase & Express) + Realtime
     settingsReady
-      .then(() =>
-        Promise.all([
-          syncServerGalleryItems(),
-          fetchSchoolGalleryFromFirebase(),
-          fetchSchoolGalleryFromSupabase(),
-        ])
-      )
-      .then(([serverItems, firestoreItems, supabaseItems]) => {
-        const hasFb = Array.isArray(firestoreItems) && firestoreItems.length > 0;
-        const hasSb = Array.isArray(supabaseItems) && supabaseItems.length > 0;
-        let authoritative: any[] = [];
-        if (hasSb && hasFb) {
-          const sbMs = getMaxTimestampMs(supabaseItems);
-          const fbMs = getMaxTimestampMs(firestoreItems);
-          authoritative = fbMs > sbMs + 2500 ? firestoreItems : supabaseItems;
-        } else if (hasSb) {
-          authoritative = supabaseItems;
-        } else if (hasFb) {
-          authoritative = firestoreItems;
-        } else if (Array.isArray(serverItems) && serverItems.length > 0) {
-          authoritative = serverItems;
-        }
-        const cleaned = filterGalleryAgainstTombstones(authoritative).map(sanitizeItem);
-        if (cleaned.length > 0 || isGalleryInitialized()) {
-          saveGalleryItems(cleaned);
-        }
-      })
+      .then(() => syncServerGalleryItems())
       .catch((e) => console.warn('Gallery sync notice:', e));
 
     let fbGallerySeen = false;
     const unsubGallery = subscribeToSchoolGallery((liveItems) => {
       if (Array.isArray(liveItems) && (liveItems.length > 0 || fbGallerySeen || isGalleryInitialized())) {
         if (liveItems.length > 0) fbGallerySeen = true;
-        saveGalleryItems(filterGalleryAgainstTombstones(liveItems).map(sanitizeItem));
+        const cleaned = filterGalleryAgainstTombstones(liveItems).map(sanitizeItem);
+        applyLocalMirror('mugina_gallery_items_v3', 'mugina-gallery-updated', cleaned);
       }
     });
 
@@ -340,7 +303,7 @@ export default function App() {
       if (Array.isArray(liveItems)) {
         const cleaned = filterGalleryAgainstTombstones(liveItems).map(sanitizeItem);
         if (cleaned.length > 0 || isGalleryInitialized()) {
-          saveGalleryItems(cleaned);
+          applyLocalMirror('mugina_gallery_items_v3', 'mugina-gallery-updated', cleaned);
         }
       }
     });
@@ -405,21 +368,7 @@ export default function App() {
     };
     window.addEventListener('mugina-announcements-updated', handleLocalAnnUpdate);
 
-    // 5. Website Settings Sync & Realtime (timestamp-guarded)
-    Promise.all([fetchWebsiteSettingsFromFirebase(), fetchWebsiteSettingsFromSupabase()])
-      .then(([fbSettings, sbSettings]) => {
-        const candidates = [fbSettings, sbSettings].filter(Boolean) as any[];
-        if (candidates.length > 0) {
-          candidates.sort((a, b) => {
-            const aMs = a?.updatedAt ? Date.parse(a.updatedAt) : 0;
-            const bMs = b?.updatedAt ? Date.parse(b.updatedAt) : 0;
-            return (Number.isNaN(bMs) ? 0 : bMs) - (Number.isNaN(aMs) ? 0 : aMs);
-          });
-          applyLiveWebsiteSettings(candidates[0]);
-        }
-      })
-      .catch((e) => console.warn('Website settings initial fetch notice:', e));
-
+    // 5. Website Settings Realtime Subscriptions (initial fetch handled by settingsReady above)
     const unsubSettings = subscribeToWebsiteSettings(applyLiveWebsiteSettings);
     const unsubSupabaseSettings = subscribeToSupabaseWebsiteSettings(applyLiveWebsiteSettings);
 

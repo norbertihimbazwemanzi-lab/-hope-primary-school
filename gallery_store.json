@@ -1,0 +1,22 @@
+[
+  {
+    "id": "fac-campus-showcase",
+    "title": "Hope Primary Campus Grounds & Active Courtyard",
+    "category": "outdoor",
+    "description": "Scenic view of Mugina Hope campus in Kamonyi District with Rwandan flag, brick classrooms, and students walking to class.",
+    "imageSrc": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRiEeNXRWzK5DchjG42J4C9V1tvGJAfdxHcKhs4_qSrmw&s=10",
+    "caption": "Campus academic wings nestled on the picturesque hills of Mugina Sector.",
+    "altText": "Hope Primary Campus Grounds & Active Courtyard",
+    "updatedAt": "2026-11-11T16:44:01.519+00:00"
+  },
+  {
+    "id": "f5",
+    "title": "Secure School Perimeter & Guarded Gate",
+    "category": "outdoor",
+    "description": "Located right next to the Mugina Police Station with 24/7 security personnel, perimeter wall, CCTV entrance monitor, and visitor verification logbook.",
+    "imageSrc": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRwlVYd3U4rXhdq2AlwGwN06fule-8odraTX5fetgmrpw&s=10",
+    "caption": "Uncompromising child safety with immediate proximity to the local Mugina Police Post.",
+    "altText": "Secure School Perimeter & Guarded Gate",
+    "updatedAt": "2026-11-11T16:40:51.932+00:00"
+  }
+]

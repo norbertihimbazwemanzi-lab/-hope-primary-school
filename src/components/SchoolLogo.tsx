@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getWebsiteSettings, saveWebsiteSettings } from '../services/adminStore';
-import { fetchSchoolLogoFromFirebase } from '../services/firebaseStore';
+import { getWebsiteSettings } from '../services/adminStore';
 
 interface SchoolLogoProps {
   className?: string;
@@ -34,31 +33,13 @@ export const SchoolLogo: React.FC<SchoolLogoProps> = ({
     };
     updateLogo();
 
-    // Fetch from Firebase Firestore to ensure all devices display the same uploaded logo
-    let isMounted = true;
-    fetchSchoolLogoFromFirebase().then((firebaseLogoUrl) => {
-      if (isMounted && firebaseLogoUrl) {
-        setLogoUrl(firebaseLogoUrl);
-        setImgError(false);
-        const current = getWebsiteSettings();
-        if (current.schoolLogoUrl !== firebaseLogoUrl) {
-          localStorage.setItem(
-            'mugina_website_settings_v3',
-            JSON.stringify({ ...current, schoolLogoUrl: firebaseLogoUrl })
-          );
-        }
-      }
-    }).catch((e) => console.warn('Logo firebase sync notice:', e));
-
     const handler = (e: any) => {
-      if (e.detail?.schoolLogoUrl !== undefined) {
-        setLogoUrl(e.detail.schoolLogoUrl || '');
-        setImgError(false);
-      }
+      const nextUrl = e?.detail?.schoolLogoUrl ?? getWebsiteSettings().schoolLogoUrl ?? '';
+      setLogoUrl(nextUrl);
+      setImgError(false);
     };
     window.addEventListener('mugina-settings-updated', handler);
     return () => {
-      isMounted = false;
       window.removeEventListener('mugina-settings-updated', handler);
     };
   }, [customLogoUrl]);
@@ -80,6 +61,7 @@ export const SchoolLogo: React.FC<SchoolLogoProps> = ({
           <img
             src={logoUrl}
             alt="Mugina Hope Academy Official Logo"
+            referrerPolicy="no-referrer"
             onError={() => setImgError(true)}
             className="w-full h-full object-contain rounded-xl drop-shadow-xs"
           />

@@ -2433,7 +2433,7 @@ export const getWebsiteSettings = (): WebsiteSettings => {
   return defaultWebsiteSettings;
 };
 
-export const saveWebsiteSettings = (settings: WebsiteSettings) => {
+export const saveWebsiteSettings = (settings: WebsiteSettings): Promise<boolean> => {
   const tracker = getDeletedTracker();
   const mergedDeletedGallery = Array.from(
     new Set([...tracker.gallery, ...(settings.deletedGalleryIds || [])].filter(Boolean))
@@ -2455,48 +2455,51 @@ export const saveWebsiteSettings = (settings: WebsiteSettings) => {
   };
 
   syncTombstonesFromSettings(stampedSettings);
-  localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(stampedSettings));
-
-  // Sync official school logo to Firebase Firestore for cross-device visibility
-  if (stampedSettings.schoolLogoUrl !== undefined) {
-    saveSchoolLogoToFirebase(stampedSettings.schoolLogoUrl || '').catch((e) =>
-      console.warn('Firebase school logo sync error:', e)
-    );
-  }
-
-  // Sync complete settings to Firebase Firestore
-  saveWebsiteSettingsToFirebase(stampedSettings).catch((e) =>
-    console.warn('Firebase website settings sync notice:', e)
-  );
-
-  // Sync complete settings to Supabase
-  saveWebsiteSettingsToSupabase(stampedSettings).catch((e) =>
-    console.warn('Supabase website settings sync notice:', e)
-  );
-
   try {
-    fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(stampedSettings),
-    }).catch((err) => console.warn('Server settings sync notice:', err));
-  } catch (err) {
-    console.warn('Settings sync error:', err);
+    localStorage.setItem(STORAGE_KEYS.WEBSITE_SETTINGS, JSON.stringify(stampedSettings));
+  } catch (e) {
+    console.warn('Local settings storage notice:', e);
   }
   dispatchStoreEvent('mugina-settings-updated', stampedSettings);
+
+  // Fire-and-forget Firebase mirror (never blocks UI/cloud save)
+  if (stampedSettings.schoolLogoUrl !== undefined) {
+    saveSchoolLogoToFirebase(stampedSettings.schoolLogoUrl || '').catch(() => {});
+  }
+  saveWebsiteSettingsToFirebase(stampedSettings).catch(() => {});
+
+  // Primary shared cloud persistence: Supabase + Express server store
+  const supabaseWrite = saveWebsiteSettingsToSupabase(stampedSettings).catch((e) => {
+    console.warn('Supabase website settings sync notice:', e);
+    return false;
+  });
+
+  const serverWrite = fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(stampedSettings),
+  })
+    .then((res) => res.ok)
+    .catch((err) => {
+      console.warn('Server settings sync notice:', err);
+      return false;
+    });
+
+  return Promise.all([supabaseWrite, serverWrite]).then(([sbOk, srvOk]) => Boolean(sbOk || srvOk));
 };
 
 export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | null> => {
   try {
     const [sbSettings, fbSettings, serverSettingsData] = await Promise.all([
-      fetchWebsiteSettingsFromSupabase(),
-      fetchWebsiteSettingsFromFirebase(),
+      fetchWebsiteSettingsFromSupabase().catch(() => null),
+      withTimeout(fetchWebsiteSettingsFromFirebase(), 1200, null),
       fetchServerJsonSafely('/api/settings'),
     ]);
     const serverSettings = serverSettingsData?.settings || null;
 
+    const rawLocal = localStorage.getItem(STORAGE_KEYS.WEBSITE_SETTINGS);
     const localSettings = getWebsiteSettings();
-    const localMs = localSettings?.updatedAt ? Date.parse(localSettings.updatedAt) : 0;
+    const localMs = rawLocal && localSettings?.updatedAt ? Date.parse(localSettings.updatedAt) : 0;
 
     const candidates = [sbSettings, fbSettings, serverSettings].filter(Boolean);
     if (candidates.length > 0) {
@@ -2509,7 +2512,7 @@ export const syncServerWebsiteSettings = async (): Promise<WebsiteSettings | nul
       const remoteTop = candidates[0] as any;
       const remoteMs = remoteTop?.updatedAt ? Date.parse(remoteTop.updatedAt) : 0;
 
-      // Never overwrite newer local settings (e.g. just-deleted headmaster photo) with stale/unstamped remote settings
+      // Never overwrite newer local settings (e.g. just-edited portrait/logo) with older remote settings
       if (!Number.isNaN(localMs) && localMs > 0 && (Number.isNaN(remoteMs) || remoteMs <= 0 || remoteMs < localMs)) {
         return localSettings;
       }
@@ -2573,7 +2576,11 @@ export const getGalleryItems = (): FacilityItem[] => {
 export const saveGalleryItems = (items: FacilityItem[], syncRemote = false) => {
   const filtered = filterGalleryAgainstTombstones(items).map(normalizeGalleryItem);
   updateDeletedTracker((cur) => ({ ...cur, galleryInitialized: true }));
-  localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(filtered));
+  try {
+    localStorage.setItem(STORAGE_KEYS.GALLERY, JSON.stringify(filtered));
+  } catch (e) {
+    console.warn('Local gallery storage notice:', e);
+  }
   if (syncRemote) {
     filtered.forEach((item) => {
       saveSchoolGalleryItemToFirebase(item).catch(() => {});
@@ -2587,8 +2594,8 @@ export const saveGalleryItems = (items: FacilityItem[], syncRemote = false) => {
 export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
   try {
     const [sbItems, fbItems, serverGalleryData] = await Promise.all([
-      fetchSchoolGalleryFromSupabase(),
-      fetchSchoolGalleryFromFirebase(),
+      fetchSchoolGalleryFromSupabase().catch(() => null),
+      withTimeout(fetchSchoolGalleryFromFirebase(), 1200, []),
       fetchServerJsonSafely('/api/gallery'),
     ]);
     const serverItems = Array.isArray(serverGalleryData?.items) ? serverGalleryData.items : [];
@@ -2611,11 +2618,33 @@ export const syncServerGalleryItems = async (): Promise<FacilityItem[]> => {
   return getGalleryItems();
 };
 
+const syncGalleryItemToCloud = async (item: FacilityItem): Promise<boolean> => {
+  saveSchoolGalleryItemToFirebase(item).catch(() => {});
+  const sbPromise = saveSchoolGalleryItemToSupabase(item).catch((e) => {
+    console.warn('Supabase gallery save notice:', e);
+    return false;
+  });
+  const srvPromise = fetch('/api/gallery', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(item),
+  })
+    .then((r) => r.ok)
+    .catch((e) => {
+      console.warn('Gallery sync error:', e);
+      return false;
+    });
+  const [sbOk, srvOk] = await Promise.all([sbPromise, srvPromise]);
+  return Boolean(sbOk || srvOk);
+};
+
 export const addGalleryItem = (item: Omit<FacilityItem, 'id'>): FacilityItem => {
+  const nowIso = new Date().toISOString();
   const current = getGalleryItems();
-  const newItem: FacilityItem = {
+  const newItem: FacilityItem & { updatedAt?: string } = {
     ...item,
     id: `fac-${Date.now()}`,
+    updatedAt: nowIso,
   };
   updateDeletedTracker((cur) => ({
     ...cur,
@@ -2629,40 +2658,63 @@ export const addGalleryItem = (item: Omit<FacilityItem, 'id'>): FacilityItem => 
 
   const updated = [newItem, ...current];
   saveGalleryItems(updated);
-
-  // Sync to Firebase Firestore so all users and devices immediately see this image
-  saveSchoolGalleryItemToFirebase(newItem).catch((e) => console.warn('Firebase gallery save error:', e));
-
-  // Sync to Supabase PostgreSQL database
-  saveSchoolGalleryItemToSupabase(newItem).catch((e) => console.warn('Supabase gallery save notice:', e));
-
-  // Sync to server so visible on all devices
-  fetch('/api/gallery', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newItem),
-  }).catch((e) => console.warn('Gallery sync error:', e));
+  void syncGalleryItemToCloud(newItem);
 
   return newItem;
 };
 
-export const updateGalleryItem = (id: string, updates: Partial<FacilityItem>): FacilityItem[] => {
+export const addGalleryItemAsync = async (
+  item: Omit<FacilityItem, 'id'>
+): Promise<{ item: FacilityItem; synced: boolean }> => {
+  const nowIso = new Date().toISOString();
   const current = getGalleryItems();
-  const updated = current.map((i) => (i.id === id ? { ...i, ...updates } : i));
+  const newItem: FacilityItem & { updatedAt?: string } = {
+    ...item,
+    id: `fac-${Date.now()}`,
+    updatedAt: nowIso,
+  };
+  updateDeletedTracker((cur) => ({
+    ...cur,
+    galleryInitialized: true,
+    gallery: cur.gallery.filter((gId) => gId !== newItem.id),
+  }));
+  const currentSettings = getWebsiteSettings();
+  if (!currentSettings.galleryInitialized) {
+    await saveWebsiteSettings({ ...currentSettings, galleryInitialized: true });
+  }
+
+  const updated = [newItem, ...current];
+  saveGalleryItems(updated);
+  const synced = await syncGalleryItemToCloud(newItem);
+  return { item: newItem, synced };
+};
+
+export const updateGalleryItem = (id: string, updates: Partial<FacilityItem>): FacilityItem[] => {
+  const nowIso = new Date().toISOString();
+  const current = getGalleryItems();
+  const updated = current.map((i) => (i.id === id ? { ...i, ...updates, updatedAt: nowIso } : i));
   saveGalleryItems(updated);
 
   const target = updated.find((i) => i.id === id);
   if (target) {
-    saveSchoolGalleryItemToFirebase(target).catch((e) => console.warn('Firebase gallery update error:', e));
-    saveSchoolGalleryItemToSupabase(target).catch((e) => console.warn('Supabase gallery update notice:', e));
-    fetch('/api/gallery', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(target),
-    }).catch((e) => console.warn('Gallery sync error:', e));
+    void syncGalleryItemToCloud(target);
   }
 
   return updated;
+};
+
+export const updateGalleryItemAsync = async (
+  id: string,
+  updates: Partial<FacilityItem>
+): Promise<{ items: FacilityItem[]; synced: boolean }> => {
+  const nowIso = new Date().toISOString();
+  const current = getGalleryItems();
+  const updated = current.map((i) => (i.id === id ? { ...i, ...updates, updatedAt: nowIso } : i));
+  saveGalleryItems(updated);
+
+  const target = updated.find((i) => i.id === id);
+  const synced = target ? await syncGalleryItemToCloud(target) : true;
+  return { items: updated, synced };
 };
 
 export const deleteGalleryItem = (id: string): FacilityItem[] => {
@@ -2679,7 +2731,7 @@ export const deleteGalleryItem = (id: string): FacilityItem[] => {
 
   // Persist deletion tombstone & initialized flag to cross-browser website settings so ALL browsers drop removed seed/cloud images permanently
   const currentSettings = getWebsiteSettings();
-  saveWebsiteSettings({
+  void saveWebsiteSettings({
     ...currentSettings,
     galleryInitialized: true,
     deletedGalleryIds: Array.from(new Set([...(currentSettings.deletedGalleryIds || []), ...tracker.gallery, id])),

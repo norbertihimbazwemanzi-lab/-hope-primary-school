@@ -866,6 +866,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
             <img
               src={effectiveStudent.photoUrl}
               alt={effectiveStudent.fullName}
+              referrerPolicy="no-referrer"
               className="w-9 h-9 rounded-lg object-cover border border-amber-400 shrink-0"
             />
           ) : (
@@ -903,6 +904,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
               <img
                 src={effectiveStudent.photoUrl}
                 alt={effectiveStudent.fullName}
+                referrerPolicy="no-referrer"
                 className="w-11 h-11 rounded-lg object-cover border-2 border-amber-400 shrink-0"
               />
             ) : (
@@ -968,6 +970,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                   <img
                     src={effectiveStudent.photoUrl}
                     alt={effectiveStudent.fullName}
+                    referrerPolicy="no-referrer"
                     className="w-16 h-16 rounded-xl object-cover border-2 border-amber-400 shrink-0"
                   />
                 ) : (
@@ -1259,6 +1262,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({ sessionUser, stude
                     <img
                       src={effectiveStudent.photoUrl}
                       alt={effectiveStudent.fullName}
+                      referrerPolicy="no-referrer"
                       className="w-16 h-16 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
                     />
                   ) : (

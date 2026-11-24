@@ -879,8 +879,8 @@ export const subscribeToSupabaseWebsiteSettings = (callback: (settings: any) => 
     const channel = client
       .channel('public:website_settings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'website_settings' }, (payload) => {
-        if (payload.new && (payload.new as any).data) {
-          const row = payload.new as any;
+        const row = payload.new as any;
+        if (row && row.id === 'general' && row.data) {
           callback({ ...row.data, updatedAt: row.data.updatedAt || row.updated_at });
         }
       })
@@ -1100,9 +1100,12 @@ export const saveSchoolGalleryItemToSupabase = async (item: any): Promise<boolea
       image_src: item.imageSrc || item.image_src,
       caption: item.caption || item.description || item.title,
       alt_text: item.altText || item.alt_text || item.title,
-      updated_at: new Date().toISOString(),
+      updated_at: item.updatedAt || new Date().toISOString(),
     };
     const { error } = await client.from('school_gallery').upsert(payload, { onConflict: 'id' });
+    if (error && !isMissingTableError(error)) {
+      console.warn('[Supabase Store] Gallery item write notice:', error.message);
+    }
     return !error;
   } catch (err) {
     console.warn('[Supabase Store] Gallery item write notice:', err);
@@ -1125,9 +1128,12 @@ export const saveGalleryBatchToSupabase = async (
       image_src: g.imageSrc || g.image_src,
       caption: g.caption || g.description || g.title,
       alt_text: g.altText || g.alt_text || g.title,
-      updated_at: new Date().toISOString(),
+      updated_at: g.updatedAt || new Date().toISOString(),
     }));
     const { error } = await client.from('school_gallery').upsert(rows, { onConflict: 'id' });
+    if (error && !isMissingTableError(error)) {
+      console.warn('[Supabase Store] Gallery batch write notice:', error.message);
+    }
     return !error;
   } catch {
     return false;

@@ -110,7 +110,10 @@ export const HomePage: React.FC<HomePageProps> = ({
   }, []);
 
   useEffect(() => {
-    setSessionUser(getCurrentSessionUser());
+    const syncSession = () => setSessionUser(getCurrentSessionUser());
+    syncSession();
+    window.addEventListener('mugina-session-updated', syncSession);
+    return () => window.removeEventListener('mugina-session-updated', syncSession);
   }, []);
 
   const isAdmin = isAdminOrExecutive(sessionUser?.role);
@@ -169,7 +172,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     );
   };
 
-  const handleSaveLeadership = (e: React.FormEvent) => {
+  const handleSaveLeadership = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanUrl = managerPhotoUrl.trim();
     const latest = getWebsiteSettings();
@@ -188,14 +191,14 @@ export const HomePage: React.FC<HomePageProps> = ({
       adminCommitments: commitments,
       ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
     };
-    saveWebsiteSettings(updated);
     setSettings(updated);
     setManagerImgError(false);
-    setSaveToast('Leadership message and School Manager image saved permanently!');
+    await saveWebsiteSettings(updated);
+    setSaveToast('Leadership message and School Manager image published to all visitor devices!');
     setTimeout(() => {
       setSaveToast(null);
       setIsEditingLeadershipModal(false);
-    }, 1200);
+    }, 1000);
   };
 
   return (
@@ -236,6 +239,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                         settings.schoolManagerAlt ||
                         `${settings.schoolManagerName || 'School Manager'} - Mugina Hope Academy`
                       }
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover object-top"
                       onError={() => setManagerImgError(true)}
                     />
@@ -409,7 +413,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                   {managerPhotoUrl && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         setManagerPhotoUrl('');
                         const latest = getWebsiteSettings();
                         const updatedShowcase = syncManagerShowcaseImage(latest, '');
@@ -418,9 +422,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                           schoolManagerPhotoUrl: '',
                           ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
                         };
-                        saveWebsiteSettings(clearedSettings);
                         setSettings(clearedSettings);
                         setManagerImgError(false);
+                        await saveWebsiteSettings(clearedSettings);
                         setSaveToast('School Manager photo removed permanently across all browsers.');
                         setTimeout(() => setSaveToast(null), 2500);
                       }}
@@ -438,6 +442,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                       <img
                         src={managerPhotoUrl}
                         alt="School Manager Preview"
+                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover object-top"
                       />
                     ) : (

@@ -6,6 +6,7 @@ import {
   WebsiteSettings,
 } from '../services/adminStore';
 import { uploadSchoolAsset } from '../services/storageService';
+import { isAdminOrExecutive } from '../services/rbac';
 import { PageId } from '../types';
 import {
   Edit3,
@@ -96,10 +97,13 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
   }, []);
 
   useEffect(() => {
-    setSessionUser(getCurrentSessionUser());
+    const syncSession = () => setSessionUser(getCurrentSessionUser());
+    syncSession();
+    window.addEventListener('mugina-session-updated', syncSession);
+    return () => window.removeEventListener('mugina-session-updated', syncSession);
   }, []);
 
-  const isAdmin = sessionUser?.role === 'Admin' || sessionUser?.role === 'DOS';
+  const isAdmin = isAdminOrExecutive(sessionUser?.role) || sessionUser?.role === 'DOS';
 
   const slides: HeroSlide[] = cleanSlides(settings.heroSlides);
 
@@ -159,22 +163,28 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
     }
   };
 
-  const handleSaveHero = (e: React.FormEvent) => {
+  const handleSaveHero = async (e: React.FormEvent) => {
     e.preventDefault();
+    const latest = getWebsiteSettings();
     const updated: WebsiteSettings = {
-      ...settings,
+      ...latest,
       heroHeadline: editHeadline,
       heroTagline: editTagline,
       heroIntervalSeconds: Number(editInterval) || 5,
       heroSlides: editSlides.filter((s) => s.imageUrl && s.imageUrl.trim().length > 0),
     };
-    saveWebsiteSettings(updated);
     setSettings(updated);
-    setSaveSuccessMsg('Hero section updated and saved permanently to database!');
-    setTimeout(() => {
-      setSaveSuccessMsg(null);
-      setIsEditModalOpen(false);
-    }, 1200);
+    setIsUploading(true);
+    try {
+      await saveWebsiteSettings(updated);
+      setSaveSuccessMsg('Hero section updated and published to all visitor devices!');
+      setTimeout(() => {
+        setSaveSuccessMsg(null);
+        setIsEditModalOpen(false);
+      }, 1000);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -221,6 +231,7 @@ export const HeroSlider: React.FC<HeroSliderProps> = ({
               <img
                 src={slide.imageUrl}
                 alt={slide.altText || slide.title || 'Mugina Hope Primary and Nursery School Campus'}
+                referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   if (!target.dataset.triedFallback) {

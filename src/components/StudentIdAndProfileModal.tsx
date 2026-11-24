@@ -98,6 +98,7 @@ export const StudentIdAndProfileModal: React.FC<StudentIdAndProfileModalProps> =
               <img
                 src={student.photoUrl}
                 alt={student.fullName}
+                referrerPolicy="no-referrer"
                 className="w-11 h-11 rounded-lg object-cover border border-amber-400"
               />
             ) : (
@@ -319,7 +320,7 @@ export const StudentIdAndProfileModal: React.FC<StudentIdAndProfileModalProps> =
                   <div className="p-4 flex gap-4 items-center text-slate-900">
                     <div className="w-20 h-24 rounded-lg border border-slate-300 bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
                       {student.photoUrl ? (
-                        <img src={student.photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+                        <img src={student.photoUrl} alt={student.fullName} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-xl font-bold text-blue-900">{student.fullName.slice(0, 2).toUpperCase()}</span>
                       )}

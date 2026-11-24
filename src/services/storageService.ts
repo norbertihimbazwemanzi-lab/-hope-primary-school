@@ -16,18 +16,67 @@ export interface UploadResult {
   fileType?: string;
 }
 
+const STORAGE_TIMEOUT_MS = 1800;
+let firebaseStorageUnavailable = false;
+let supabaseBucketUnavailable = false;
+
+const withStorageTimeout = <T,>(promise: PromiseLike<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error('Storage upload timeout'));
+      }
+    }, ms);
+    Promise.resolve(promise).then(
+      (val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      },
+      (err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      }
+    );
+  });
+
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 /**
- * Optimizes and compresses an image in the browser (max 1200px, 82% quality).
- * Produces a lightweight, highly compatible JPEG data URI (~60KB-120KB)
- * that safely fits within cloud database records without degrading visual quality.
+ * Optimizes and compresses an image in the browser (max 1200px, ~78-82% quality).
+ * Produces a lightweight, highly compatible data URI (~40KB-140KB)
+ * that safely fits within cloud database records (Supabase + Firestore + Express)
+ * and renders identically across all browsers and devices.
  */
 export const compressImageForCloud = async (
   fileOrBase64: File | string,
   maxDimension = 1200,
-  quality = 0.82
+  quality = 0.8,
+  preserveTransparency = false
 ): Promise<string> => {
   if (typeof window === 'undefined') {
     return typeof fileOrBase64 === 'string' ? fileOrBase64 : '';
+  }
+
+  // Keep compact SVGs intact as crisp vector data URIs
+  if (fileOrBase64 instanceof File && fileOrBase64.type === 'image/svg+xml' && fileOrBase64.size <= 160 * 1024) {
+    return readFileAsDataUrl(fileOrBase64);
+  }
+  if (typeof fileOrBase64 === 'string' && fileOrBase64.startsWith('data:image/svg+xml') && fileOrBase64.length <= 220000) {
+    return fileOrBase64;
   }
 
   return new Promise<string>((resolve, reject) => {
@@ -35,8 +84,8 @@ export const compressImageForCloud = async (
     img.crossOrigin = 'anonymous';
 
     const handleLoad = () => {
-      let width = img.width;
-      let height = img.height;
+      let width = img.naturalWidth || img.width || maxDimension;
+      let height = img.naturalHeight || img.height || maxDimension;
 
       if (width > maxDimension || height > maxDimension) {
         if (width > height) {
@@ -49,50 +98,62 @@ export const compressImageForCloud = async (
       }
 
       const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = Math.max(1, width);
+      canvas.height = Math.max(1, height);
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         resolve(img.src);
         return;
       }
 
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
+      if (preserveTransparency) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const pngUri = canvas.toDataURL('image/png');
+        if (pngUri.length <= 180000) {
+          resolve(pngUri);
+          return;
+        }
+      }
 
-      const mime = 'image/jpeg';
-      const compressedUri = canvas.toDataURL(mime, quality);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      let currentQuality = quality;
+      let compressedUri = canvas.toDataURL('image/jpeg', currentQuality);
+      while (compressedUri.length > 220000 && currentQuality > 0.45) {
+        currentQuality = Number((currentQuality - 0.1).toFixed(2));
+        compressedUri = canvas.toDataURL('image/jpeg', currentQuality);
+      }
       resolve(compressedUri);
     };
+
+    img.onload = handleLoad;
 
     img.onerror = () => {
       if (typeof fileOrBase64 === 'string') {
         resolve(fileOrBase64);
       } else {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(fileOrBase64);
+        readFileAsDataUrl(fileOrBase64).then(resolve).catch(reject);
       }
     };
 
     if (typeof fileOrBase64 === 'string') {
       img.src = fileOrBase64;
     } else {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        img.src = reader.result as string;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(fileOrBase64);
+      readFileAsDataUrl(fileOrBase64)
+        .then((dataUrl) => {
+          img.src = dataUrl;
+        })
+        .catch(reject);
     }
   });
 };
 
 /**
- * Uploads an image file to cloud storage or compresses to persistent cloud data URI.
- * Guaranteed to be visible across 100% of devices, browsers, and hosted domains (like Vercel).
+ * Uploads an image file to cloud storage or compresses to a portable cloud data URI.
+ * Guaranteed to resolve fast without hanging and remain visible across all devices, browsers, and hosts.
  */
 export const uploadSchoolAsset = async (
   fileOrBase64: File | string,
@@ -101,69 +162,101 @@ export const uploadSchoolAsset = async (
 ): Promise<UploadResult> => {
   const cleanName = fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
   const timestamp = Date.now();
+  const isBranding = category === 'branding';
+  const isPngOrWebp =
+    fileOrBase64 instanceof File
+      ? /png|webp|svg/i.test(fileOrBase64.type)
+      : /^data:image\/(png|webp|svg)/i.test(fileOrBase64);
   const storagePath = `school-assets/${category}/${timestamp}_${cleanName}.jpg`;
 
-  // Always compress image first to save bandwidth and guarantee instant cross-device loading
+  // Always compress image first so it is lightweight and cloud-database portable
   let compressedDataUrl = '';
   try {
-    compressedDataUrl = await compressImageForCloud(fileOrBase64, 1200, 0.82);
+    compressedDataUrl = await compressImageForCloud(
+      fileOrBase64,
+      isBranding ? 900 : 1200,
+      0.8,
+      isBranding && isPngOrWebp
+    );
   } catch (compErr) {
     console.warn('Compression notice, proceeding with raw data:', compErr);
     if (typeof fileOrBase64 === 'string') {
       compressedDataUrl = fileOrBase64;
+    } else {
+      compressedDataUrl = await readFileAsDataUrl(fileOrBase64);
     }
   }
 
-  // 1. Try Firebase Storage
-  try {
-    const storageRef = ref(storage, storagePath);
-    if (compressedDataUrl) {
-      await uploadString(storageRef, compressedDataUrl, 'data_url');
-      const downloadURL = await getDownloadURL(storageRef);
-      return { url: downloadURL, source: 'firebase-storage' };
-    } else if (fileOrBase64 instanceof File) {
-      const uploadTask = await uploadBytesResumable(storageRef, fileOrBase64);
-      const downloadURL = await getDownloadURL(uploadTask.ref);
-      return { url: downloadURL, source: 'firebase-storage' };
+  // 1. Try Firebase Storage (strict timeout so unprovisioned buckets never stall UI)
+  if (!firebaseStorageUnavailable) {
+    try {
+      const storageRef = ref(storage, storagePath);
+      if (compressedDataUrl) {
+        await withStorageTimeout(uploadString(storageRef, compressedDataUrl, 'data_url'), STORAGE_TIMEOUT_MS);
+        const downloadURL = await withStorageTimeout(getDownloadURL(storageRef), STORAGE_TIMEOUT_MS);
+        return { url: downloadURL, source: 'firebase-storage' };
+      } else if (fileOrBase64 instanceof File) {
+        const task = uploadBytesResumable(storageRef, fileOrBase64);
+        const uploadSnap = await withStorageTimeout(
+          new Promise<typeof task.snapshot>((res, rej) => task.then(res, rej)),
+          STORAGE_TIMEOUT_MS
+        );
+        const downloadURL = await withStorageTimeout(getDownloadURL(uploadSnap.ref), STORAGE_TIMEOUT_MS);
+        return { url: downloadURL, source: 'firebase-storage' };
+      }
+    } catch (firebaseStorageError: any) {
+      firebaseStorageUnavailable = true;
+      console.warn(
+        'Firebase Storage upload notice (proceeding to cloud data storage):',
+        firebaseStorageError?.message || firebaseStorageError
+      );
     }
-  } catch (firebaseStorageError: any) {
-    console.warn('Firebase Storage upload notice (proceeding to cloud data storage):', firebaseStorageError?.message || firebaseStorageError);
   }
 
-  // 2. Try Supabase Storage (if bucket exists)
-  try {
-    const supabase = getSupabaseClient();
-    if (supabase && compressedDataUrl) {
-      const base64Content = compressedDataUrl.split(',')[1];
-      if (base64Content) {
-        const byteCharacters = atob(base64Content);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/jpeg' });
+  // 2. Try Supabase Storage (if 'school-media' bucket exists)
+  if (!supabaseBucketUnavailable) {
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && compressedDataUrl) {
+        const parts = compressedDataUrl.split(',');
+        const mimeMatch = parts[0]?.match(/data:([^;]+);base64/i);
+        const mimeType = mimeMatch?.[1] || 'image/jpeg';
+        const ext = mimeType.includes('png') ? 'png' : mimeType.includes('svg') ? 'svg' : 'jpg';
+        const base64Content = parts[1];
+        if (base64Content) {
+          const byteCharacters = atob(base64Content);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: mimeType });
 
-        const sbPath = `public/${timestamp}_${cleanName}.jpg`;
-        const { data: uploadData, error: sbErr } = await supabase.storage
-          .from('school-media')
-          .upload(sbPath, blob, { contentType: 'image/jpeg', upsert: true });
+          const sbPath = `public/${timestamp}_${cleanName}.${ext}`;
+          const { data: uploadData, error: sbErr } = await withStorageTimeout(
+            supabase.storage
+              .from('school-media')
+              .upload(sbPath, blob, { contentType: mimeType, upsert: true }),
+            STORAGE_TIMEOUT_MS
+          );
 
-        if (!sbErr && uploadData) {
-          const { data: publicUrlData } = supabase.storage.from('school-media').getPublicUrl(sbPath);
-          if (publicUrlData?.publicUrl) {
-            return { url: publicUrlData.publicUrl, source: 'supabase-storage' };
+          if (!sbErr && uploadData) {
+            const { data: publicUrlData } = supabase.storage.from('school-media').getPublicUrl(sbPath);
+            if (publicUrlData?.publicUrl) {
+              return { url: publicUrlData.publicUrl, source: 'supabase-storage' };
+            }
+          } else {
+            supabaseBucketUnavailable = true;
           }
         }
       }
+    } catch {
+      supabaseBucketUnavailable = true;
     }
-  } catch (sbStorageErr) {
-    // Proceed to persistent cloud data URI
   }
 
-  // 3. Fallback: Return the optimized, highly-compressed Cloud Data URI (~70KB).
-  // This is 100% immune to missing server files, works identically on Vercel, Netlify,
-  // mobile browsers, and stores directly into Firestore and Supabase records so every visitor sees it!
+  // 3. Fallback: Return the optimized, highly-compressed Cloud Data URI.
+  // Stored directly inside Supabase and Express records so every visitor on every device/browser sees it!
   if (compressedDataUrl) {
     return {
       url: compressedDataUrl,
@@ -179,8 +272,7 @@ export const uploadSchoolAsset = async (
 };
 
 /**
- * Uploads a school document (PDF, Word, Form template) to Firebase Storage
- * Stored under school-assets/documents/
+ * Uploads a school document (PDF, Word, Form template) to Firebase Storage or server/cloud fallback
  */
 export const uploadSchoolDocument = async (
   file: File,
@@ -194,40 +286,44 @@ export const uploadSchoolDocument = async (
       ? `${(file.size / 1024).toFixed(1)} KB`
       : `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
 
-  // 1. Try Firebase Storage
-  try {
-    const storageRef = ref(storage, storagePath);
-    const metadata = {
-      contentType: file.type || 'application/pdf',
-      customMetadata: {
-        title: documentTitle,
-        originalName: file.name,
-      },
-    };
-    const uploadTask = await uploadBytesResumable(storageRef, file, metadata);
-    const downloadURL = await getDownloadURL(uploadTask.ref);
-    return {
-      url: downloadURL,
-      source: 'firebase-storage',
-      fileName: file.name,
-      fileSize: fileSizeStr,
-      fileType: file.type || 'application/pdf',
-    };
-  } catch (storageError: any) {
-    console.warn(
-      'Firebase Storage document upload notice (falling back to server endpoint):',
-      storageError?.message || storageError
-    );
-
-    // 2. Fallback to Express backend /api/upload
+  // 1. Try Firebase Storage with timeout
+  if (!firebaseStorageUnavailable) {
     try {
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const storageRef = ref(storage, storagePath);
+      const metadata = {
+        contentType: file.type || 'application/pdf',
+        customMetadata: {
+          title: documentTitle,
+          originalName: file.name,
+        },
+      };
+      const task = uploadBytesResumable(storageRef, file, metadata);
+      const uploadSnap = await withStorageTimeout(
+        new Promise<typeof task.snapshot>((res, rej) => task.then(res, rej)),
+        STORAGE_TIMEOUT_MS * 2
+      );
+      const downloadURL = await withStorageTimeout(getDownloadURL(uploadSnap.ref), STORAGE_TIMEOUT_MS);
+      return {
+        url: downloadURL,
+        source: 'firebase-storage',
+        fileName: file.name,
+        fileSize: fileSizeStr,
+        fileType: file.type || 'application/pdf',
+      };
+    } catch (storageError: any) {
+      firebaseStorageUnavailable = true;
+      console.warn(
+        'Firebase Storage document upload notice (falling back to server/base64):',
+        storageError?.message || storageError
+      );
+    }
+  }
 
+  // 2. Fallback to Express backend /api/upload or portable Data URI
+  try {
+    const base64Data = await readFileAsDataUrl(file);
+
+    try {
       const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -251,18 +347,20 @@ export const uploadSchoolDocument = async (
           };
         }
       }
-
-      return {
-        url: base64Data,
-        source: 'base64',
-        fileName: file.name,
-        fileSize: fileSizeStr,
-        fileType: file.type || 'application/pdf',
-      };
-    } catch (serverErr: any) {
-      console.warn('Server document upload fallback error:', serverErr);
-      throw new Error('Unable to upload document file. Please verify file format.');
+    } catch {
+      // Static host fallback uses portable base64 below
     }
+
+    return {
+      url: base64Data,
+      source: 'base64',
+      fileName: file.name,
+      fileSize: fileSizeStr,
+      fileType: file.type || 'application/pdf',
+    };
+  } catch (serverErr: any) {
+    console.warn('Document upload fallback error:', serverErr);
+    throw new Error('Unable to upload document file. Please verify file format.');
   }
 };
 

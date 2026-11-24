@@ -756,6 +756,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
                 <img
                   src={profileForm.photoUrl || sessionUser?.photoUrl}
                   alt={sessionUser?.name || 'Teacher'}
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -2044,7 +2045,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({ students, onTakeAt
           <div className="flex flex-col sm:flex-row sm:items-center gap-5 pb-5 border-b border-slate-100 dark:border-slate-800">
             <div className="w-20 h-20 rounded-2xl overflow-hidden bg-blue-950 border-2 border-amber-400 flex items-center justify-center shrink-0">
               {profileForm.photoUrl ? (
-                <img src={profileForm.photoUrl} alt={profileForm.name || 'Teacher'} className="w-full h-full object-cover" />
+                <img src={profileForm.photoUrl} alt={profileForm.name || 'Teacher'} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xl font-bold text-amber-300">
                   {(profileForm.name || sessionUser?.name || 'T').slice(0, 2).toUpperCase()}

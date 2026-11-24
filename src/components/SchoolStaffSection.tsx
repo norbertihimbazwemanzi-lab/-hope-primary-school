@@ -6,6 +6,7 @@ import {
   WebsiteSettings,
 } from '../services/adminStore';
 import { uploadSchoolAsset } from '../services/storageService';
+import { isAdminOrExecutive } from '../services/rbac';
 import { Edit3, Check, X, Plus, Trash2, Mail, Phone, Upload, Users, GraduationCap } from 'lucide-react';
 
 export interface StaffShowcaseMember {
@@ -57,10 +58,13 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
   }, []);
 
   useEffect(() => {
-    setSessionUser(getCurrentSessionUser());
+    const syncSession = () => setSessionUser(getCurrentSessionUser());
+    syncSession();
+    window.addEventListener('mugina-session-updated', syncSession);
+    return () => window.removeEventListener('mugina-session-updated', syncSession);
   }, []);
 
-  const isAdmin = sessionUser?.role === 'Admin' || sessionUser?.role === 'DOS';
+  const isAdmin = isAdminOrExecutive(sessionUser?.role) || sessionUser?.role === 'DOS';
 
   const handleOpenEdit = () => {
     const current = getWebsiteSettings();
@@ -113,26 +117,27 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
     }
   };
 
-  const handleSaveStaff = (e: React.FormEvent) => {
+  const handleSaveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
+    const latest = getWebsiteSettings();
     const managerEntry = staffList.find(
       (m) => m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
     );
     const updatedSettings: WebsiteSettings = {
-      ...settings,
+      ...latest,
       staffBadge,
       staffSubtitle,
       staffShowcase: staffList,
       ...(managerEntry !== undefined ? { schoolManagerPhotoUrl: managerEntry.imageUrl || '' } : {}),
     };
-    saveWebsiteSettings(updatedSettings);
     setSettings(updatedSettings);
     setFailedImageIds({});
-    setSaveSuccessMsg('School staff directory saved permanently to database!');
+    await saveWebsiteSettings(updatedSettings);
+    setSaveSuccessMsg('School staff directory published to all visitor devices!');
     setTimeout(() => {
       setSaveSuccessMsg(null);
       setIsEditModalOpen(false);
-    }, 1200);
+    }, 1000);
   };
 
   const defaultShowcaseMembers: StaffShowcaseMember[] = [
@@ -293,6 +298,7 @@ export const SchoolStaffSection: React.FC<SchoolStaffSectionProps> = ({
                       <img
                         src={photoSrc}
                         alt={member.name}
+                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover object-top"
                         onError={() =>
                           setFailedImageIds((prev) => ({ ...prev, [memberKey]: true }))

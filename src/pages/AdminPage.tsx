@@ -22,11 +22,9 @@ import {
   saveAttendanceBatch,
   getGalleryItems,
   saveGalleryItems,
-  addGalleryItem,
-  updateGalleryItem,
+  addGalleryItemAsync,
+  updateGalleryItemAsync,
   deleteGalleryItem,
-  filterGalleryAgainstTombstones,
-  isGalleryInitialized,
   saveStaffMembers,
   saveEnrolledStudents,
   syncServerGalleryItems,
@@ -94,8 +92,6 @@ import {
 import { uploadSchoolAsset, uploadSchoolDocument } from '../services/storageService';
 import { SchoolLogo } from '../components/SchoolLogo';
 import {
-  saveSchoolLogoToFirebase,
-  fetchSchoolGalleryFromFirebase,
   fetchApplicantChatsFromFirebase,
   saveApplicantChatToFirebase,
 } from '../services/firebaseStore';
@@ -571,43 +567,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
       setDocList(docs);
     });
 
-    const getMaxTs = (items: any[] | null | undefined) => {
-      if (!Array.isArray(items) || items.length === 0) return 0;
-      let maxMs = 0;
-      items.forEach((item) => {
-        const raw = item?.updatedAt || item?.updated_at;
-        if (raw) {
-          const ms = Date.parse(raw);
-          if (!Number.isNaN(ms) && ms > maxMs) maxMs = ms;
-        }
-      });
-      return maxMs;
-    };
-
-    Promise.all([
-      fetchSchoolGalleryFromFirebase(),
-      fetchSchoolGalleryFromSupabase(),
-      syncServerGalleryItems(),
-    ])
-      .then(([firestoreItems, supabaseItems, serverItems]) => {
-        const hasFb = Array.isArray(firestoreItems) && firestoreItems.length > 0;
-        const hasSb = Array.isArray(supabaseItems) && supabaseItems.length > 0;
-        let authoritative: FacilityItem[] = [];
-        if (hasSb && hasFb) {
-          authoritative = getMaxTs(firestoreItems) > getMaxTs(supabaseItems) + 2500 ? firestoreItems : supabaseItems;
-        } else if (hasSb) {
-          authoritative = supabaseItems;
-        } else if (hasFb) {
-          authoritative = firestoreItems;
-        } else if (Array.isArray(serverItems) && serverItems.length > 0) {
-          authoritative = serverItems;
-        }
-        const cleaned = filterGalleryAgainstTombstones(authoritative);
-        if (cleaned.length > 0 || isGalleryInitialized()) {
-          saveGalleryItems(cleaned);
-          setGalleryItems(cleaned);
-          if (onGalleryUpdated) onGalleryUpdated();
-        }
+    syncServerGalleryItems()
+      .then((cleaned) => {
+        setGalleryItems(cleaned);
+        if (onGalleryUpdated) onGalleryUpdated();
       })
       .catch((e) => console.warn('Gallery sync notice in admin:', e));
 
@@ -1241,10 +1204,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigate, onGalleryUpdat
   // Website Settings Save Handler (Admin & Headteacher can edit everything)
   const handleSaveWebsiteSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveWebsiteSettings(websiteSettings);
-    if (websiteSettings.schoolLogoUrl !== undefined) {
-      await saveSchoolLogoToFirebase(websiteSettings.schoolLogoUrl || '');
-    }
+    await saveWebsiteSettings(websiteSettings);
     setWebsiteSettingsSuccess(true);
     setTimeout(() => setWebsiteSettingsSuccess(false), 3500);
   };
@@ -1998,46 +1958,56 @@ END $$;`;
 
     try {
       if (selectedImageFile) {
-        setImageUploadStatus('Uploading securely to Cloud Storage...');
+        setImageUploadStatus('Optimizing & uploading image to Cloud Storage...');
         const uploadRes = await uploadSchoolAsset(selectedImageFile, imageFormData.title, imageFormData.category);
         finalImageUrl = uploadRes.url;
-        setImageUploadStatus(`Uploaded successfully via ${uploadRes.source === 'firebase-storage' ? 'Firebase Storage' : uploadRes.source === 'supabase-storage' ? 'Supabase Storage' : 'Cloud Asset'}`);
+        setImageUploadStatus(
+          `Ready via ${
+            uploadRes.source === 'firebase-storage'
+              ? 'Firebase Storage'
+              : uploadRes.source === 'supabase-storage'
+                ? 'Supabase Storage'
+                : 'Cloud Synced Asset'
+          }`
+        );
       } else if (imageFormData.imageSrc && imageFormData.imageSrc.startsWith('data:')) {
-        setImageUploadStatus('Uploading image to Cloud Storage...');
+        setImageUploadStatus('Optimizing image for multi-device display...');
         const uploadRes = await uploadSchoolAsset(imageFormData.imageSrc, imageFormData.title, imageFormData.category);
         finalImageUrl = uploadRes.url;
       }
+
+      if (editingImageItem) {
+        await updateGalleryItemAsync(editingImageItem.id, {
+          title: imageFormData.title,
+          category: imageFormData.category,
+          description: imageFormData.description || imageFormData.title,
+          caption: imageFormData.caption || imageFormData.title,
+          altText: imageFormData.altText || imageFormData.title,
+          imageSrc: finalImageUrl,
+        });
+      } else {
+        await addGalleryItemAsync({
+          title: imageFormData.title,
+          category: imageFormData.category,
+          description: imageFormData.description || imageFormData.title,
+          caption: imageFormData.caption || imageFormData.title,
+          altText: imageFormData.altText || imageFormData.title,
+          imageSrc: finalImageUrl,
+        });
+      }
+
+      setGalleryItems(getGalleryItems());
+      if (onGalleryUpdated) onGalleryUpdated();
+      setShowAddImageModal(false);
+      setEditingImageItem(null);
+      setSelectedImageFile(null);
+      setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', altText: '', imageSrc: '' });
     } catch (err: any) {
-      console.warn('Storage upload fallback:', err);
+      console.warn('Gallery image save notice:', err);
+      setImageFormError('Failed to save gallery image. Please try again.');
+    } finally {
+      setIsUploadingImage(false);
     }
-
-    if (editingImageItem) {
-      updateGalleryItem(editingImageItem.id, {
-        title: imageFormData.title,
-        category: imageFormData.category,
-        description: imageFormData.description || imageFormData.title,
-        caption: imageFormData.caption || imageFormData.title,
-        altText: imageFormData.altText || imageFormData.title,
-        imageSrc: finalImageUrl,
-      });
-    } else {
-      addGalleryItem({
-        title: imageFormData.title,
-        category: imageFormData.category,
-        description: imageFormData.description || imageFormData.title,
-        caption: imageFormData.caption || imageFormData.title,
-        altText: imageFormData.altText || imageFormData.title,
-        imageSrc: finalImageUrl,
-      });
-    }
-
-    setGalleryItems(getGalleryItems());
-    if (onGalleryUpdated) onGalleryUpdated();
-    setIsUploadingImage(false);
-    setShowAddImageModal(false);
-    setEditingImageItem(null);
-    setSelectedImageFile(null);
-    setImageFormData({ title: '', category: 'outdoor', description: '', caption: '', altText: '', imageSrc: '' });
   };
 
   // 6. News / Announcement CRUD
@@ -3464,7 +3434,7 @@ END $$;`;
                     <td className="p-3.5">
                       <div className="flex items-center gap-2.5">
                         {st.photoUrl ? (
-                          <img src={st.photoUrl} alt={st.fullName} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                          <img src={st.photoUrl} alt={st.fullName} referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
                         ) : (
                           <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-amber-300 font-bold flex items-center justify-center shrink-0">
                             {st.fullName.charAt(0)}
@@ -4855,33 +4825,23 @@ END $$;`;
                       const file = e.target.files?.[0];
                       if (file) {
                         try {
-                          // Upload to Firebase Storage
                           const uploadRes = await uploadSchoolAsset(file, 'official_school_logo', 'branding');
                           const finalUrl = uploadRes.url;
-                          setWebsiteSettings((prev) => ({ ...prev, schoolLogoUrl: finalUrl }));
-                          saveWebsiteSettings({ ...websiteSettings, schoolLogoUrl: finalUrl });
-                          await saveSchoolLogoToFirebase(finalUrl);
+                          const latest = getWebsiteSettings();
+                          const updated = { ...latest, ...websiteSettings, schoolLogoUrl: finalUrl };
+                          setWebsiteSettings(updated);
+                          await saveWebsiteSettings(updated);
                           setWebsiteSettingsSuccess(true);
                           setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                         } catch (err) {
-                          console.warn('Firebase upload error, fallback to data url:', err);
-                          const reader = new FileReader();
-                          reader.onload = async (event) => {
-                            const base64 = event.target?.result as string;
-                            if (base64) {
-                              setWebsiteSettings((prev) => ({ ...prev, schoolLogoUrl: base64 }));
-                              saveWebsiteSettings({ ...websiteSettings, schoolLogoUrl: base64 });
-                              await saveSchoolLogoToFirebase(base64);
-                            }
-                          };
-                          reader.readAsDataURL(file);
+                          console.warn('Logo upload error:', err);
                         }
                       }
                     }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-900 file:text-white hover:file:bg-blue-950 cursor-pointer"
                   />
                   <p className="text-[10px] text-slate-400 mt-1">
-                    Upload your school logo image. It is securely saved to Firebase Storage and synced across all user devices.
+                    Upload your school logo image. It is saved to cloud storage and synced automatically across all visitor browsers and devices.
                   </p>
                 </div>
 
@@ -4902,10 +4862,7 @@ END $$;`;
                   <button
                     type="button"
                     onClick={async () => {
-                      saveWebsiteSettings(websiteSettings);
-                      if (websiteSettings.schoolLogoUrl !== undefined) {
-                        await saveSchoolLogoToFirebase(websiteSettings.schoolLogoUrl || '');
-                      }
+                      await saveWebsiteSettings(websiteSettings);
                       setWebsiteSettingsSuccess(true);
                       setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                     }}
@@ -4917,7 +4874,13 @@ END $$;`;
                   {websiteSettings.schoolLogoUrl && (
                     <button
                       type="button"
-                      onClick={() => setWebsiteSettings({ ...websiteSettings, schoolLogoUrl: '' })}
+                      onClick={async () => {
+                        const updated = { ...websiteSettings, schoolLogoUrl: '' };
+                        setWebsiteSettings(updated);
+                        await saveWebsiteSettings(updated);
+                        setWebsiteSettingsSuccess(true);
+                        setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
+                      }}
                       className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                     >
                       Reset to Default Crest
@@ -5278,7 +5241,7 @@ END $$;`;
                   {websiteSettings.schoolManagerPhotoUrl && (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={async () => {
                         const updatedShowcase = Array.isArray(websiteSettings.staffShowcase)
                           ? websiteSettings.staffShowcase.map((m) =>
                               m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
@@ -5292,7 +5255,7 @@ END $$;`;
                           ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
                         };
                         setWebsiteSettings(updated);
-                        saveWebsiteSettings(updated);
+                        await saveWebsiteSettings(updated);
                         setWebsiteSettingsSuccess(true);
                         setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                       }}
@@ -5310,6 +5273,7 @@ END $$;`;
                       <img
                         src={websiteSettings.schoolManagerPhotoUrl}
                         alt="School Manager Portrait"
+                        referrerPolicy="no-referrer"
                         className="w-28 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
@@ -5337,22 +5301,22 @@ END $$;`;
                           if (file) {
                             try {
                               const uploadRes = await uploadSchoolAsset(file, 'school_manager_portrait', 'branding');
-                              setWebsiteSettings((prev) => {
-                                const updatedShowcase = Array.isArray(prev.staffShowcase)
-                                  ? prev.staffShowcase.map((m) =>
-                                      m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
-                                        ? { ...m, imageUrl: uploadRes.url }
-                                        : m
-                                    )
-                                  : prev.staffShowcase;
-                                const updated = {
-                                  ...prev,
-                                  schoolManagerPhotoUrl: uploadRes.url,
-                                  ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
-                                };
-                                saveWebsiteSettings(updated);
-                                return updated;
-                              });
+                              const latest = getWebsiteSettings();
+                              const base = { ...latest, ...websiteSettings };
+                              const updatedShowcase = Array.isArray(base.staffShowcase)
+                                ? base.staffShowcase.map((m) =>
+                                    m.id === 'staff-lead-1' || m.role.toLowerCase().includes('manager')
+                                      ? { ...m, imageUrl: uploadRes.url }
+                                      : m
+                                  )
+                                : base.staffShowcase;
+                              const updated = {
+                                ...base,
+                                schoolManagerPhotoUrl: uploadRes.url,
+                                ...(updatedShowcase ? { staffShowcase: updatedShowcase } : {}),
+                              };
+                              setWebsiteSettings(updated);
+                              await saveWebsiteSettings(updated);
                               setWebsiteSettingsSuccess(true);
                               setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                             } catch (err) {
@@ -5524,10 +5488,10 @@ END $$;`;
                     {websiteSettings.aboutPrincipalPhotoUrl && (
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           const updated = { ...websiteSettings, aboutPrincipalPhotoUrl: '' };
                           setWebsiteSettings(updated);
-                          saveWebsiteSettings(updated);
+                          await saveWebsiteSettings(updated);
                           setWebsiteSettingsSuccess(true);
                           setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                         }}
@@ -5549,6 +5513,7 @@ END $$;`;
                       <img
                         src={websiteSettings.aboutPrincipalPhotoUrl}
                         alt="Head of School Portrait"
+                        referrerPolicy="no-referrer"
                         className="w-24 h-28 object-cover rounded-xl shadow-xs border border-slate-200"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
@@ -5576,14 +5541,13 @@ END $$;`;
                           if (file) {
                             try {
                               const uploadRes = await uploadSchoolAsset(file, 'principal_headmaster_portrait', 'branding');
-                              setWebsiteSettings((prev) => {
-                                const updated = {
-                                  ...prev,
-                                  aboutPrincipalPhotoUrl: uploadRes.url,
-                                };
-                                saveWebsiteSettings(updated);
-                                return updated;
-                              });
+                              const updated = {
+                                ...getWebsiteSettings(),
+                                ...websiteSettings,
+                                aboutPrincipalPhotoUrl: uploadRes.url,
+                              };
+                              setWebsiteSettings(updated);
+                              await saveWebsiteSettings(updated);
                               setWebsiteSettingsSuccess(true);
                               setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                             } catch (err) {
@@ -5748,6 +5712,7 @@ END $$;`;
                     <img
                       src={websiteSettings.aboutValuesBannerUrl || '/images/hero_mugina_hope_campus_1791823254957.jpg'}
                       alt="Campus Visual Preview"
+                      referrerPolicy="no-referrer"
                       className="w-full h-auto max-h-36 object-cover rounded-lg"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
@@ -5769,10 +5734,15 @@ END $$;`;
                           if (file) {
                             try {
                               const uploadRes = await uploadSchoolAsset(file, 'rwanda_values_charter_board', 'branding');
-                              setWebsiteSettings((prev) => ({
-                                ...prev,
+                              const updated = {
+                                ...getWebsiteSettings(),
+                                ...websiteSettings,
                                 aboutValuesBannerUrl: uploadRes.url,
-                              }));
+                              };
+                              setWebsiteSettings(updated);
+                              await saveWebsiteSettings(updated);
+                              setWebsiteSettingsSuccess(true);
+                              setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                             } catch (err) {
                               console.warn('Charter upload error:', err);
                             }
@@ -5850,11 +5820,11 @@ END $$;`;
                       </span>
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           const updatedShowcase = (websiteSettings.staffShowcase || []).filter((_, i) => i !== sIdx);
                           const updated = { ...websiteSettings, staffShowcase: updatedShowcase };
                           setWebsiteSettings(updated);
-                          saveWebsiteSettings(updated);
+                          await saveWebsiteSettings(updated);
                           setWebsiteSettingsSuccess(true);
                           setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                         }}
@@ -5929,6 +5899,7 @@ END $$;`;
                           <img
                             src={staff.imageUrl}
                             alt={staff.name}
+                            referrerPolicy="no-referrer"
                             className="w-10 h-10 rounded-full object-cover border-2 border-[#003380]"
                             onError={(e) => {
                               (e.target as HTMLImageElement).style.display = 'none';
@@ -5950,16 +5921,17 @@ END $$;`;
                             if (file) {
                               try {
                                 const uploadRes = await uploadSchoolAsset(file, `staff_${staff.id}`, 'branding');
-                                const updatedShowcase = [...(websiteSettings.staffShowcase || [])];
+                                const base = { ...getWebsiteSettings(), ...websiteSettings };
+                                const updatedShowcase = [...(base.staffShowcase || [])];
                                 updatedShowcase[sIdx] = { ...updatedShowcase[sIdx], imageUrl: uploadRes.url };
                                 const isMgr = updatedShowcase[sIdx]?.id === 'staff-lead-1' || updatedShowcase[sIdx]?.role?.toLowerCase().includes('manager');
                                 const updated = {
-                                  ...websiteSettings,
+                                  ...base,
                                   staffShowcase: updatedShowcase,
                                   ...(isMgr ? { schoolManagerPhotoUrl: uploadRes.url } : {}),
                                 };
                                 setWebsiteSettings(updated);
-                                saveWebsiteSettings(updated);
+                                await saveWebsiteSettings(updated);
                                 setWebsiteSettingsSuccess(true);
                                 setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                               } catch (err) {
@@ -5987,7 +5959,7 @@ END $$;`;
                         {staff.imageUrl && (
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               const updatedShowcase = [...(websiteSettings.staffShowcase || [])];
                               const isMgr = updatedShowcase[sIdx]?.id === 'staff-lead-1' || updatedShowcase[sIdx]?.role?.toLowerCase().includes('manager');
                               updatedShowcase[sIdx] = { ...updatedShowcase[sIdx], imageUrl: '' };
@@ -5997,7 +5969,7 @@ END $$;`;
                                 ...(isMgr ? { schoolManagerPhotoUrl: '' } : {}),
                               };
                               setWebsiteSettings(updated);
-                              saveWebsiteSettings(updated);
+                              await saveWebsiteSettings(updated);
                               setWebsiteSettingsSuccess(true);
                               setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                             }}
@@ -6040,12 +6012,16 @@ END $$;`;
                 <div className="md:col-span-4 p-3 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-2">
                   <div className="h-44 rounded-xl overflow-hidden border border-slate-200 bg-white">
                     <img
-                      src={websiteSettings.culturalDancePhotoUrl || '/public/assets/aistudio/Capture_cd3b07eb.PNG'}
+                      src={websiteSettings.culturalDancePhotoUrl || '/images/campus_life_traditional_dance_1791823290926.jpg'}
                       alt={websiteSettings.culturalDanceAlt || 'Mugina Hope Traditional Dance Troupe'}
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
-                        target.src = '/public/assets/aistudio/Capture_cd3b07eb.PNG';
+                        if (!target.dataset.triedFallback) {
+                          target.dataset.triedFallback = '1';
+                          target.src = '/images/campus_life_traditional_dance_1791823290926.jpg';
+                        }
                       }}
                     />
                   </div>
@@ -6065,10 +6041,15 @@ END $$;`;
                         if (file) {
                           try {
                             const uploadRes = await uploadSchoolAsset(file, 'cultural_dance_spotlight', 'gallery');
-                            setWebsiteSettings((prev) => ({
-                              ...prev,
+                            const updated = {
+                              ...getWebsiteSettings(),
+                              ...websiteSettings,
                               culturalDancePhotoUrl: uploadRes.url,
-                            }));
+                            };
+                            setWebsiteSettings(updated);
+                            await saveWebsiteSettings(updated);
+                            setWebsiteSettingsSuccess(true);
+                            setTimeout(() => setWebsiteSettingsSuccess(false), 3000);
                           } catch (err) {
                             console.warn('Cultural image upload error:', err);
                           }
@@ -6086,7 +6067,7 @@ END $$;`;
                       type="text"
                       value={websiteSettings.culturalDancePhotoUrl || ''}
                       onChange={(e) => setWebsiteSettings({ ...websiteSettings, culturalDancePhotoUrl: e.target.value })}
-                      placeholder="/public/assets/aistudio/Capture_cd3b07eb.PNG"
+                      placeholder="/images/campus_life_traditional_dance_1791823290926.jpg"
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-mono text-xs text-slate-900"
                     />
                   </div>
@@ -6650,7 +6631,7 @@ END $$;`;
 
               <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 {studentFormData.photoUrl ? (
-                  <img src={studentFormData.photoUrl} alt="Student portrait" className="w-12 h-12 rounded-xl object-cover border border-slate-300 shrink-0" />
+                  <img src={studentFormData.photoUrl} alt="Student portrait" referrerPolicy="no-referrer" className="w-12 h-12 rounded-xl object-cover border border-slate-300 shrink-0" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-900 font-bold flex items-center justify-center shrink-0">
                     Photo
@@ -7282,7 +7263,7 @@ END $$;`;
 
               {imageFormData.imageSrc && (
                 <div className="h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
-                  <img src={imageFormData.imageSrc} alt="Preview" className="w-full h-full object-cover" />
+                  <img src={imageFormData.imageSrc} alt="Preview" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                 </div>
               )}
 
@@ -7321,12 +7302,12 @@ END $$;`;
                   {isUploadingImage ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Uploading to Firebase Storage...</span>
+                      <span>Uploading &amp; Publishing...</span>
                     </>
                   ) : (
                     <>
                       <UploadCloud className="w-3.5 h-3.5" />
-                      <span>Save & Publish to Gallery</span>
+                      <span>Save &amp; Publish to Gallery</span>
                     </>
                   )}
                 </button>
