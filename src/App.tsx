@@ -15,6 +15,7 @@ import { ApplicationModal } from './components/ApplicationModal';
 import { CampusTourModal } from './components/CampusTourModal';
 import { PrintableApplicationModal } from './components/PrintableApplicationModal';
 import { ApplicantChatTrackerModal } from './components/ApplicantChatTrackerModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { ArrowUp } from 'lucide-react';
 import {
   getAnnouncements,
@@ -849,6 +850,9 @@ export default function App() {
         onClose={() => setIsChatTrackerOpen(false)}
         initialRefCode={chatTrackerRefCode}
       />
+
+      {/* Offline Connectivity Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }
