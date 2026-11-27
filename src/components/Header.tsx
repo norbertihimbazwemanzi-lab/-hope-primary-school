@@ -3,7 +3,6 @@ import { PageId } from '../types';
 import { Menu, X, Shield, Lock, LogOut } from 'lucide-react';
 import { setCurrentSessionUser, getCurrentSessionUser } from '../services/adminStore';
 import { SchoolLogo } from './SchoolLogo';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentPage: PageId;
@@ -95,9 +94,6 @@ export const Header: React.FC<HeaderProps> = ({
             </nav>
 
             <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-              <div className="hidden sm:block">
-                <PWAInstallButton variant="header" />
-              </div>
               {sessionUser ? (
                 <div className="flex items-center gap-1.5 sm:gap-2">
                   <button
@@ -208,7 +204,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <Lock className="w-4 h-4 text-slate-500 dark:text-slate-400 shrink-0" />
                 <span>{sessionUser ? `${portalRoleLabel}` : 'School Portal (Staff, Parents & Students)'}</span>
               </button>
-              <PWAInstallButton variant="mobile-menu" />
             </div>
           </div>
         )}

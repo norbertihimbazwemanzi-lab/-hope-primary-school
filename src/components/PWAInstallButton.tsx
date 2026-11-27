@@ -3,7 +3,7 @@ import { MonitorDown, Laptop, X } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface PWAInstallButtonProps {
-  variant?: 'header' | 'mobile-menu';
+  variant?: 'header' | 'mobile-menu' | 'portal';
 }
 
 export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'header' }) => {
@@ -25,6 +25,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'h
   const buttonClasses =
     variant === 'mobile-menu'
       ? 'cursor-pointer text-left px-3 py-3 min-h-[44px] text-sm flex items-center gap-2 rounded-md text-blue-950 dark:text-amber-400 font-semibold bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-950/70 transition-colors'
+      : variant === 'portal'
+      ? 'w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-50/80 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-950 dark:text-amber-300 font-semibold text-xs rounded-xl border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer'
       : 'cursor-pointer inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 min-h-[38px] sm:min-h-[40px] text-xs font-semibold rounded-md transition-all border border-blue-900/20 dark:border-amber-400/30 bg-blue-50/90 dark:bg-blue-950/60 text-blue-950 dark:text-amber-300 hover:bg-blue-100 dark:hover:bg-blue-900/70 whitespace-nowrap shrink-0';
 
   return (
@@ -36,7 +38,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({ variant = 'h
         title={isIOS ? 'Add Mugina Hope Academy to Home Screen' : 'Install Mugina Hope Academy as a Desktop App'}
       >
         <MonitorDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-        {variant === 'mobile-menu' ? (
+        {variant === 'mobile-menu' || variant === 'portal' ? (
           <span>{isIOS ? 'Install App (iOS)' : 'Install Desktop App'}</span>
         ) : (
           <>

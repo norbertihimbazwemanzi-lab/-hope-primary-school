@@ -125,6 +125,7 @@ import { ParentPortal } from '../components/ParentPortal';
 import { StudentPortal } from '../components/StudentPortal';
 import { StudentIdAndProfileModal } from '../components/StudentIdAndProfileModal';
 import { AdminEmailNotificationsModule } from '../components/AdminEmailNotificationsModule';
+import { PWAInstallButton } from '../components/PWAInstallButton';
 import {
   hasPermission,
   getRoleDisplayLabel,
@@ -2685,6 +2686,8 @@ END $$;`;
                   </svg>
                   <span>{isGoogleLoading ? 'Connecting...' : 'Sign in with Google Account'}</span>
                 </button>
+
+                <PWAInstallButton variant="portal" />
 
                 {needsBootstrap && (
                   <button
